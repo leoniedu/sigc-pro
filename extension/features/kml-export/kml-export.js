@@ -47,77 +47,15 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  // Returns { header: string[], rows: string[][], source: 'api'|'dom' } or null.
-  // Scoped to the toolbar's own .dataTables_wrapper so the button always acts
-  // on its table. In DataTables scroll mode the wrapper holds header/body
-  // CLONES of the table; only the original is registered with the API, so we
-  // pick tables by isDataTable() instead of the .dataTable class.
-  function readTable(toolbar) {
-    const scope = (toolbar && toolbar.closest('.dataTables_wrapper')) || document;
-    const jq = window.jQuery || window.$;
-
-    if (jq && jq.fn && jq.fn.dataTable) {
-      const tableEl = [...scope.querySelectorAll('table')].find((t) =>
-        jq.fn.dataTable.isDataTable(t)
-      );
-      if (tableEl) {
-        const dt = jq(tableEl).DataTable();
-        const header = dt
-          .columns()
-          .header()
-          .toArray()
-          .map((h) => (h.textContent || '').trim());
-        const rows = dt
-          .rows({ search: 'applied' })
-          .data()
-          .toArray()
-          .map((r) => Array.from(r).map(cellText));
-        return { header, rows, source: 'api' };
-      }
-    }
-
-    // DOM fallback. Scroll mode splits the table into clones, so don't trust
-    // any single element: take headers from whichever table has non-empty
-    // thead text, and rows from whichever has the most tbody rows.
-    let tables = [...scope.querySelectorAll('table')];
-    if (tables.length === 0 && scope !== document) tables = [...document.querySelectorAll('table')];
-    if (tables.length === 0) return null;
-
-    console.warn(`${TAG} DataTables API unavailable — falling back to DOM (visible page only).`);
-    console.warn(
-      `${TAG} diagnostics:`,
-      JSON.stringify({
-        jquery: !!(window.jQuery || window.$),
-        dtPlugin: !!(jq && jq.fn && jq.fn.dataTable),
-        tablesInScope: tables.length,
-        perTable: tables.map((t) => ({
-          cls: t.className,
-          ths: t.querySelectorAll('thead th').length,
-          rows: t.querySelectorAll('tbody tr').length,
-        })),
-      })
-    );
-
-    const headEl = tables.find((t) =>
-      [...t.querySelectorAll('thead th')].some((th) => (th.textContent || '').trim())
-    );
-    const bodyEl = tables.reduce(
-      (best, t) =>
-        t.querySelectorAll('tbody tr').length >
-        (best ? best.querySelectorAll('tbody tr').length : 0)
-          ? t
-          : best,
+  // Finds the native PDF export button in the same toolbar as the KML button.
+  function findPdfButton(toolbar) {
+    return (
+      toolbar.querySelector('.buttons-pdf') ||
+      [...toolbar.querySelectorAll('button')].find(
+        (b) => b.id !== BUTTON_ID && /pdf/i.test(`${b.className} ${b.textContent}`)
+      ) ||
       null
     );
-    if (!headEl || !bodyEl) return null;
-
-    const header = [...headEl.querySelectorAll('thead th')].map((th) =>
-      (th.textContent || '').trim()
-    );
-    const rows = [...bodyEl.querySelectorAll('tbody tr')].map((tr) =>
-      [...tr.querySelectorAll('td')].map((td) => (td.textContent || '').trim())
-    );
-    return { header, rows, source: 'dom' };
   }
 
   function placemark(row, cols) {
@@ -201,25 +139,53 @@
     URL.revokeObjectURL(url);
   }
 
+  // One click, two files: triggers the native PDF export (which our
+  // pdf-export hook tweaks as usual) and also receives the ORIGINAL pdfmake
+  // table body from that hook to build the KML.
   function exportKml(pesquisa, toolbar) {
-    const data = readTable(toolbar);
-    if (!data) {
-      alert('SIGC-PRO: tabela de endereços não encontrada nesta página.');
+    const pdfBtn = findPdfButton(toolbar);
+    if (!pdfBtn) {
+      alert('SIGC-PRO: botão de PDF não encontrado — a exportação PDF+KML depende dele.');
       return;
     }
-    if (!window.__sigcPro.tableMatchesLayout(data.header, pesquisa.columns)) {
-      console.warn(`${TAG} Table header doesn't match the ${pesquisa.id} layout — aborting.`);
-      alert('SIGC-PRO: o layout da tabela não corresponde ao esperado; exportação KML cancelada.');
+    if (!(window.pdfMake && window.pdfMake.__sigcProPdfTweak)) {
+      alert('SIGC-PRO: componente de PDF ainda não carregou; tente novamente em alguns segundos.');
       return;
     }
+    if (window.__sigcPro.kmlOnNextPdf) return; // export already in flight
 
-    const { kml, skipped, total } = buildKml(pesquisa, data.rows);
-    download(`lista-enderecos-${pesquisa.id.toLowerCase()}.kml`, kml);
+    const timeout = setTimeout(() => {
+      if (window.__sigcPro.kmlOnNextPdf) {
+        window.__sigcPro.kmlOnNextPdf = null;
+        console.warn(`${TAG} Timed out — PDF button click produced no pdfMake call.`);
+        alert('SIGC-PRO: não foi possível gerar o KML (a exportação de PDF não respondeu).');
+      }
+    }, 8000);
 
-    console.log(`${TAG} KML exported: ${total} placemarks, ${skipped} skipped (source: ${data.source}).`);
-    if (skipped > 0) {
-      alert(`SIGC-PRO: ${skipped} endereço(s) sem coordenadas válidas ficaram fora do KML.`);
-    }
+    window.__sigcPro.kmlOnNextPdf = (body) => {
+      clearTimeout(timeout);
+      if (!body || body.length < 2) {
+        alert('SIGC-PRO: a tabela está vazia ou não pôde ser lida.');
+        return;
+      }
+      const asText = (c) => (c && c.text != null ? String(c.text).trim() : '');
+      const header = body[0].map(asText);
+      if (!window.__sigcPro.tableMatchesLayout(header, pesquisa.columns)) {
+        alert('SIGC-PRO: o layout da tabela não corresponde ao esperado; exportação KML cancelada.');
+        return;
+      }
+      const rows = body.slice(1).map((r) => r.map(asText));
+
+      const { kml, skipped, total } = buildKml(pesquisa, rows);
+      download(`lista-enderecos-${pesquisa.id.toLowerCase()}.kml`, kml);
+
+      console.log(`${TAG} KML exported: ${total} placemarks, ${skipped} skipped (source: pdf-capture).`);
+      if (skipped > 0) {
+        alert(`SIGC-PRO: ${skipped} endereço(s) sem coordenadas válidas ficaram fora do KML.`);
+      }
+    };
+
+    pdfBtn.click();
   }
 
   function insertButton(pesquisa, toolbar) {
@@ -230,8 +196,8 @@
     btn.type = 'button';
     const sibling = toolbar.querySelector('button');
     btn.className = sibling ? sibling.className : 'dt-button';
-    btn.innerHTML = '<span>KML</span>';
-    btn.title = 'Exportar KML (SIGC-PRO)';
+    btn.innerHTML = '<span>PDF+KML</span>';
+    btn.title = 'Exportar PDF e KML (SIGC-PRO)';
     // Match the sibling export buttons' shape (via the copied class) but in
     // SIGC-PRO blue, so it reads as an add-on rather than a native button.
     btn.style.background = '#005a9c';

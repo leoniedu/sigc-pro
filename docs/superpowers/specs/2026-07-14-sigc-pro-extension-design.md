@@ -125,13 +125,17 @@ Adds a "KML" button next to the existing DataTables export buttons on the
 Lista de Endereços; clicking it downloads the list as
 `lista-enderecos-{pesquisa}.kml`.
 
-- **Rows:** the same rows the PDF export sees — read via the DataTables API
-  (`rows({ search: 'applied' }).data()`) when available, falling back to
-  parsing the rendered DOM table (which then only covers the visible page;
-  logged as a warning). Assumption: the table is client-side (the official
-  PDF export button shares this limitation, so if SIGC used server-side
-  pagination the PDF export would already be page-limited); verified during
-  testing against the table's row-count info.
+- **Rows:** the exact rows the PDF export sees, by riding the native PDF
+  pipeline. The button is labeled **PDF+KML**: it sets
+  `__sigcPro.kmlOnNextPdf` and programmatically clicks the native PDF
+  button; the pdf-export hook hands the callback the ORIGINAL pdfmake table
+  body (all rows, real header texts) and then lets the tweaked PDF proceed
+  normally — one click downloads both files. This sidesteps DOM scraping
+  entirely (SIGC behind the F5 gateway renders the visible table with
+  header/body clones that made DOM reads unreliable) and needs no
+  jQuery/DataTables API access. An 8 s timeout clears the flag and alerts if
+  the click never reaches pdfMake. PDF-only remains available via the native
+  button.
 - **Button idempotency:** the button gets a fixed `id`; injection checks for
   it first, so redraws can't stack duplicates. (No MutationObserver
   re-insertion unless testing shows DataTables actually rebuilds the toolbar.)

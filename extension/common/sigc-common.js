@@ -107,6 +107,11 @@
     whenReady,
     tableMatchesLayout,
     labelForIndex,
+    // Set by kml-export before it programmatically clicks the native PDF
+    // button; consumed (and cleared) by the pdf-export hook, which passes the
+    // ORIGINAL pdfmake table body to it and then lets the PDF proceed
+    // normally — one click yields both the (tweaked) PDF and the KML.
+    kmlOnNextPdf: null,
   };
   console.log(`${TAG} common runtime loaded.`);
 })();

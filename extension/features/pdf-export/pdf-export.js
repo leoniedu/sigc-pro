@@ -118,6 +118,26 @@
 
     const originalCreatePdf = pdfMake.createPdf;
     pdfMake.createPdf = function (doc) {
+      // PDF+KML mode: kml-export set a callback and clicked the native PDF
+      // button. Hand it the ORIGINAL table body (before any trimming), then
+      // continue with the normal tweaks and PDF generation.
+      const emitKml = window.__sigcPro.kmlOnNextPdf;
+      if (typeof emitKml === 'function') {
+        window.__sigcPro.kmlOnNextPdf = null;
+        let body = null;
+        try {
+          const tableContent = doc && Array.isArray(doc.content) && findTableContent(doc);
+          body = tableContent ? tableContent.table.body : null;
+        } catch (e) {
+          console.error(`${TAG} KML data extraction failed:`, e);
+        }
+        try {
+          emitKml(body);
+        } catch (e) {
+          console.error(`${TAG} KML callback failed:`, e);
+        }
+      }
+
       try {
         const tableContent = doc && Array.isArray(doc.content) && findTableContent(doc);
         if (
