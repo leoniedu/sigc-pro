@@ -1,6 +1,6 @@
-// SIGC-PRO feature: tweak the DataTables/pdfmake PDF export of the
-// Lista de Endereços (trim columns, custom title, constant columns
-// promoted to a subtitle line). Config lives in __sigcPro.PESQUISAS[..].pdf.
+// SIGC-PRO feature: rebuild the Lista de Endereços PDF in the classic IBGE
+// listagem style (landscape, two-line entries, big Nº Domicílio) for exports
+// triggered by the PDF+KML button. The native PDF button stays untouched.
 (function () {
   'use strict';
 
@@ -15,102 +15,117 @@
     return headerRow.map((cell) => cell && cell.text);
   }
 
-  function customizeTitle(doc, pdfCfg) {
-    const titleItem = doc.content[0];
-    const looksLikeTitle =
-      titleItem && typeof titleItem.text === 'string' && titleItem.style === 'title';
-    if (!looksLikeTitle) return;
+  // Replaces the DataTables-generated doc with a PNAD-listagem-style layout:
+  //   LISTA DE ENDEREÇOS - SELECIONADOS|COMPLETA        CONTROLE x - ZONA
+  //   Q/F | Endereço / Morador / Telefone | Lat/Lon | Situação | Nº (big)
+  // Two lines per entry (Lat over Lon), hairline rule between entries,
+  // "Pág. X de Y" / "Gerado em ..." footer.
+  function rebuildAsListagem(doc, pesquisa, body) {
+    const { MISSING_VALUES } = window.__sigcPro;
+    const cols = pesquisa.columns;
+    const rows = body.slice(1);
+    const val = (r, c) => (r[c.index] && r[c.index].text != null ? String(r[c.index].text).trim() : '');
+    const present = (s) => s && !MISSING_VALUES.includes(s);
 
-    if (pdfCfg.customTitle === null) {
-      doc.content.shift();
-      console.log(`${TAG} Title block removed.`);
-    } else {
-      titleItem.text = pdfCfg.customTitle;
-      console.log(`${TAG} Title set to:`, pdfCfg.customTitle);
-    }
-  }
+    const first = rows[0] || [];
+    const controle = val(first, cols.controle);
+    const zona = val(first, cols.nomeZona);
+    const bio = val(first, cols.biomarcadores);
+    const allSim = rows.length > 0 && rows.every((r) => val(r, cols.selecionado) === 'Sim');
+    const tipo = allSim ? 'SELECIONADOS' : 'COMPLETA';
 
-  function addHeaderColumns(doc, pesquisa) {
-    const { MISSING_VALUES, labelForIndex } = window.__sigcPro;
-    const pdfCfg = pesquisa.pdf;
-    if (!pdfCfg.columnsToHeader || pdfCfg.columnsToHeader.length === 0) return;
+    const tbody = [
+      [
+        { text: 'Q/F', style: 'th' },
+        { text: 'Endereço / Morador / Telefone', style: 'th' },
+        { text: 'Lat/Lon', style: 'th', alignment: 'right' },
+        { text: 'Situação', style: 'th' },
+        { text: 'Nº', style: 'th', alignment: 'center' },
+      ],
+    ];
 
-    // Reads the ORIGINAL table (runs before filterTableColumns), so indexes
-    // may reference columns that are not kept in the table at all.
-    const tableContent = findTableContent(doc);
-    if (!tableContent) return;
+    rows.forEach((r) => {
+      const endereco = [cols.logradouro, cols.numero, cols.complemento, cols.bairro]
+        .map((c) => val(r, c))
+        .filter(present)
+        .join(', ');
+      const linha2 = [
+        `ID_CNEFE ${val(r, cols.idCnefe)}`,
+        present(val(r, cols.morador)) ? `MORADOR: ${val(r, cols.morador)}` : '',
+        present(val(r, cols.telefone)) ? `TEL: ${val(r, cols.telefone)}` : '',
+      ]
+        .filter(Boolean)
+        .join('   •   ');
 
-    const body = tableContent.table.body;
-    if (body.length < 2) return; // need header row + at least one data row
-
-    const dataRows = body.slice(1);
-    const parts = [];
-
-    pdfCfg.columnsToHeader.forEach((i) => {
-      const label = labelForIndex(pesquisa.columns, i);
-      if (!label) {
-        console.warn(`${TAG} columnsToHeader index ${i} not in columns map — skipping.`);
-        return;
-      }
-
-      const columnValues = dataRows.map((row) =>
-        row[i] ? String(row[i].text).trim() : ''
-      );
-      const firstValue =
-        columnValues.find((v) => v && !MISSING_VALUES.includes(v)) ?? MISSING_VALUES[0];
-
-      const distinctNonMissing = new Set(
-        columnValues.filter((v) => v && !MISSING_VALUES.includes(v))
-      );
-
-      let value = firstValue;
-      if (distinctNonMissing.size > 1) {
-        // Not actually constant: a single value would misrepresent the rows.
-        value = `vários (${distinctNonMissing.size})`;
-        console.warn(
-          `${TAG} "${label}" (index ${i}) has ${distinctNonMissing.size} distinct non-missing values ` +
-            `(${[...distinctNonMissing].join(', ')}) — subtitle shows "${value}".`
-        );
-      }
-
-      parts.push(`${label}: ${value}`);
+      tbody.push([
+        { text: `${val(r, cols.quadra)}/${val(r, cols.face)}`, style: 'td' },
+        { text: endereco, style: 'td' },
+        { text: val(r, cols.latitude), style: 'td', alignment: 'right', noWrap: true },
+        { text: val(r, cols.situacao), style: 'td' },
+        {
+          text: val(r, cols.nDomicilio),
+          rowSpan: 2,
+          fontSize: 16,
+          bold: true,
+          alignment: 'center',
+          margin: [0, 3, 0, 0],
+        },
+      ]);
+      tbody.push([
+        { text: '', style: 'td2' },
+        { text: linha2, style: 'td2' },
+        { text: val(r, cols.longitude), style: 'td2', alignment: 'right', noWrap: true },
+        { text: `Antrop: ${val(r, cols.antropometria)}`, style: 'td2' },
+        {},
+      ]);
     });
 
-    if (parts.length === 0) return;
-
-    const subtitleBlock = {
-      text: parts.join('   •   '),
-      style: 'subtitle',
-      margin: [0, 0, 0, 8],
+    doc.pageOrientation = 'landscape';
+    doc.pageMargins = [24, 28, 24, 32];
+    doc.content = [
+      {
+        columns: [
+          { text: `LISTA DE ENDEREÇOS - ${tipo}`, style: 'hdr' },
+          {
+            text:
+              `CONTROLE ${controle} - ${zona}` +
+              (present(bio) ? `   •   BIOMARCADORES: ${bio}` : ''),
+            style: 'hdr',
+            alignment: 'right',
+          },
+        ],
+        margin: [0, 0, 0, 6],
+      },
+      {
+        table: { headerRows: 1, widths: [42, '*', 80, 58, 42], body: tbody },
+        layout: {
+          hLineWidth: (i) => (i <= 1 ? 0.8 : i % 2 === 1 ? 0.4 : 0),
+          vLineWidth: () => 0,
+          paddingTop: (i) => (i > 0 && i % 2 === 0 ? 0 : 2),
+          paddingBottom: (i) => (i > 0 && i % 2 === 1 ? 0 : 2),
+          paddingLeft: () => 3,
+          paddingRight: () => 3,
+        },
+      },
+    ];
+    doc.styles = {
+      hdr: { fontSize: 10, bold: true },
+      th: { fontSize: 7.5, bold: true },
+      td: { fontSize: 7.5 },
+      td2: { fontSize: 6.5, color: '#444444' },
     };
+    doc.defaultStyle = { fontSize: 7.5 };
 
-    const titleIndex = doc.content.findIndex((c) => c && c.style === 'title');
-    doc.content.splice(titleIndex >= 0 ? titleIndex + 1 : 0, 0, subtitleBlock);
+    const gerado = new Date().toLocaleString('pt-BR');
+    doc.footer = (page, total) => ({
+      columns: [
+        { text: `Pág. ${page} de ${total}`, fontSize: 7 },
+        { text: `Gerado em ${gerado}`, fontSize: 7, alignment: 'right' },
+      ],
+      margin: [24, 8, 24, 0],
+    });
 
-    doc.styles = doc.styles || {};
-    doc.styles.subtitle =
-      doc.styles.subtitle || { fontSize: 10, italics: true, color: '#555555' };
-
-    console.log(`${TAG} Subtitle added:`, subtitleBlock.text);
-  }
-
-  function filterTableColumns(doc, pesquisa) {
-    const tableContent = findTableContent(doc);
-    if (!tableContent) {
-      console.warn(`${TAG} No table found in PDF doc — skipping column filter.`);
-      return;
-    }
-
-    const keep = pesquisa.pdf.columnsToKeep;
-    const body = tableContent.table.body;
-    const totalCols = body[0] ? body[0].length : 0;
-
-    tableContent.table.body = body.map((row) => keep.map((i) => row[i] ?? { text: '' }));
-    if (Array.isArray(tableContent.table.widths)) {
-      tableContent.table.widths = keep.map((i) => tableContent.table.widths[i]);
-    }
-
-    console.log(`${TAG} PDF columns trimmed: ${totalCols} -> ${keep.length}`);
+    console.log(`${TAG} PDF rebuilt as listagem (${rows.length} endereços, ${tipo}).`);
   }
 
   function installHook(pesquisa, pdfMake) {
@@ -118,20 +133,29 @@
 
     const originalCreatePdf = pdfMake.createPdf;
     pdfMake.createPdf = function (doc) {
-      // Tweaks apply ONLY to exports triggered by the PDF+KML button (which
-      // sets kmlOnNextPdf). The native PDF button stays completely original.
+      // The listagem rebuild applies ONLY to exports triggered by the
+      // PDF+KML button (which sets kmlOnNextPdf). The native PDF button
+      // stays completely original.
       const emitKml = window.__sigcPro.kmlOnNextPdf;
       if (typeof emitKml !== 'function') {
         return originalCreatePdf.call(this, doc);
       }
       window.__sigcPro.kmlOnNextPdf = null;
 
-      // Hand the KML builder the ORIGINAL table body (before any trimming),
-      // then continue with the tweaks and normal PDF generation.
+      // Hand the KML builder the ORIGINAL table body, then rebuild the PDF.
       let body = null;
       try {
         const tableContent = doc && Array.isArray(doc.content) && findTableContent(doc);
-        body = tableContent ? tableContent.table.body : null;
+        if (
+          tableContent &&
+          window.__sigcPro.tableMatchesLayout(headerTexts(tableContent), pesquisa.columns)
+        ) {
+          body = tableContent.table.body;
+        } else if (tableContent) {
+          console.warn(
+            `${TAG} Table header doesn't match the ${pesquisa.id} Lista de Endereços layout — exporting unmodified.`
+          );
+        }
       } catch (e) {
         console.error(`${TAG} KML data extraction failed:`, e);
       }
@@ -141,27 +165,17 @@
         console.error(`${TAG} KML callback failed:`, e);
       }
 
-      try {
-        const tableContent = doc && Array.isArray(doc.content) && findTableContent(doc);
-        if (
-          tableContent &&
-          window.__sigcPro.tableMatchesLayout(headerTexts(tableContent), pesquisa.columns)
-        ) {
-          customizeTitle(doc, pesquisa.pdf);
-          addHeaderColumns(doc, pesquisa); // reads original columns; must run before trimming
-          filterTableColumns(doc, pesquisa);
-        } else if (tableContent) {
-          console.warn(
-            `${TAG} Table header doesn't match the ${pesquisa.id} Lista de Endereços layout — exporting unmodified.`
-          );
+      if (body) {
+        try {
+          rebuildAsListagem(doc, pesquisa, body);
+        } catch (e) {
+          console.error(`${TAG} Error while rebuilding PDF doc, exporting as-is:`, e);
         }
-      } catch (e) {
-        console.error(`${TAG} Error while tweaking PDF doc, exporting as-is:`, e);
       }
 
       const pdf = originalCreatePdf.call(this, doc);
       // Give the PDF the same descriptive filename as the KML (controle,
-      // selecionados/completos, date). Only PDF+KML exports reach this point.
+      // selecionados/completos, date).
       if (body) {
         try {
           const base = window.__sigcPro.exportFileBase(pesquisa, body);

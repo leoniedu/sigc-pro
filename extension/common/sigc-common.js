@@ -35,11 +35,6 @@
         idZona:        { index: 17, label: 'ID Zona' },
         nomeZona:      { index: 18, label: 'Nome ZONA' },
       },
-      pdf: {
-        customTitle: 'Lista de Endereços — PNS 2026',
-        columnsToKeep: [1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 14],
-        columnsToHeader: [0, 16, 18], // Controle, Biomarcadores, Nome ZONA
-      },
     },
   };
 
@@ -95,11 +90,6 @@
     return true;
   }
 
-  function labelForIndex(columns, index) {
-    const entry = Object.values(columns).find((c) => c.index === index);
-    return entry ? entry.label : null;
-  }
-
   // Shared export filename (no extension) built from the ORIGINAL pdfmake
   // table body: lista-enderecos-<pesquisa>_<controle>_<tipo>_<data>.
   // tipo = "selecionados" when every row has Selecionado = Sim (the report
@@ -126,7 +116,6 @@
     detectPesquisa,
     whenReady,
     tableMatchesLayout,
-    labelForIndex,
     exportFileBase,
     // Set by kml-export before it programmatically clicks the native PDF
     // button; consumed (and cleared) by the pdf-export hook, which passes the
