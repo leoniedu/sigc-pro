@@ -70,13 +70,29 @@ const PESQUISAS = {
   PNS2026: {
     titlePattern: /SIGC\s*-\s*PNS2026/i,
     // Column layout of the Lista de Endereços table (0-based), shared by
-    // both features.
+    // both features. `label` is the expected header text: features validate
+    // labels before acting and go inert (console warning) on mismatch, so a
+    // reordered/inserted column in a SIGC update can't silently shift data.
     columns: {
-      controle: 0, idCnefe: 1, nDomicilio: 2, quadra: 3, face: 4,
-      logradouro: 5, numero: 6, complemento: 7, bairro: 8,
-      latitude: 9, longitude: 10, telefone: 11, morador: 12,
-      situacao: 13, selecionado: 14, antropometria: 15,
-      biomarcadores: 16, idZona: 17, nomeZona: 18,
+      controle:     { index: 0,  label: 'Controle' },
+      idCnefe:      { index: 1,  label: 'ID_CNEFE' },
+      nDomicilio:   { index: 2,  label: 'N.º Domicilio' },
+      quadra:       { index: 3,  label: 'Quadra' },
+      face:         { index: 4,  label: 'Face' },
+      logradouro:   { index: 5,  label: 'Logradouro' },
+      numero:       { index: 6,  label: 'Número' },
+      complemento:  { index: 7,  label: 'Complemento' },
+      bairro:       { index: 8,  label: 'Bairro' },
+      latitude:     { index: 9,  label: 'Latitude' },
+      longitude:    { index: 10, label: 'Longitude' },
+      telefone:     { index: 11, label: 'Telefone' },
+      morador:      { index: 12, label: 'Morador' },
+      situacao:     { index: 13, label: 'Situação' },
+      selecionado:  { index: 14, label: 'Selecionado' },
+      antropometria:{ index: 15, label: 'Antropometria' },
+      biomarcadores:{ index: 16, label: 'Biomarcadores' },
+      idZona:       { index: 17, label: 'ID Zona' },
+      nomeZona:     { index: 18, label: 'Nome ZONA' },
     },
     pdf: {
       customTitle: 'Lista de Endereços — PNS 2026',
@@ -91,10 +107,14 @@ v1 ships with the `PNS2026` entry only (values from the validated userscript).
 New pesquisas are added as new entries with the same shape once their column
 layouts are confirmed.
 
-- Each feature's poll loop (200 ms, ~10 s max) waits for **both** its page
-  prerequisite (`window.pdfMake` for PDF; the DataTables toolbar for KML) and
-  a matching pesquisa; if either never appears, the feature stays inert (no
-  hook, no button, no logging noise on other IBGE sites).
+- `__sigcPro.whenReady(prereqFn, callback)` implements the shared poll loop
+  (200 ms, ~10 s max): it fires only when **both** a pesquisa matches and the
+  feature's prerequisite is satisfied (`window.pdfMake` for PDF; the
+  DataTables toolbar for KML). If either never appears, the feature stays
+  inert (no hook, no button, no logging noise on other IBGE sites).
+- Label validation is tolerant (trim, case-insensitive, collapse whitespace);
+  the exact expected strings are confirmed against the live table during
+  implementation.
 - The matched pesquisa's config drives each feature. Unknown pesquisa → inert.
 - If a future pesquisa needs different *behavior* (not just different columns),
   its config entry gains a function then — not before.
@@ -108,16 +128,23 @@ Lista de Endereços; clicking it downloads the list as
 - **Rows:** the same rows the PDF export sees — read via the DataTables API
   (`rows({ search: 'applied' }).data()`) when available, falling back to
   parsing the rendered DOM table (which then only covers the visible page;
-  logged as a warning).
+  logged as a warning). Assumption: the table is client-side (the official
+  PDF export button shares this limitation, so if SIGC used server-side
+  pagination the PDF export would already be page-limited); verified during
+  testing against the table's row-count info.
+- **Button idempotency:** the button gets a fixed `id`; injection checks for
+  it first, so redraws can't stack duplicates. (No MutationObserver
+  re-insertion unless testing shows DataTables actually rebuilds the toolbar.)
 - **Layers:** two `<Folder>`s split on the `selecionado` column:
   "Selecionados" (green pin style) and "Não selecionados" (red pin style).
   Values other than `Sim` go to the Não selecionados folder.
 - **Placemarks:** name `Dom. {nDomicilio} — {logradouro}, {numero}`;
   description balloon (CDATA HTML) with Controle, ID_CNEFE, Quadra, Face,
   Complemento, Bairro, Telefone, Morador, Situação. Coordinates from the
-  latitude/longitude columns, accepting comma decimal separators. Rows
-  without valid coordinates are skipped and counted; the count is reported
-  in the console and in an alert if nonzero.
+  latitude/longitude columns, accepting comma decimal separators, emitted as
+  `longitude,latitude,0` (KML order), assumed WGS84 (SIGC/CNEFE standard).
+  Rows without valid coordinates are skipped and counted; the count is
+  reported in the console and in an alert if nonzero.
 - **Download:** Blob + temporary `<a download>` — no extension permissions
   needed. All XML text is escaped.
 - Column indexes come from the pesquisa's `columns` map; the same
@@ -131,11 +158,15 @@ Hook `pdfMake.createPdf`, guarded by an idempotency flag, and apply in order:
    `style: 'title'` block at `content[0]`.
 2. `addHeaderColumns` — read the **original** table columns listed in
    `columnsToHeader`, pick the first non-missing value per column
-   (`MISSING_VALUES = ['-', '']`), warn on multiple distinct non-missing
-   values, and insert a `subtitle`-styled line after the title.
+   (`MISSING_VALUES = ['-', '']`), and insert a `subtitle`-styled line after
+   the title. If a column has multiple distinct non-missing values, show
+   `label: vários (N)` instead of a misleading single value (plus the
+   console warning). *(Deviation from the userscript, which showed the first
+   value.)*
 3. `filterTableColumns` — keep only `columnsToKeep` (and matching `widths`).
-   Guard: if the table has fewer columns than `max(columnsToKeep)`, skip the
-   filter so other reports sharing the same export button are unaffected.
+   Guard: header-label validation (against the pesquisa `columns` map) plus
+   the column-count check; on failure, skip the filter so other reports
+   sharing the same export button are unaffected.
 
 All three run inside a try/catch: any error logs and exports the PDF
 unmodified. Console messages keep the `[sigc-pdf-tweak]` prefix.
@@ -160,6 +191,9 @@ Manual, v1:
 4. Click the KML button → file downloads; opened in Google Earth / geojson.io
    it shows two layers (Selecionados / Não selecionados) with correct pin
    positions and balloon data; rows without coordinates are reported.
-5. Filter the table, export KML again → only filtered rows present.
+5. Filter the table, export KML again → only filtered rows present. Confirm
+   the KML placemark count matches the table's "Mostrando X de Y" total
+   (validates the client-side-table assumption).
+6. Filter/paginate several times → still exactly one KML button.
 
 No automated tests: the logic is DOM/pdfmake-bound and config-driven.
