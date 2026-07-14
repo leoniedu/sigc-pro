@@ -1,2 +1,15 @@
 #!/bin/sh
-exec "$(git rev-parse --show-toplevel)/scripts/check-privacy.sh" --staged
+set -e
+ROOT="$(git rev-parse --show-toplevel)"
+
+"$ROOT/scripts/check-privacy.sh" --staged
+
+# Keep dist/sigc-pro-extension.zip in sync: rebuild from the staged content
+# whenever the commit touches extension/, and include it in the same commit.
+if ! git diff --cached --quiet -- extension/; then
+  mkdir -p "$ROOT/dist"
+  TREE=$(git write-tree)
+  git archive --format=zip -o "$ROOT/dist/sigc-pro-extension.zip" "$TREE" extension
+  git add "$ROOT/dist/sigc-pro-extension.zip"
+  echo "dist/sigc-pro-extension.zip rebuilt from staged extension/"
+fi

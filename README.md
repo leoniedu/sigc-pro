@@ -31,8 +31,9 @@ em qualquer outra página do domínio `ibge.gov.br` ela permanece inativa.
 
 ## Instalação (modo desenvolvedor)
 
-1. Baixe este repositório (`Code > Download ZIP`) e descompacte, ou
-   `git clone`.
+1. Baixe [`dist/sigc-pro-extension.zip`](dist/sigc-pro-extension.zip)
+   (sempre atualizado a cada commit) e descompacte — ou baixe o repositório
+   inteiro (`Code > Download ZIP`) / `git clone`.
 2. No Chrome, abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor** (canto superior direito).
 4. Clique em **Carregar sem compactação** e selecione a pasta `extension/`
