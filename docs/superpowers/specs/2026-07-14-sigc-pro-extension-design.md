@@ -171,6 +171,26 @@ Hook `pdfMake.createPdf`, guarded by an idempotency flag, and apply in order:
 All three run inside a try/catch: any error logs and exports the PDF
 unmodified. Console messages keep the `[sigc-pdf-tweak]` prefix.
 
+## Privacy
+
+Guarantee: no data leaves the user's computer, ever. Enforced by design, not
+just policy:
+
+- **Zero extension permissions** — the manifest requests none (`permissions`
+  absent; content-script `matches` only). Chrome's extension page shows "no
+  special permissions", user-verifiable.
+- **Zero network calls in code** — no `fetch`, `XMLHttpRequest`,
+  `sendBeacon`, `WebSocket`, no remote assets. The KML file is built in
+  memory and saved via `Blob` + `<a download>` — a purely local download.
+- **Zero storage** — v1 keeps nothing, not even `localStorage`.
+- **No background worker, no remote code** (MV3 forbids remote code anyway);
+  the three shipped JS files are the entire executable surface, auditable in
+  the open repo.
+- **Repo privacy gate** — a grep for network APIs over `extension/` must
+  return nothing; run before each release.
+- `docs/PRIVACY_POLICY.html` (pt-BR, modeled on SEI-PRO's) states the above
+  plus LGPD note and contact; linked from README and the landing page.
+
 ## Docs (pt-BR, SEI-PRO style)
 
 - `README.md`: what SIGC-PRO is, "extensão não oficial, sem vínculo com o
