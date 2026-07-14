@@ -5,11 +5,12 @@ ROOT="$(git rev-parse --show-toplevel)"
 "$ROOT/scripts/check-privacy.sh" --staged
 
 # Keep dist/sigc-pro-extension.zip in sync: rebuild from the staged content
-# whenever the commit touches extension/, and include it in the same commit.
-if ! git diff --cached --quiet -- extension/; then
+# whenever the commit touches extension/ or the bundled manual, and include
+# it in the same commit. Zip layout: LEIA-ME.txt + extension/.
+if ! git diff --cached --quiet -- extension/ LEIA-ME.txt; then
   mkdir -p "$ROOT/dist"
   TREE=$(git write-tree)
-  git archive --format=zip -o "$ROOT/dist/sigc-pro-extension.zip" "$TREE" extension
+  git archive --format=zip -o "$ROOT/dist/sigc-pro-extension.zip" "$TREE" extension LEIA-ME.txt
   git add "$ROOT/dist/sigc-pro-extension.zip"
-  echo "dist/sigc-pro-extension.zip rebuilt from staged extension/"
+  echo "dist/sigc-pro-extension.zip rebuilt from staged extension/ + LEIA-ME.txt"
 fi

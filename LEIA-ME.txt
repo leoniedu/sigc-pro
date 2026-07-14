@@ -1,0 +1,58 @@
+SIGC-PRO — melhorias não oficiais para o SIGC (IBGE)
+=====================================================
+
+O que é
+-------
+Extensão do Chrome que adiciona um botão "PDF+KML" à Lista de Endereços do
+SIGC (PNS 2026). Um clique baixa dois arquivos:
+
+  * PDF melhorado — sem colunas pouco úteis em campo, com título
+    customizado e com as colunas constantes (Controle, Biomarcadores,
+    Nome ZONA) movidas para uma linha de subtítulo;
+  * KML (Google Earth / Google Maps / geojson.io) — endereços em duas
+    camadas: Selecionado = Sim (verde) e Não (vermelho).
+
+O botão de PDF original do SIGC continua funcionando como sempre, sem
+nenhuma alteração.
+
+AVISO: projeto independente, sem vínculo com o IBGE. Protótipo para
+demonstração à equipe oficial do SIGC. Use por sua conta e risco.
+
+Instalação (Chrome 111 ou superior)
+-----------------------------------
+1. Descompacte este arquivo ZIP em uma pasta permanente (não apague a
+   pasta depois — o Chrome carrega a extensão a partir dela).
+2. No Chrome, abra:  chrome://extensions
+3. Ative o "Modo do desenvolvedor" (canto superior direito).
+4. Clique em "Carregar sem compactação" e selecione a pasta "extension"
+   (a pasta que contém o arquivo manifest.json).
+5. Pronto. O ícone azul da extensão aparece na barra do Chrome (ele não
+   faz nada ao ser clicado — tudo acontece dentro da página do SIGC).
+
+Como usar
+---------
+1. Entre no SIGC e abra o relatório Lista de Endereços normalmente.
+2. Ao lado dos botões de exportação (copiar, CSV, Excel, PDF), aparece o
+   botão azul "PDF+KML".
+3. Clique nele: o PDF melhorado e o arquivo .kml são baixados juntos.
+4. Abra o .kml no Google Earth (ou arraste em geojson.io) para ver os
+   endereços no mapa, com selecionados em verde e não selecionados em
+   vermelho. Endereços sem coordenadas válidas são avisados na tela.
+
+Problemas?
+----------
+* O botão não aparece: confirme que a página é a Lista de Endereços do
+  SIGC e recarregue a página (Cmd+Shift+R / Ctrl+F5).
+* Atualizou a extensão? Em chrome://extensions, clique no ícone de
+  recarregar (↻) do SIGC-PRO e recarregue a página do SIGC.
+* Mensagem "o layout da tabela não corresponde ao esperado": o SIGC mudou
+  as colunas do relatório; reporte ao mantenedor.
+
+Privacidade
+-----------
+Nenhum dado sai do seu computador. A extensão não pede nenhuma permissão
+do navegador, não faz nenhuma chamada de rede e não armazena nada; os
+arquivos são gerados localmente. Isso é verificado automaticamente a cada
+alteração do código.
+
+Código-fonte e contato: https://github.com/leoniedu/sigc-pro
