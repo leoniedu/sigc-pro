@@ -24,9 +24,26 @@
   }
 
   function parseCoord(v) {
-    const s = cellText(v).replace(',', '.');
+    const s = cellText(v);
     if (s === '' || window.__sigcPro.MISSING_VALUES.includes(s)) return null;
-    const n = Number(s);
+
+    // SIGC shows DMS: "dd mm ss.sss S" (also tolerates °'" marks; hemisphere
+    // N/S/E/W, plus O = Oeste). Decimal seconds may use comma.
+    const dms = s.match(
+      /^(-?\d{1,3})[°\s]+(\d{1,2})['\s]+(\d{1,2}(?:[.,]\d+)?)["\s]*([NSEWO])?$/i
+    );
+    if (dms) {
+      const deg = Math.abs(parseInt(dms[1], 10));
+      const min = parseInt(dms[2], 10);
+      const sec = Number(dms[3].replace(',', '.'));
+      if (!Number.isFinite(sec) || min >= 60 || sec >= 60) return null;
+      let value = deg + min / 60 + sec / 3600;
+      const hemi = (dms[4] || '').toUpperCase();
+      if (hemi === 'S' || hemi === 'W' || hemi === 'O' || dms[1].startsWith('-')) value = -value;
+      return value;
+    }
+
+    const n = Number(s.replace(',', '.'));
     return Number.isFinite(n) ? n : null;
   }
 
@@ -182,6 +199,12 @@
     btn.className = sibling ? sibling.className : 'dt-button';
     btn.innerHTML = '<span>KML</span>';
     btn.title = 'Exportar KML (SIGC-PRO)';
+    // Match the sibling export buttons' shape (via the copied class) but in
+    // SIGC-PRO blue, so it reads as an add-on rather than a native button.
+    btn.style.background = '#005a9c';
+    btn.style.borderColor = '#005a9c';
+    btn.style.color = '#fff';
+    btn.style.fontWeight = '600';
     btn.addEventListener('click', () => exportKml(pesquisa));
     toolbar.appendChild(btn);
 

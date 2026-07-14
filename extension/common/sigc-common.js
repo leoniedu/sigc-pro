@@ -78,9 +78,21 @@
   }
 
   function tableMatchesLayout(headerTexts, columns) {
-    return Object.values(columns).every(
-      (c) => normalizeLabel(headerTexts[c.index]) === normalizeLabel(c.label)
+    const mismatches = Object.entries(columns).filter(
+      ([, c]) => normalizeLabel(headerTexts[c.index]) !== normalizeLabel(c.label)
     );
+    if (mismatches.length > 0) {
+      console.warn(
+        `${TAG} Layout mismatch:`,
+        mismatches
+          .map(([k, c]) => `${k}[${c.index}] expected "${c.label}" got "${headerTexts[c.index] ?? ''}"`)
+          .join('; '),
+        '| live headers:',
+        JSON.stringify(headerTexts)
+      );
+      return false;
+    }
+    return true;
   }
 
   function labelForIndex(columns, index) {
