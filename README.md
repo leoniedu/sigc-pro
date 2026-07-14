@@ -53,6 +53,15 @@ permissão do navegador, não faz nenhuma chamada de rede, não armazena nada
 memória e salvo localmente. Detalhes em
 [PRIVACY_POLICY](docs/PRIVACY_POLICY.html).
 
+Essa garantia é verificada por um *gate* automático
+(`scripts/check-privacy.sh`): um hook de pre-commit bloqueia qualquer commit
+que introduza APIs de rede ou armazenamento em `extension/`. Para ativá-lo
+após clonar o repositório:
+
+```sh
+git config core.hooksPath .githooks
+```
+
 ## Licença
 
 MIT.

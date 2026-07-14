@@ -186,8 +186,11 @@ just policy:
 - **No background worker, no remote code** (MV3 forbids remote code anyway);
   the three shipped JS files are the entire executable surface, auditable in
   the open repo.
-- **Repo privacy gate** — a grep for network APIs over `extension/` must
-  return nothing; run before each release.
+- **Repo privacy gate** — `scripts/check-privacy.sh` greps `extension/` for
+  network/storage APIs (`fetch`, XHR, `sendBeacon`, WebSocket, EventSource,
+  `.src =`, storage, `eval`); enforced as an obligatory pre-commit hook
+  (`.githooks/pre-commit`, activated per clone with
+  `git config core.hooksPath .githooks`).
 - `docs/PRIVACY_POLICY.html` (pt-BR, modeled on SEI-PRO's) states the above
   plus LGPD note and contact; linked from README and the landing page.
 
