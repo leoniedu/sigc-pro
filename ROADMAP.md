@@ -40,8 +40,8 @@ Working checklist; move items up/down freely. Specs live in
 
 ## Known minors (deliberately deferred)
 
-- [ ] `whenReady` gives up after ~10 s — SPA navigation to the report later
-      than that needs a page reload
+- [x] ~~SPA navigation loses the PDF+KML button~~ — fixed: MutationObserver
+      re-inserts whenever the toolbar is rebuilt (2026-07-14)
 - [ ] `cellText` uses `innerHTML` on a detached div; `DOMParser` would be
       inert-safer
 - [ ] KML button copies its CSS class from the first toolbar button
