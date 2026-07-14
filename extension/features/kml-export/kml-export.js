@@ -177,7 +177,7 @@
       const rows = body.slice(1).map((r) => r.map(asText));
 
       const { kml, skipped, total } = buildKml(pesquisa, rows);
-      download(`lista-enderecos-${pesquisa.id.toLowerCase()}.kml`, kml);
+      download(`${window.__sigcPro.exportFileBase(pesquisa, body)}.kml`, kml);
 
       console.log(`${TAG} KML exported: ${total} placemarks, ${skipped} skipped (source: pdf-capture).`);
       if (skipped > 0) {

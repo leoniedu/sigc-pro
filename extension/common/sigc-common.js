@@ -100,6 +100,26 @@
     return entry ? entry.label : null;
   }
 
+  // Shared export filename (no extension) built from the ORIGINAL pdfmake
+  // table body: lista-enderecos-<pesquisa>_<controle>_<tipo>_<data>.
+  // tipo = "selecionados" when every row has Selecionado = Sim (the report
+  // was requested filtered), otherwise "completos".
+  function exportFileBase(pesquisa, body) {
+    const cols = pesquisa.columns;
+    const rows = body.slice(1);
+    const val = (r, i) => (r[i] && r[i].text != null ? String(r[i].text).trim() : '');
+
+    const controles = [...new Set(rows.map((r) => val(r, cols.controle.index)).filter(Boolean))];
+    const controle = controles.length === 1 ? controles[0] : 'varios-controles';
+
+    const allSim =
+      rows.length > 0 && rows.every((r) => val(r, cols.selecionado.index) === 'Sim');
+    const tipo = allSim ? 'selecionados' : 'completos';
+
+    const data = new Date().toISOString().slice(0, 10);
+    return `lista-enderecos-${pesquisa.id.toLowerCase()}_${controle}_${tipo}_${data}`;
+  }
+
   window.__sigcPro = {
     PESQUISAS,
     MISSING_VALUES,
@@ -107,6 +127,7 @@
     whenReady,
     tableMatchesLayout,
     labelForIndex,
+    exportFileBase,
     // Set by kml-export before it programmatically clicks the native PDF
     // button; consumed (and cleared) by the pdf-export hook, which passes the
     // ORIGINAL pdfmake table body to it and then lets the PDF proceed

@@ -158,7 +158,20 @@
       } catch (e) {
         console.error(`${TAG} Error while tweaking PDF doc, exporting as-is:`, e);
       }
-      return originalCreatePdf.call(this, doc);
+
+      const pdf = originalCreatePdf.call(this, doc);
+      // Give the PDF the same descriptive filename as the KML (controle,
+      // selecionados/completos, date). Only PDF+KML exports reach this point.
+      if (body) {
+        try {
+          const base = window.__sigcPro.exportFileBase(pesquisa, body);
+          const originalDownload = pdf.download.bind(pdf);
+          pdf.download = (name, cb, opts) => originalDownload(`${base}.pdf`, cb, opts);
+        } catch (e) {
+          console.error(`${TAG} Could not set PDF filename:`, e);
+        }
+      }
+      return pdf;
     };
     pdfMake.__sigcProPdfTweak = true;
     console.log(`${TAG} Hook installed on pdfMake.createPdf (${pesquisa.id}).`);
