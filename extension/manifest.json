@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "SIGC-PRO",
+  "version": "0.1.0",
+  "description": "Melhorias não oficiais para o SIGC (IBGE): ajustes na exportação de PDF e exportação KML da Lista de Endereços.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.ibge.gov.br/*"],
+      "js": [
+        "common/sigc-common.js",
+        "features/pdf-export/pdf-export.js",
+        "features/kml-export/kml-export.js"
+      ],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ]
+}
