@@ -48,34 +48,40 @@
   }
 
   // Returns { header: string[], rows: string[][], source: 'api'|'dom' } or null.
-  function readTable() {
-    const tableEl = document.querySelector('table.dataTable');
+  // Scoped to the toolbar's own .dataTables_wrapper so the button always acts
+  // on its table. In DataTables scroll mode the wrapper holds header/body
+  // CLONES of the table; only the original is registered with the API, so we
+  // pick tables by isDataTable() instead of the .dataTable class.
+  function readTable(toolbar) {
+    const scope = (toolbar && toolbar.closest('.dataTables_wrapper')) || document;
     const jq = window.jQuery || window.$;
 
-    if (
-      tableEl &&
-      jq &&
-      jq.fn &&
-      jq.fn.dataTable &&
-      jq.fn.dataTable.isDataTable(tableEl)
-    ) {
-      const dt = jq(tableEl).DataTable();
-      const header = dt
-        .columns()
-        .header()
-        .toArray()
-        .map((h) => (h.textContent || '').trim());
-      const rows = dt
-        .rows({ search: 'applied' })
-        .data()
-        .toArray()
-        .map((r) => Array.from(r).map(cellText));
-      return { header, rows, source: 'api' };
+    if (jq && jq.fn && jq.fn.dataTable) {
+      const tableEl = [...scope.querySelectorAll('table')].find((t) =>
+        jq.fn.dataTable.isDataTable(t)
+      );
+      if (tableEl) {
+        const dt = jq(tableEl).DataTable();
+        const header = dt
+          .columns()
+          .header()
+          .toArray()
+          .map((h) => (h.textContent || '').trim());
+        const rows = dt
+          .rows({ search: 'applied' })
+          .data()
+          .toArray()
+          .map((r) => Array.from(r).map(cellText));
+        return { header, rows, source: 'api' };
+      }
     }
 
+    const tableEl = scope.querySelector('table.dataTable');
     if (tableEl) {
       console.warn(`${TAG} DataTables API unavailable — falling back to DOM (visible page only).`);
-      const header = [...tableEl.querySelectorAll('thead th')].map((th) =>
+      // Scroll mode keeps the real thead in a .dataTables_scrollHead clone.
+      const headEl = scope.querySelector('.dataTables_scrollHead table') || tableEl;
+      const header = [...headEl.querySelectorAll('thead th')].map((th) =>
         (th.textContent || '').trim()
       );
       const rows = [...tableEl.querySelectorAll('tbody tr')].map((tr) =>
@@ -168,8 +174,8 @@
     URL.revokeObjectURL(url);
   }
 
-  function exportKml(pesquisa) {
-    const data = readTable();
+  function exportKml(pesquisa, toolbar) {
+    const data = readTable(toolbar);
     if (!data) {
       alert('SIGC-PRO: tabela de endereços não encontrada nesta página.');
       return;
@@ -205,7 +211,7 @@
     btn.style.borderColor = '#005a9c';
     btn.style.color = '#fff';
     btn.style.fontWeight = '600';
-    btn.addEventListener('click', () => exportKml(pesquisa));
+    btn.addEventListener('click', () => exportKml(pesquisa, toolbar));
     toolbar.appendChild(btn);
 
     console.log(`${TAG} KML button added (${pesquisa.id}).`);
