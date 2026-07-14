@@ -26,7 +26,7 @@
   function parseCoord(v) {
     const s = cellText(v).replace(',', '.');
     if (s === '' || window.__sigcPro.MISSING_VALUES.includes(s)) return null;
-    const n = parseFloat(s);
+    const n = Number(s);
     return Number.isFinite(n) ? n : null;
   }
 

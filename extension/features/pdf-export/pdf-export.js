@@ -105,7 +105,7 @@
     const body = tableContent.table.body;
     const totalCols = body[0] ? body[0].length : 0;
 
-    tableContent.table.body = body.map((row) => keep.map((i) => row[i]));
+    tableContent.table.body = body.map((row) => keep.map((i) => row[i] ?? { text: '' }));
     if (Array.isArray(tableContent.table.widths)) {
       tableContent.table.widths = keep.map((i) => tableContent.table.widths[i]);
     }
@@ -133,7 +133,7 @@
           );
         }
       } catch (e) {
-        console.error(`${TAG} Error while tweaking PDF doc, exporting unmodified:`, e);
+        console.error(`${TAG} Error while tweaking PDF doc, exporting as-is:`, e);
       }
       return originalCreatePdf.call(this, doc);
     };
