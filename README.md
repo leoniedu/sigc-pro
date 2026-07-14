@@ -12,14 +12,18 @@ para o SIGC — Sistema Integrado de Gestão da Coleta (IBGE), no espírito do
 
 Na **Lista de Endereços** (PNS 2026):
 
-- **PDF melhorado** — a exportação de PDF passa a ocultar colunas pouco
-  úteis em campo, usa um título customizado e move colunas de valor
-  constante (Controle, Biomarcadores, Nome ZONA) para uma linha de
-  subtítulo.
-- **Exportação KML** — novo botão "KML" ao lado dos botões de exportação,
-  que baixa os endereços como arquivo KML (Google Earth / Maps) com camadas
-  separadas para **Selecionado = Sim** (verde) e **Não** (vermelho).
-  Endereços sem coordenadas válidas são contados e informados.
+- **Botão PDF+KML** — novo botão azul ao lado dos botões de exportação.
+  Um clique baixa dois arquivos:
+  - **PDF melhorado** — oculta colunas pouco úteis em campo, usa um título
+    customizado e move colunas de valor constante (Controle, Biomarcadores,
+    Nome ZONA) para uma linha de subtítulo;
+  - **KML** (Google Earth / Maps) — endereços com camadas separadas para
+    **Selecionado = Sim** (verde) e **Não** (vermelho); coordenadas em
+    GMS (`gg mm ss.sss S`) são convertidas automaticamente; endereços sem
+    coordenadas válidas são contados e informados.
+
+O botão de PDF original do SIGC continua intocado — gera o PDF padrão,
+sem alterações.
 
 A extensão só age em páginas do SIGC (detectadas pelo cabeçalho
 `SIGC - PNS2026`) e valida o layout da tabela antes de qualquer alteração —

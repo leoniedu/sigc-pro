@@ -134,8 +134,9 @@ Lista de Endereços; clicking it downloads the list as
   entirely (SIGC behind the F5 gateway renders the visible table with
   header/body clones that made DOM reads unreliable) and needs no
   jQuery/DataTables API access. An 8 s timeout clears the flag and alerts if
-  the click never reaches pdfMake. PDF-only remains available via the native
-  button.
+  the click never reaches pdfMake. The native PDF button is left completely
+  untouched: the hook applies the PDF tweaks only when `kmlOnNextPdf` is set,
+  i.e. only for exports triggered by the PDF+KML button.
 - **Button idempotency:** the button gets a fixed `id`; injection checks for
   it first, so redraws can't stack duplicates. (No MutationObserver
   re-insertion unless testing shows DataTables actually rebuilds the toolbar.)
