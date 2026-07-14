@@ -76,21 +76,48 @@
       }
     }
 
-    const tableEl = scope.querySelector('table.dataTable');
-    if (tableEl) {
-      console.warn(`${TAG} DataTables API unavailable — falling back to DOM (visible page only).`);
-      // Scroll mode keeps the real thead in a .dataTables_scrollHead clone.
-      const headEl = scope.querySelector('.dataTables_scrollHead table') || tableEl;
-      const header = [...headEl.querySelectorAll('thead th')].map((th) =>
-        (th.textContent || '').trim()
-      );
-      const rows = [...tableEl.querySelectorAll('tbody tr')].map((tr) =>
-        [...tr.querySelectorAll('td')].map((td) => (td.textContent || '').trim())
-      );
-      return { header, rows, source: 'dom' };
-    }
+    // DOM fallback. Scroll mode splits the table into clones, so don't trust
+    // any single element: take headers from whichever table has non-empty
+    // thead text, and rows from whichever has the most tbody rows.
+    let tables = [...scope.querySelectorAll('table')];
+    if (tables.length === 0 && scope !== document) tables = [...document.querySelectorAll('table')];
+    if (tables.length === 0) return null;
 
-    return null;
+    console.warn(`${TAG} DataTables API unavailable — falling back to DOM (visible page only).`);
+    console.warn(
+      `${TAG} diagnostics:`,
+      JSON.stringify({
+        jquery: !!(window.jQuery || window.$),
+        dtPlugin: !!(jq && jq.fn && jq.fn.dataTable),
+        tablesInScope: tables.length,
+        perTable: tables.map((t) => ({
+          cls: t.className,
+          ths: t.querySelectorAll('thead th').length,
+          rows: t.querySelectorAll('tbody tr').length,
+        })),
+      })
+    );
+
+    const headEl = tables.find((t) =>
+      [...t.querySelectorAll('thead th')].some((th) => (th.textContent || '').trim())
+    );
+    const bodyEl = tables.reduce(
+      (best, t) =>
+        t.querySelectorAll('tbody tr').length >
+        (best ? best.querySelectorAll('tbody tr').length : 0)
+          ? t
+          : best,
+      null
+    );
+    if (!headEl || !bodyEl) return null;
+
+    const header = [...headEl.querySelectorAll('thead th')].map((th) =>
+      (th.textContent || '').trim()
+    );
+    const rows = [...bodyEl.querySelectorAll('tbody tr')].map((tr) =>
+      [...tr.querySelectorAll('td')].map((td) => (td.textContent || '').trim())
+    );
+    return { header, rows, source: 'dom' };
   }
 
   function placemark(row, cols) {
