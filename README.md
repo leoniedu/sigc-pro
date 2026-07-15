@@ -18,7 +18,8 @@ Na **Lista de Endereços** (PNS 2026):
     customizado e move colunas de valor constante (Controle, Biomarcadores,
     Nome ZONA) para uma linha de subtítulo;
   - **KML** (Google Earth / Maps) — endereços com camadas separadas para
-    **Selecionado = Sim** (verde) e **Não** (vermelho); coordenadas em
+    **Selecionado = Sim** (vermelho, numerado) e **Não** (azul, menor) —
+    cores seguras para daltonismo; coordenadas em
     GMS (`gg mm ss.sss S`) são convertidas automaticamente; endereços sem
     coordenadas válidas são contados e informados.
 

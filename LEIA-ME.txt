@@ -10,7 +10,7 @@ SIGC (PNS 2026). Um clique baixa dois arquivos:
     customizado e com as colunas constantes (Controle, Biomarcadores,
     Nome ZONA) movidas para uma linha de subtítulo;
   * KML (Google Earth / Google Maps / geojson.io) — endereços em duas
-    camadas: Selecionado = Sim (verde) e Não (vermelho).
+    camadas: Selecionado = Sim (vermelho, numerado) e Não (azul, menor).
 
 O botão de PDF original do SIGC continua funcionando como sempre, sem
 nenhuma alteração.
@@ -36,8 +36,10 @@ Como usar
    botão azul "PDF+KML".
 3. Clique nele: o PDF melhorado e o arquivo .kml são baixados juntos.
 4. Abra o .kml no Google Earth (ou arraste em geojson.io) para ver os
-   endereços no mapa, com selecionados em verde e não selecionados em
-   vermelho. Endereços sem coordenadas válidas são avisados na tela.
+   endereços no mapa, com selecionados em vermelho (rotulados com o nº do
+   domicílio) e não selecionados em azul, menores e sem rótulo (cores
+   seguras para daltonismo). Endereços sem coordenadas válidas são
+   avisados na tela.
 
 Problemas?
 ----------
