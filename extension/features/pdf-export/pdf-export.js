@@ -49,9 +49,9 @@
     const listTable = (listRows) => {
       const tbody = [
         [
+          { text: 'Nº', style: 'th', alignment: 'center' },
           { text: 'Q/F', style: 'th' },
           { text: 'Endereço / Morador / Telefone', style: 'th' },
-          { text: 'Nº', style: 'th', alignment: 'center' },
         ],
       ];
 
@@ -69,8 +69,6 @@
           .join('   •   ');
 
         tbody.push([
-          { text: `${val(r, cols.quadra)}/${val(r, cols.face)}`, style: 'td' },
-          { text: endereco, style: 'td' },
           {
             text: present(val(r, cols.nDomicilio)) ? val(r, cols.nDomicilio) : '',
             rowSpan: 2,
@@ -79,16 +77,18 @@
             alignment: 'center',
             margin: [0, 2, 0, 0],
           },
+          { text: `${val(r, cols.quadra)}/${val(r, cols.face)}`, style: 'td' },
+          { text: endereco, style: 'td' },
         ]);
         tbody.push([
+          {},
           { text: '', style: 'td2' },
           { text: linha2, style: 'td2' },
-          {},
         ]);
       });
 
       return {
-        table: { headerRows: 1, widths: [42, '*', 32], body: tbody },
+        table: { headerRows: 1, widths: [32, 42, '*'], body: tbody },
         layout: {
           hLineWidth: (i) => (i <= 1 ? 0.8 : i % 2 === 1 ? 0.4 : 0),
           vLineWidth: () => 0,
