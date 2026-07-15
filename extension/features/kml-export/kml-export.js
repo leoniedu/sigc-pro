@@ -203,9 +203,12 @@
       // SIGC builds and rebuilds the report view via in-app navigation
       // (e.g. opening another controle), so the toolbar can appear at any
       // time and is recreated without our button. Watch the DOM and insert
-      // whenever a toolbar exists without it. insertButton is idempotent
-      // and the getElementById guard keeps the observer cheap.
+      // whenever a toolbar exists without it — but only on the Lista de
+      // Endereços page, since in-app navigation can leave for other SIGC
+      // pages without a full reload. insertButton is idempotent and the
+      // getElementById guard keeps the observer cheap.
       const tryInsert = () => {
+        if (!window.__sigcPro.onListaEnderecos()) return;
         if (document.getElementById(BUTTON_ID)) return;
         const toolbar = document.querySelector('.dt-buttons');
         if (toolbar) insertButton(pesquisa, toolbar);

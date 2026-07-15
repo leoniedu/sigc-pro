@@ -54,14 +54,24 @@
     return null;
   }
 
-  // Fires callback(pesquisa, prereq) once, when a pesquisa matches AND
-  // prereqFn() is truthy. Silent give-up after ~10 s keeps the extension
-  // inert on non-SIGC IBGE pages.
+  // True only on the Lista de Endereços page. KML/PDF export are meaningless
+  // elsewhere in SIGC, so features gate on this before touching the DOM.
+  function onListaEnderecos() {
+    return [...document.querySelectorAll('h6')].some(
+      (h) => normalizeLabel(h.textContent).replace(/[çã]/g, (c) => (c === 'ç' ? 'c' : 'a')) ===
+        'lista de enderecos'
+    );
+  }
+
+  // Fires callback(pesquisa, prereq) once, when a pesquisa matches, the
+  // current page is the Lista de Endereços, AND prereqFn() is truthy.
+  // Silent give-up after ~10 s keeps the extension inert on non-SIGC IBGE
+  // pages and on other SIGC pages within a matching pesquisa.
   function whenReady(prereqFn, callback) {
     let attempts = 0;
     const tick = () => {
       const pesquisa = detectPesquisa();
-      const prereq = pesquisa ? prereqFn() : null;
+      const prereq = pesquisa && onListaEnderecos() ? prereqFn() : null;
       if (pesquisa && prereq) {
         callback(pesquisa, prereq);
         return;
@@ -147,6 +157,7 @@
     PESQUISAS,
     MISSING_VALUES,
     detectPesquisa,
+    onListaEnderecos,
     whenReady,
     tableMatchesLayout,
     exportFileBase,

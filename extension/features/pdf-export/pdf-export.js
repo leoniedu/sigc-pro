@@ -45,6 +45,7 @@
     const zona = `${constVal(cols.idZona)} ${constVal(cols.nomeZona)}`.trim();
     const allSim = rows.length > 0 && rows.every((r) => val(r, cols.selecionado) === 'Sim');
     const tipo = allSim ? 'SELECIONADOS' : 'COMPLETA';
+    const nSelecionados = rows.filter((r) => val(r, cols.selecionado) === 'Sim').length;
 
     const listTable = (listRows) => {
       const tbody = [
@@ -115,7 +116,9 @@
         { text: 'BIOMARCADORES: ', bold: true },
         `${bio}\n`,
         { text: 'ZONA: ', bold: true },
-        `${zona}`,
+        `${zona} • `,
+        { text: 'Nº DE SELECIONADOS: ', bold: true },
+        `${nSelecionados}`,
       ],
       style: 'hdr',
       margin: [24, 14, 24, 0],
