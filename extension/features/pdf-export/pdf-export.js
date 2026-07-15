@@ -93,17 +93,11 @@
     doc.pageMargins = [24, 46, 24, 32];
     // Repeated on EVERY page (pdfmake page header, not a content block).
     doc.header = () => ({
-      columns: [
-        { text: `LISTA DE ENDEREÇOS - ${tipo}`, style: 'hdr' },
-        {
-          text:
-            `CONTROLE: ${controle}   •   SITUAÇÃO: ${situacao}   •   ` +
-            `BIOMARCADORES: ${bio}   •   ZONA: ${zona}`,
-          style: 'hdr',
-          alignment: 'right',
-        },
-      ],
-      margin: [24, 16, 24, 0],
+      text:
+        `LISTA DE ENDEREÇOS - ${tipo} - CONTROLE: ${controle} • ` +
+        `SITUAÇÃO: ${situacao} • BIOMARCADORES: ${bio} • ZONA: ${zona}`,
+      style: 'hdr',
+      margin: [24, 14, 24, 0],
     });
     doc.content = [
       {
