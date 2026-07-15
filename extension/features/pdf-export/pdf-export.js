@@ -59,7 +59,7 @@
     // when the value can't be parsed.
     const coordText = (r, c) => {
       const dec = window.__sigcPro.parseCoord(val(r, c));
-      return dec !== null ? dec.toFixed(7) : val(r, c);
+      return dec !== null ? dec.toFixed(4) : val(r, c);
     };
 
     rows.forEach((r) => {
@@ -97,7 +97,7 @@
     });
 
     doc.pageOrientation = 'portrait';
-    doc.pageMargins = [24, 56, 24, 32];
+    doc.pageMargins = [24, 62, 24, 32];
     // Repeated on EVERY page (pdfmake page header, not a content block).
     // Labels bold, values regular.
     doc.header = () => ({
@@ -107,7 +107,7 @@
         { text: 'SITUAÇÃO: ', bold: true },
         `${situacao} • `,
         { text: 'BIOMARCADORES: ', bold: true },
-        `${bio} • `,
+        `${bio}\n`,
         { text: 'ZONA: ', bold: true },
         `${zona}`,
       ],
@@ -116,7 +116,7 @@
     });
     doc.content = [
       {
-        table: { headerRows: 1, widths: [42, '*', 80, 42], body: tbody },
+        table: { headerRows: 1, widths: [42, '*', 52, 32], body: tbody },
         layout: {
           hLineWidth: (i) => (i <= 1 ? 0.8 : i % 2 === 1 ? 0.4 : 0),
           vLineWidth: () => 0,
@@ -129,11 +129,11 @@
     ];
     doc.styles = {
       hdr: { fontSize: 10 },
-      th: { fontSize: 7.5, bold: true },
-      td: { fontSize: 7.5 },
-      td2: { fontSize: 6.5, color: '#444444' },
+      th: { fontSize: 8, bold: true },
+      td: { fontSize: 8 },
+      td2: { fontSize: 7, color: '#444444' },
     };
-    doc.defaultStyle = { fontSize: 7.5 };
+    doc.defaultStyle = { fontSize: 8 };
 
     const gerado = new Date().toLocaleString('pt-BR');
     doc.footer = (page, total) => ({
