@@ -99,10 +99,8 @@
           text:
             `CONTROLE: ${controle}   •   SITUAÇÃO: ${situacao}   •   ` +
             `BIOMARCADORES: ${bio}   •   ZONA: ${zona}`,
-          fontSize: 8,
-          bold: true,
+          style: 'hdr',
           alignment: 'right',
-          margin: [0, 2, 0, 0],
         },
       ],
       margin: [24, 16, 24, 0],
