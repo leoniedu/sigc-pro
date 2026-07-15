@@ -16,37 +16,6 @@
       .replace(/'/g, '&apos;');
   }
 
-  function cellText(v) {
-    // DataTables cell data may contain HTML; reduce to text.
-    const div = document.createElement('div');
-    div.innerHTML = String(v ?? '');
-    return (div.textContent || '').trim();
-  }
-
-  function parseCoord(v) {
-    const s = cellText(v);
-    if (s === '' || window.__sigcPro.MISSING_VALUES.includes(s)) return null;
-
-    // SIGC shows DMS: "dd mm ss.sss S" (also tolerates °'" marks; hemisphere
-    // N/S/E/W, plus O = Oeste). Decimal seconds may use comma.
-    const dms = s.match(
-      /^(-?\d{1,3})[°\s]+(\d{1,2})['\s]+(\d{1,2}(?:[.,]\d+)?)["\s]*([NSEWO])?$/i
-    );
-    if (dms) {
-      const deg = Math.abs(parseInt(dms[1], 10));
-      const min = parseInt(dms[2], 10);
-      const sec = Number(dms[3].replace(',', '.'));
-      if (!Number.isFinite(sec) || min >= 60 || sec >= 60) return null;
-      let value = deg + min / 60 + sec / 3600;
-      const hemi = (dms[4] || '').toUpperCase();
-      if (hemi === 'S' || hemi === 'W' || hemi === 'O' || dms[1].startsWith('-')) value = -value;
-      return value;
-    }
-
-    const n = Number(s.replace(',', '.'));
-    return Number.isFinite(n) ? n : null;
-  }
-
   // Finds the native PDF export button in the same toolbar as the KML button.
   function findPdfButton(toolbar) {
     return (
@@ -60,8 +29,8 @@
 
   function placemark(row, cols) {
     const get = (key) => row[cols[key].index] ?? '';
-    const lat = parseCoord(get('latitude'));
-    const lon = parseCoord(get('longitude'));
+    const lat = window.__sigcPro.parseCoord(get('latitude'));
+    const lon = window.__sigcPro.parseCoord(get('longitude'));
     if (lat === null || lon === null) return null;
 
     const name = `Dom. ${get('nDomicilio')} — ${get('logradouro')}, ${get('numero')}`;

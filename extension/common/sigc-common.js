@@ -90,6 +90,39 @@
     return true;
   }
 
+  function cellText(v) {
+    // Cell data may contain HTML; reduce to text.
+    const div = document.createElement('div');
+    div.innerHTML = String(v ?? '');
+    return (div.textContent || '').trim();
+  }
+
+  // Parses a coordinate cell to signed decimal degrees, or null.
+  // SIGC shows DMS: "dd mm ss.sss S" (also tolerates °'" marks; hemisphere
+  // N/S/E/W, plus O = Oeste). Decimal seconds may use comma. Plain decimal
+  // values (dot or comma) are accepted too.
+  function parseCoord(v) {
+    const s = cellText(v);
+    if (s === '' || MISSING_VALUES.includes(s)) return null;
+
+    const dms = s.match(
+      /^(-?\d{1,3})[°\s]+(\d{1,2})['\s]+(\d{1,2}(?:[.,]\d+)?)["\s]*([NSEWO])?$/i
+    );
+    if (dms) {
+      const deg = Math.abs(parseInt(dms[1], 10));
+      const min = parseInt(dms[2], 10);
+      const sec = Number(dms[3].replace(',', '.'));
+      if (!Number.isFinite(sec) || min >= 60 || sec >= 60) return null;
+      let value = deg + min / 60 + sec / 3600;
+      const hemi = (dms[4] || '').toUpperCase();
+      if (hemi === 'S' || hemi === 'W' || hemi === 'O' || dms[1].startsWith('-')) value = -value;
+      return value;
+    }
+
+    const n = Number(s.replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  }
+
   // Shared export filename (no extension) built from the ORIGINAL pdfmake
   // table body: lista-enderecos-<pesquisa>_<controle>_<tipo>_<data>.
   // tipo = "selecionados" when every row has Selecionado = Sim (the report
@@ -117,6 +150,7 @@
     whenReady,
     tableMatchesLayout,
     exportFileBase,
+    parseCoord,
     // Set by kml-export before it programmatically clicks the native PDF
     // button; consumed (and cleared) by the pdf-export hook, which passes the
     // ORIGINAL pdfmake table body to it and then lets the PDF proceed

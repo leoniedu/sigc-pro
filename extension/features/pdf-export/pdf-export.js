@@ -55,6 +55,13 @@
       ],
     ];
 
+    // Google-Maps-friendly decimal degrees; falls back to the original text
+    // when the value can't be parsed.
+    const coordText = (r, c) => {
+      const dec = window.__sigcPro.parseCoord(val(r, c));
+      return dec !== null ? dec.toFixed(7) : val(r, c);
+    };
+
     rows.forEach((r) => {
       const endereco = [cols.logradouro, cols.numero, cols.complemento, cols.bairro]
         .map((c) => val(r, c))
@@ -71,7 +78,7 @@
       tbody.push([
         { text: `${val(r, cols.quadra)}/${val(r, cols.face)}`, style: 'td' },
         { text: endereco, style: 'td' },
-        { text: val(r, cols.latitude), style: 'td', alignment: 'right', noWrap: true },
+        { text: coordText(r, cols.latitude), style: 'td', alignment: 'right', noWrap: true },
         {
           text: val(r, cols.nDomicilio),
           rowSpan: 2,
@@ -84,7 +91,7 @@
       tbody.push([
         { text: '', style: 'td2' },
         { text: linha2, style: 'td2' },
-        { text: val(r, cols.longitude), style: 'td2', alignment: 'right', noWrap: true },
+        { text: coordText(r, cols.longitude), style: 'td2', alignment: 'right', noWrap: true },
         {},
       ]);
     });
