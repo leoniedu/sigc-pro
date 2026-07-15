@@ -96,13 +96,21 @@
       ]);
     });
 
-    doc.pageOrientation = 'landscape';
-    doc.pageMargins = [24, 46, 24, 32];
+    doc.pageOrientation = 'portrait';
+    doc.pageMargins = [24, 56, 24, 32];
     // Repeated on EVERY page (pdfmake page header, not a content block).
+    // Labels bold, values regular.
     doc.header = () => ({
-      text:
-        `CONTROLE: ${controle} • SITUAÇÃO: ${situacao} • ` +
-        `BIOMARCADORES: ${bio} • ZONA: ${zona}`,
+      text: [
+        { text: 'CONTROLE: ', bold: true },
+        `${controle} • `,
+        { text: 'SITUAÇÃO: ', bold: true },
+        `${situacao} • `,
+        { text: 'BIOMARCADORES: ', bold: true },
+        `${bio} • `,
+        { text: 'ZONA: ', bold: true },
+        `${zona}`,
+      ],
       style: 'hdr',
       margin: [24, 14, 24, 0],
     });
@@ -120,7 +128,7 @@
       },
     ];
     doc.styles = {
-      hdr: { fontSize: 10, bold: true },
+      hdr: { fontSize: 10 },
       th: { fontSize: 7.5, bold: true },
       td: { fontSize: 7.5 },
       td2: { fontSize: 6.5, color: '#444444' },
