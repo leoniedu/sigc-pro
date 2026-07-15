@@ -93,11 +93,14 @@
       // Dots instead of pushpins: centered on the coordinate and far less
       // busy in dense areas. Icons come from the standard KML palette,
       // resolved by the viewer (Google Earth).
-      '    <Style id="sel"><IconStyle><color>ff00b400</color><scale>1.0</scale>' +
+      // Okabe-Ito colorblind-safe pair (KML colors are aabbggrr):
+      // selected = vermillion #D55E00 (attention), non-selected = sky blue
+      // #56B4E9 at ~70% opacity (context).
+      '    <Style id="sel"><IconStyle><color>ff005ed5</color><scale>1.0</scale>' +
         '<Icon><href>http://maps.google.com/mapfiles/kml/shapes/shaded_dot.png</href></Icon>' +
         '<hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/></IconStyle>' +
         '<LabelStyle><scale>0.9</scale></LabelStyle></Style>',
-      '    <Style id="nsel"><IconStyle><color>b32222dd</color><scale>0.6</scale>' +
+      '    <Style id="nsel"><IconStyle><color>b3e9b456</color><scale>0.6</scale>' +
         '<Icon><href>http://maps.google.com/mapfiles/kml/shapes/shaded_dot.png</href></Icon>' +
         '<hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/></IconStyle>' +
         '<LabelStyle><scale>0</scale></LabelStyle></Style>',
