@@ -1,0 +1,12 @@
+#!/bin/sh
+# On push, drop the current distribution zip into the shared OneDrive folder.
+# Silently skipped on machines without the OneDrive path.
+ROOT="$(git rev-parse --show-toplevel)"
+SRC="$ROOT/dist/sigc-pro-extension.zip"
+DEST_DIR="/Users/eleon/Library/CloudStorage/OneDrive-fundacaoibge/pns2026/pns_ba"
+
+if [ -f "$SRC" ] && [ -d "$DEST_DIR" ]; then
+  cp "$SRC" "$DEST_DIR/sigc-pro-extension.zip" \
+    && echo "pre-push: zip copied to $DEST_DIR"
+fi
+exit 0
