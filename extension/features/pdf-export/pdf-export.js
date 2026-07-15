@@ -46,15 +46,6 @@
     const allSim = rows.length > 0 && rows.every((r) => val(r, cols.selecionado) === 'Sim');
     const tipo = allSim ? 'SELECIONADOS' : 'COMPLETA';
 
-    const tbody = [
-      [
-        { text: 'Q/F', style: 'th' },
-        { text: 'Endereço / Morador / Telefone', style: 'th' },
-        { text: 'Lat/Lon', style: 'th', alignment: 'right' },
-        { text: 'Nº', style: 'th', alignment: 'center' },
-      ],
-    ];
-
     // Google-Maps-friendly decimal degrees; falls back to the original text
     // when the value can't be parsed.
     const coordText = (r, c) => {
@@ -62,39 +53,62 @@
       return dec !== null ? dec.toFixed(4) : val(r, c);
     };
 
-    rows.forEach((r) => {
-      const endereco = [cols.logradouro, cols.numero, cols.complemento, cols.bairro]
-        .map((c) => val(r, c))
-        .filter(present)
-        .join(', ');
-      const linha2 = [
-        `ID_CNEFE ${val(r, cols.idCnefe)}`,
-        present(val(r, cols.morador)) ? `MORADOR: ${val(r, cols.morador)}` : '',
-        present(val(r, cols.telefone)) ? `TEL: ${val(r, cols.telefone)}` : '',
-      ]
-        .filter(Boolean)
-        .join('   •   ');
+    const listTable = (listRows) => {
+      const tbody = [
+        [
+          { text: 'Q/F', style: 'th' },
+          { text: 'Endereço / Morador / Telefone', style: 'th' },
+          { text: 'Lat/Lon', style: 'th', alignment: 'right' },
+          { text: 'Nº', style: 'th', alignment: 'center' },
+        ],
+      ];
 
-      tbody.push([
-        { text: `${val(r, cols.quadra)}/${val(r, cols.face)}`, style: 'td' },
-        { text: endereco, style: 'td' },
-        { text: coordText(r, cols.latitude), style: 'td', alignment: 'right', noWrap: true },
-        {
-          text: present(val(r, cols.nDomicilio)) ? val(r, cols.nDomicilio) : '',
-          rowSpan: 2,
-          fontSize: 12,
-          bold: true,
-          alignment: 'center',
-          margin: [0, 2, 0, 0],
+      listRows.forEach((r) => {
+        const endereco = [cols.logradouro, cols.numero, cols.complemento, cols.bairro]
+          .map((c) => val(r, c))
+          .filter(present)
+          .join(', ');
+        const linha2 = [
+          `ID_CNEFE ${val(r, cols.idCnefe)}`,
+          present(val(r, cols.morador)) ? `MORADOR: ${val(r, cols.morador)}` : '',
+          present(val(r, cols.telefone)) ? `TEL: ${val(r, cols.telefone)}` : '',
+        ]
+          .filter(Boolean)
+          .join('   •   ');
+
+        tbody.push([
+          { text: `${val(r, cols.quadra)}/${val(r, cols.face)}`, style: 'td' },
+          { text: endereco, style: 'td' },
+          { text: coordText(r, cols.latitude), style: 'td', alignment: 'right', noWrap: true },
+          {
+            text: present(val(r, cols.nDomicilio)) ? val(r, cols.nDomicilio) : '',
+            rowSpan: 2,
+            fontSize: 12,
+            bold: true,
+            alignment: 'center',
+            margin: [0, 2, 0, 0],
+          },
+        ]);
+        tbody.push([
+          { text: '', style: 'td2' },
+          { text: linha2, style: 'td2' },
+          { text: coordText(r, cols.longitude), style: 'td2', alignment: 'right', noWrap: true },
+          {},
+        ]);
+      });
+
+      return {
+        table: { headerRows: 1, widths: [42, '*', 52, 32], body: tbody },
+        layout: {
+          hLineWidth: (i) => (i <= 1 ? 0.8 : i % 2 === 1 ? 0.4 : 0),
+          vLineWidth: () => 0,
+          paddingTop: (i) => (i > 0 && i % 2 === 0 ? 0 : 2),
+          paddingBottom: (i) => (i > 0 && i % 2 === 1 ? 0 : 2),
+          paddingLeft: () => 3,
+          paddingRight: () => 3,
         },
-      ]);
-      tbody.push([
-        { text: '', style: 'td2' },
-        { text: linha2, style: 'td2' },
-        { text: coordText(r, cols.longitude), style: 'td2', alignment: 'right', noWrap: true },
-        {},
-      ]);
-    });
+      };
+    };
 
     doc.pageOrientation = 'portrait';
     doc.pageMargins = [24, 62, 24, 32];
@@ -114,21 +128,27 @@
       style: 'hdr',
       margin: [24, 14, 24, 0],
     });
-    doc.content = [
-      {
-        table: { headerRows: 1, widths: [42, '*', 52, 32], body: tbody },
-        layout: {
-          hLineWidth: (i) => (i <= 1 ? 0.8 : i % 2 === 1 ? 0.4 : 0),
-          vLineWidth: () => 0,
-          paddingTop: (i) => (i > 0 && i % 2 === 0 ? 0 : 2),
-          paddingBottom: (i) => (i > 0 && i % 2 === 1 ? 0 : 2),
-          paddingLeft: () => 3,
-          paddingRight: () => 3,
-        },
-      },
-    ];
+    // Like the PNAD listagem: selecionados first, a blank page, then the
+    // full list. Single-section export when the report is already
+    // selecionados-only (or has no selected rows to lead with).
+    const selRows = rows.filter((r) => val(r, cols.selecionado) === 'Sim');
+    if (tipo === 'COMPLETA' && selRows.length > 0) {
+      doc.content = [
+        { text: 'SELECIONADOS', style: 'section' },
+        listTable(selRows),
+        { text: '', pageBreak: 'before' }, // blank separator page
+        { text: 'COMPLETA', style: 'section', pageBreak: 'before' },
+        listTable(rows),
+      ];
+    } else {
+      doc.content = [
+        { text: tipo, style: 'section' },
+        listTable(rows),
+      ];
+    }
     doc.styles = {
       hdr: { fontSize: 10 },
+      section: { fontSize: 9, bold: true, margin: [0, 0, 0, 4] },
       th: { fontSize: 8, bold: true },
       td: { fontSize: 8 },
       td2: { fontSize: 7, color: '#444444' },
