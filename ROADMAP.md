@@ -22,7 +22,8 @@ Working checklist; move items up/down freely. Specs live in
   - [ ] clickable map link per row (OSM template, lat/lon from dropped
         columns), plus same links in KML balloons
   - [ ] optional landscape / footer with page numbers
-  - [ ] move `parseCoord` to sigc-common (shared PDF/KML)
+  - [x] move `parseCoord` to sigc-common (shared PDF/KML) — done 2026-07-14
+        (PDF shows decimal degrees, Google Maps format)
 - [ ] Real icon (map pin / "SP" lettering) instead of blue square
 
 ## Later
