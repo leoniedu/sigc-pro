@@ -42,7 +42,7 @@
     const controle = constVal(cols.controle);
     const situacao = constVal(cols.situacao);
     const bio = constVal(cols.biomarcadores);
-    const zona = constVal(cols.nomeZona);
+    const zona = `${constVal(cols.idZona)} ${constVal(cols.nomeZona)}`.trim();
     const allSim = rows.length > 0 && rows.every((r) => val(r, cols.selecionado) === 'Sim');
     const tipo = allSim ? 'SELECIONADOS' : 'COMPLETA';
 
