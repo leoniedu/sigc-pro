@@ -46,19 +46,11 @@
     const allSim = rows.length > 0 && rows.every((r) => val(r, cols.selecionado) === 'Sim');
     const tipo = allSim ? 'SELECIONADOS' : 'COMPLETA';
 
-    // Google-Maps-friendly decimal degrees; falls back to the original text
-    // when the value can't be parsed.
-    const coordText = (r, c) => {
-      const dec = window.__sigcPro.parseCoord(val(r, c));
-      return dec !== null ? dec.toFixed(4) : val(r, c);
-    };
-
     const listTable = (listRows) => {
       const tbody = [
         [
           { text: 'Q/F', style: 'th' },
           { text: 'Endereço / Morador / Telefone', style: 'th' },
-          { text: 'Lat/Lon', style: 'th', alignment: 'right' },
           { text: 'Nº', style: 'th', alignment: 'center' },
         ],
       ];
@@ -79,7 +71,6 @@
         tbody.push([
           { text: `${val(r, cols.quadra)}/${val(r, cols.face)}`, style: 'td' },
           { text: endereco, style: 'td' },
-          { text: coordText(r, cols.latitude), style: 'td', alignment: 'right', noWrap: true },
           {
             text: present(val(r, cols.nDomicilio)) ? val(r, cols.nDomicilio) : '',
             rowSpan: 2,
@@ -92,13 +83,12 @@
         tbody.push([
           { text: '', style: 'td2' },
           { text: linha2, style: 'td2' },
-          { text: coordText(r, cols.longitude), style: 'td2', alignment: 'right', noWrap: true },
           {},
         ]);
       });
 
       return {
-        table: { headerRows: 1, widths: [42, '*', 52, 32], body: tbody },
+        table: { headerRows: 1, widths: [42, '*', 32], body: tbody },
         layout: {
           hLineWidth: (i) => (i <= 1 ? 0.8 : i % 2 === 1 ? 0.4 : 0),
           vLineWidth: () => 0,
@@ -106,6 +96,8 @@
           paddingBottom: (i) => (i > 0 && i % 2 === 1 ? 0 : 2),
           paddingLeft: () => 3,
           paddingRight: () => 3,
+          // Zebra shading per ENTRY (each entry spans two table rows).
+          fillColor: (i) => (i > 0 && Math.floor((i - 1) / 2) % 2 === 1 ? '#efefef' : null),
         },
       };
     };
