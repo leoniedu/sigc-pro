@@ -75,10 +75,10 @@
         {
           text: val(r, cols.nDomicilio),
           rowSpan: 2,
-          fontSize: 16,
+          fontSize: 12,
           bold: true,
           alignment: 'center',
-          margin: [0, 3, 0, 0],
+          margin: [0, 2, 0, 0],
         },
       ]);
       tbody.push([
