@@ -80,7 +80,7 @@
         { text: endereco, style: 'td' },
         { text: coordText(r, cols.latitude), style: 'td', alignment: 'right', noWrap: true },
         {
-          text: val(r, cols.nDomicilio),
+          text: present(val(r, cols.nDomicilio)) ? val(r, cols.nDomicilio) : '',
           rowSpan: 2,
           fontSize: 12,
           bold: true,
