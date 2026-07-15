@@ -16,10 +16,10 @@
   }
 
   // Replaces the DataTables-generated doc with a PNAD-listagem-style layout:
-  //   LISTA DE ENDEREÇOS - SELECIONADOS|COMPLETA        CONTROLE x - ZONA
-  //   Q/F | Endereço / Morador / Telefone | Lat/Lon | Situação | Nº (big)
+  //   LISTA DE ENDEREÇOS - SELECIONADOS|COMPLETA   CONTROLE x • SITUAÇÃO ...
+  //   Q/F | Endereço / Morador / Telefone | Lat/Lon | Nº (big)
   // Two lines per entry (Lat over Lon), hairline rule between entries,
-  // "Pág. X de Y" / "Gerado em ..." footer.
+  // page header repeated on every page, "Pág. X de Y" / "Gerado em" footer.
   function rebuildAsListagem(doc, pesquisa, body) {
     const { MISSING_VALUES } = window.__sigcPro;
     const cols = pesquisa.columns;
@@ -27,10 +27,22 @@
     const val = (r, c) => (r[c.index] && r[c.index].text != null ? String(r[c.index].text).trim() : '');
     const present = (s) => s && !MISSING_VALUES.includes(s);
 
-    const first = rows[0] || [];
-    const controle = val(first, cols.controle);
-    const zona = val(first, cols.nomeZona);
-    const bio = val(first, cols.biomarcadores);
+    // Report-constant column: first non-missing value, or "vários (N)" when
+    // rows genuinely differ (same semantics as the old subtitle logic).
+    const constVal = (c) => {
+      const values = rows.map((r) => val(r, c));
+      const distinct = new Set(values.filter(present));
+      if (distinct.size > 1) {
+        console.warn(`${TAG} "${c.label}" varies within the report — header shows "vários".`);
+        return `vários (${distinct.size})`;
+      }
+      return values.find(present) ?? MISSING_VALUES[0];
+    };
+
+    const controle = constVal(cols.controle);
+    const situacao = constVal(cols.situacao);
+    const bio = constVal(cols.biomarcadores);
+    const zona = constVal(cols.nomeZona);
     const allSim = rows.length > 0 && rows.every((r) => val(r, cols.selecionado) === 'Sim');
     const tipo = allSim ? 'SELECIONADOS' : 'COMPLETA';
 
@@ -39,7 +51,6 @@
         { text: 'Q/F', style: 'th' },
         { text: 'Endereço / Morador / Telefone', style: 'th' },
         { text: 'Lat/Lon', style: 'th', alignment: 'right' },
-        { text: 'Situação', style: 'th' },
         { text: 'Nº', style: 'th', alignment: 'center' },
       ],
     ];
@@ -61,7 +72,6 @@
         { text: `${val(r, cols.quadra)}/${val(r, cols.face)}`, style: 'td' },
         { text: endereco, style: 'td' },
         { text: val(r, cols.latitude), style: 'td', alignment: 'right', noWrap: true },
-        { text: val(r, cols.situacao), style: 'td' },
         {
           text: val(r, cols.nDomicilio),
           rowSpan: 2,
@@ -75,29 +85,31 @@
         { text: '', style: 'td2' },
         { text: linha2, style: 'td2' },
         { text: val(r, cols.longitude), style: 'td2', alignment: 'right', noWrap: true },
-        { text: `Antrop: ${val(r, cols.antropometria)}`, style: 'td2' },
         {},
       ]);
     });
 
     doc.pageOrientation = 'landscape';
-    doc.pageMargins = [24, 28, 24, 32];
+    doc.pageMargins = [24, 46, 24, 32];
+    // Repeated on EVERY page (pdfmake page header, not a content block).
+    doc.header = () => ({
+      columns: [
+        { text: `LISTA DE ENDEREÇOS - ${tipo}`, style: 'hdr' },
+        {
+          text:
+            `CONTROLE: ${controle}   •   SITUAÇÃO: ${situacao}   •   ` +
+            `BIOMARCADORES: ${bio}   •   ZONA: ${zona}`,
+          fontSize: 8,
+          bold: true,
+          alignment: 'right',
+          margin: [0, 2, 0, 0],
+        },
+      ],
+      margin: [24, 16, 24, 0],
+    });
     doc.content = [
       {
-        columns: [
-          { text: `LISTA DE ENDEREÇOS - ${tipo}`, style: 'hdr' },
-          {
-            text:
-              `CONTROLE ${controle} - ${zona}` +
-              (present(bio) ? `   •   BIOMARCADORES: ${bio}` : ''),
-            style: 'hdr',
-            alignment: 'right',
-          },
-        ],
-        margin: [0, 0, 0, 6],
-      },
-      {
-        table: { headerRows: 1, widths: [42, '*', 80, 58, 42], body: tbody },
+        table: { headerRows: 1, widths: [42, '*', 80, 42], body: tbody },
         layout: {
           hLineWidth: (i) => (i <= 1 ? 0.8 : i % 2 === 1 ? 0.4 : 0),
           vLineWidth: () => 0,
