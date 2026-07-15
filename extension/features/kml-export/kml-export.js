@@ -33,8 +33,14 @@
     const lon = window.__sigcPro.parseCoord(get('longitude'));
     if (lat === null || lon === null) return null;
 
-    const name = `Dom. ${get('nDomicilio')} — ${get('logradouro')}, ${get('numero')}`;
+    // Short labels keep Google Earth readable: selected households show
+    // their Nº Domicílio; the rest show no label (details in the balloon).
+    const nDom = String(get('nDomicilio')).trim();
+    const selecionado = get('selecionado') === 'Sim';
+    const name = selecionado && nDom && !window.__sigcPro.MISSING_VALUES.includes(nDom) ? nDom : '';
     const fields = [
+      ['Endereço', 'logradouro'],
+      ['Número', 'numero'],
       ['Controle', 'controle'],
       ['ID_CNEFE', 'idCnefe'],
       ['Quadra', 'quadra'],
@@ -84,8 +90,8 @@
       '  <Document>',
       `    <name>Lista de Endereços — ${escapeXml(pesquisa.id)}</name>`,
       // KML colors are aabbggrr.
-      '    <Style id="sel"><IconStyle><color>ff00b400</color></IconStyle></Style>',
-      '    <Style id="nsel"><IconStyle><color>ff2222dd</color></IconStyle></Style>',
+      '    <Style id="sel"><IconStyle><color>ff00b400</color></IconStyle><LabelStyle><scale>0.9</scale></LabelStyle></Style>',
+      '    <Style id="nsel"><IconStyle><color>ff2222dd</color><scale>0.8</scale></IconStyle><LabelStyle><scale>0</scale></LabelStyle></Style>',
       folder(`Selecionados (${selected.length})`, selected),
       folder(`Não selecionados (${notSelected.length})`, notSelected),
       '  </Document>',
