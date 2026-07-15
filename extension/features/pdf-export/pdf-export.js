@@ -94,8 +94,8 @@
     // Repeated on EVERY page (pdfmake page header, not a content block).
     doc.header = () => ({
       text:
-        `LISTA DE ENDEREÇOS - ${tipo} - CONTROLE: ${controle} • ` +
-        `SITUAÇÃO: ${situacao} • BIOMARCADORES: ${bio} • ZONA: ${zona}`,
+        `CONTROLE: ${controle} • SITUAÇÃO: ${situacao} • ` +
+        `BIOMARCADORES: ${bio} • ZONA: ${zona}`,
       style: 'hdr',
       margin: [24, 14, 24, 0],
     });
