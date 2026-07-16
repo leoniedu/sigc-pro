@@ -13,11 +13,13 @@
 // 2. Nomes: zona names must match the slot's equipe. Both follow
 //    <UF>_<Equipe>_<Local> with an optional trailing _<n> (two or three
 //    underscores); the comparison key is everything up to the third
-//    underscore (29_Linus_Lauro_1 -> 29_Linus_Lauro). Every zona in a
-//    slot (the name after "código - " in the Zonas field) must share the
-//    equipe's key; equipe names that don't fit the pattern at all are
-//    reported as malformed. Runs on ALL slots — a reserved slot hanging
-//    in the wrong equipe column is still wrong.
+//    underscore (29_Linus_Lauro_1 -> 29_Linus_Lauro). Every zona entry in
+//    the slot's comma-separated Zonas field (e.g. "29.3.03.03
+//    29_Linus_Pituba") must END with the equipe's key (optional _<n>
+//    suffix allowed), so the zona code format never needs parsing; equipe
+//    names that don't fit the pattern at all are reported as malformed.
+//    Runs on ALL slots — a reserved slot hanging in the wrong equipe
+//    column is still wrong.
 //
 // Deliberately a separate, non-blocking button (not folded into CSV-PRO's
 // download): the checks are useful on their own, any time the agenda is
@@ -46,17 +48,25 @@
     return String(name ?? '').trim().split('_').slice(0, 3).join('_');
   }
 
-  // "29001001 - 29_Linus_Lauro_1, 29001002 - 29001002" -> zone names
-  // (the part after the first " - "; the whole entry when there's none).
-  function parseZonaNames(zonas) {
-    return String(zonas ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .map((entry) => {
-        const sep = entry.indexOf(' - ');
-        return sep === -1 ? entry : entry.slice(sep + 3).trim();
-      });
+  // Comma-separated Zonas field -> individual entries, e.g.
+  // "29.3.03.03 29_Linus_Pituba, 29.3.02.03 29_Linus_Pituba" -> two
+  // entries, each "código nome". Entries are kept whole; matching against
+  // the equipe is done on the entry's tail (zonaMatchesKey), so the code
+  // format never needs parsing.
+  function parseZonaEntries(zonas) {
+    return String(zonas ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  }
+
+  function escapeRegex(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // A zona entry matches its equipe when the equipe's key ends the entry
+  // (whole word, so 29_Linus_Lauro doesn't match …_LauroX), allowing the
+  // same optional _<n> suffix zone names may carry (…_Pituba matches both
+  // "29.3.03.03 29_Linus_Pituba" and "29.3.03.03 29_Linus_Pituba_1").
+  function zonaMatchesKey(entry, key) {
+    return new RegExp(`(^|[\\s-])${escapeRegex(key)}(_[^_\\s,]+)?$`).test(entry);
   }
 
   function formatDateLong(d) {
@@ -82,7 +92,7 @@
         return;
       }
       const key = nameKey(r.equipe);
-      const badZonas = parseZonaNames(r.zonas).filter((z) => nameKey(z) !== key);
+      const badZonas = parseZonaEntries(r.zonas).filter((z) => !zonaMatchesKey(z, key));
       if (badZonas.length > 0) mismatches.push({ row: r, badZonas });
     });
     return { badEquipes: [...badEquipes], mismatches };
