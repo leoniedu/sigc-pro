@@ -6,7 +6,7 @@
 # This is a heuristic tripwire, not a proof: the hard guarantees remain the
 # empty permissions list in manifest.json and code review of extension/.
 
-PATTERN='fetch\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource|importScripts|new Image|\.src\s*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
+PATTERN='fetch\(|["'\''"]fetch["'\''"]|import\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src\s*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
 
 if [ "$1" = "--staged" ]; then
   MATCHES=$(git grep --cached -nE "$PATTERN" -- extension/ 2>/dev/null)

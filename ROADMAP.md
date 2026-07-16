@@ -58,6 +58,10 @@ Working checklist; move items up/down freely. Specs live in
 
 ## Known minors (deliberately deferred)
 
-- [ ] `cellText` uses `innerHTML` on a detached div; `DOMParser` would be
-      inert-safer — low risk (detached node, MAIN world, IBGE's own table
-      data, never inserted live), deferred rather than fixed
+- [x] `cellText` uses `innerHTML` on a detached div — fixed 2026-07-16:
+      switched to `DOMParser` (detached innerHTML still fetches `<img src>`
+      and fires `onerror`, so this was a real network/exec hole, not just
+      hygiene). Same commit: CSV formula-injection guard in
+      `escapeCsvField` (leading `= + - @` neutralized unless plain number)
+      and privacy-gate patterns extended (`import(`, quoted `fetch`,
+      `RTCPeerConnection`)

@@ -153,17 +153,23 @@
   }
 
   function cellText(v) {
-    // Cell data may contain HTML; reduce to text.
-    const div = document.createElement('div');
-    div.innerHTML = String(v ?? '');
-    return (div.textContent || '').trim();
+    // Cell data may contain HTML; reduce to text. DOMParser is inert —
+    // unlike innerHTML on a detached div, it never fetches resources or
+    // runs handlers (e.g. <img src onerror>), keeping the zero-network
+    // guarantee independent of table contents.
+    const doc = new DOMParser().parseFromString(String(v ?? ''), 'text/html');
+    return (doc.body.textContent || '').trim();
   }
 
   // Shared CSV building/download — used by csv-export and
   // agenda-csv-export (and any future CSV feature) so escaping, delimiter,
   // and BOM rules live in one place instead of being copy-pasted per file.
   function escapeCsvField(s) {
-    const v = String(s ?? '');
+    let v = String(s ?? '');
+    // Excel formula-injection guard: a leading = + - @ or tab makes Excel
+    // evaluate the field. Prefix a quote unless the field is a plain
+    // number (keeps negative coordinates numeric on import).
+    if (/^[=+\-@\t\r]/.test(v) && !/^-?\d+(?:[.,]\d+)?$/.test(v)) v = "'" + v;
     return /[;"\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
   }
 
