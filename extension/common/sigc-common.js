@@ -204,6 +204,24 @@
     };
   }
 
+  // Filename-safe slug: deaccented, non-alphanumerics collapsed to "-".
+  // Shared by agenda-csv-export and agenda-day-guide filename builders.
+  function slug(s) {
+    return String(s ?? '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase();
+  }
+
+  // Index = Date.getDay(). Shared by agenda-slot-checks (alert dates) and
+  // agenda-day-guide (guide header).
+  const WEEKDAYS_PT = [
+    'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira',
+    'quinta-feira', 'sexta-feira', 'sábado',
+  ];
+
   // Parses a coordinate cell to signed decimal degrees, or null.
   // SIGC shows DMS: "dd mm ss.sss S" (also tolerates °'" marks; hemisphere
   // N/S/E/W, plus O = Oeste). Decimal seconds may use comma. Plain decimal
@@ -415,6 +433,8 @@
     buildCsv,
     downloadFile,
     timestampSlug,
+    slug,
+    WEEKDAYS_PT,
     onAgendaPage,
     findAgendaToolbarChunk,
     parseAgendaSlotTitle,

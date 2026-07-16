@@ -31,14 +31,6 @@
     ];
   }
 
-  function slug(s) {
-    return String(s ?? '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-zA-Z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .toLowerCase();
-  }
 
   // sigc-pro-agenda_<uf>_<período do cabeçalho>_<data>_<hora>. Period comes
   // straight from the calendar's own toolbar title (e.g. "12/07/2026 –
@@ -53,7 +45,7 @@
       ? ufSelect.options[ufSelect.selectedIndex].text.trim()
       : '';
     const { data, hora } = window.__sigcPro.timestampSlug();
-    return ['sigc-pro-agenda', slug(uf), slug(periodo), data, hora].filter(Boolean).join('_');
+    return ['sigc-pro-agenda', window.__sigcPro.slug(uf), window.__sigcPro.slug(periodo), data, hora].filter(Boolean).join('_');
   }
 
   function exportAgendaCsv() {

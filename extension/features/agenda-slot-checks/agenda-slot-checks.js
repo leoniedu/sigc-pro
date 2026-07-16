@@ -34,11 +34,6 @@
   const BUTTON_ID = 'sigc-pro-agenda-slots-button';
   const MAX_LISTED = 15;
 
-  const WEEKDAYS_PT = [
-    'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira',
-    'quinta-feira', 'sexta-feira', 'sábado',
-  ];
-
   // <UF>_<Equipe>_<Local> plus optional _<n>: exactly two or three
   // underscores, no empty segments.
   const NAME_PATTERN = /^[^_\s]+_[^_\s]+_[^_\s]+(?:_[^_\s]+)?$/;
@@ -70,7 +65,7 @@
   }
 
   function formatDateLong(d) {
-    return `${window.__sigcPro.isoToBr(window.__sigcPro.dateToIso(d))} (${WEEKDAYS_PT[d.getDay()]})`;
+    return `${window.__sigcPro.isoToBr(window.__sigcPro.dateToIso(d))} (${window.__sigcPro.WEEKDAYS_PT[d.getDay()]})`;
   }
 
   function slotLabel(r) {
