@@ -84,17 +84,18 @@
 
   // Like whenReady, but with no pesquisa/page requirement — for features
   // that work on any SIGC report (e.g. generic CSV export). Fires
-  // callback(prereq) once prereqFn() is truthy; same ~10 s give-up.
+  // callback(prereq) once prereqFn() is truthy. Unlike whenReady, this never
+  // gives up: every SIGC report has a table eventually, so a slow AJAX load
+  // (past whenReady's 10 s pesquisa-detection window) should still resolve
+  // instead of leaving the button missing until a reload.
   function whenReadyGeneric(prereqFn, callback) {
-    let attempts = 0;
     const tick = () => {
       const prereq = prereqFn();
       if (prereq) {
         callback(prereq);
         return;
       }
-      attempts += 1;
-      if (attempts <= 50) setTimeout(tick, 200);
+      setTimeout(tick, 200);
     };
     tick();
   }
