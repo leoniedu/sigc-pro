@@ -159,6 +159,34 @@
     return (div.textContent || '').trim();
   }
 
+  // Shared CSV building/download — used by csv-export and
+  // agenda-csv-export (and any future CSV feature) so escaping, delimiter,
+  // and BOM rules live in one place instead of being copy-pasted per file.
+  function escapeCsvField(s) {
+    const v = String(s ?? '');
+    return /[;"\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  }
+
+  // pt-BR Excel expects `;`-delimited CSV (comma is the decimal separator
+  // in that locale, so comma-delimited CSVs misparse on import).
+  function buildCsv(header, rows) {
+    const lines = [header, ...rows].map((r) => r.map(escapeCsvField).join(';'));
+    return lines.join('\r\n') + '\r\n';
+  }
+
+  function downloadFile(filename, text, mimeType) {
+    // UTF-8 BOM so Excel doesn't mangle accented characters.
+    const blob = new Blob(['﻿' + text], { type: mimeType || 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   // Parses a coordinate cell to signed decimal degrees, or null.
   // SIGC shows DMS: "dd mm ss.sss S" (also tolerates °'" marks; hemisphere
   // N/S/E/W, plus O = Oeste). Decimal seconds may use comma. Plain decimal
@@ -183,6 +211,145 @@
 
     const n = Number(s.replace(',', '.'));
     return Number.isFinite(n) ? n : null;
+  }
+
+  // --- Agenda (AdministracaoAgenda) shared reading -------------------
+  // Used by both agenda-csv-export and agenda-lead-time-alert, which both
+  // need "every slot in the currently rendered calendar, parsed" — kept
+  // here so the DOM-reading/title-parsing logic exists in exactly one
+  // place. See docs/superpowers/specs/2026-07-16-agenda-csv-export-design.md
+  // for how these were reverse-engineered against the live FullCalendar
+  // resource-timegrid markup.
+
+  // Matches any ibge.gov.br page (through the F5 proxy or not) whose
+  // logical path ends with /AdministracaoAgenda. Query strings/F5 routing
+  // suffixes live in location.search, not location.pathname.
+  function onAgendaPage() {
+    return /\/AdministracaoAgenda\/?$/i.test(location.pathname);
+  }
+
+  // The FullCalendar toolbar always renders both view-switch buttons
+  // (Dia/Semana), whichever is active — used both as the "agenda is ready"
+  // signal and as the anchor Agenda features insert their buttons next to.
+  function findAgendaToolbarChunk() {
+    const viewBtn = document.querySelector(
+      '.fc-resourceTimeGridWeek-button, .fc-resourceTimeGridDay-button, ' +
+        '.fc-timeGridWeek-button, .fc-timeGridDay-button'
+    );
+    return viewBtn ? viewBtn.closest('.fc-toolbar-chunk') : null;
+  }
+
+  // "Label: value" per line -> { Label: value }. Empty/placeholder values
+  // ("-" after trim) are dropped so callers can just `|| ''`.
+  function parseAgendaSlotTitle(text) {
+    const fields = {};
+    String(text ?? '').split('\n').forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      const sep = trimmed.indexOf(':');
+      if (sep === -1) return;
+      const label = trimmed.slice(0, sep).trim();
+      const value = trimmed.slice(sep + 1).trim();
+      if (!MISSING_VALUES.includes(value)) fields[label] = value;
+    });
+    return fields;
+  }
+
+  function isoToBr(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso || '');
+  }
+
+  // idEquipe (uuid) -> team name. Prefers the calendar's own resource
+  // header cells (what's actually on screen); falls back to the Equipes
+  // <select> options in case a header cell is missing for some resource.
+  function getAgendaEquipeNames() {
+    const names = {};
+    document.querySelectorAll('[data-resource-id].fc-col-header-cell').forEach((el) => {
+      const id = el.getAttribute('data-resource-id');
+      if (id && !names[id]) names[id] = el.textContent.trim();
+    });
+    const select = document.getElementById('selectEquipes');
+    if (select) {
+      Array.from(select.options).forEach((o) => {
+        if (o.value && !names[o.value]) names[o.value] = o.text.trim();
+      });
+    }
+    return names;
+  }
+
+  // Reads every slot currently rendered in the calendar — both reserved
+  // (evento-reservado, has Controle/Domicílio/Nome/…) and open/unbooked
+  // (title is just "Zonas: …", no patient assigned yet). `reservado`
+  // lets callers filter either way without re-touching the DOM. Returns
+  // [] if the calendar has no events (empty week/day, or nothing loaded
+  // yet) — never throws.
+  function readAgendaSlots() {
+    const root = document.getElementById('calendar') || document;
+    const events = Array.from(root.querySelectorAll('.fc-timegrid-event'));
+    if (events.length === 0) return [];
+
+    const equipeNames = getAgendaEquipeNames();
+
+    const rows = events.map((el) => {
+      const col = el.closest('.fc-timegrid-col[data-date]');
+      const isoDate = col ? col.getAttribute('data-date') || '' : '';
+      const resourceId = col ? col.getAttribute('data-resource-id') || '' : '';
+      const equipe = equipeNames[resourceId] || resourceId;
+
+      const timeEl = el.querySelector('.fc-event-time');
+      const [horaInicio, horaFim] = (timeEl ? timeEl.textContent : '')
+        .split('-')
+        .map((s) => s.trim());
+
+      const titleEl = el.querySelector('.fc-event-title');
+      const f = parseAgendaSlotTitle(titleEl ? titleEl.textContent : '');
+
+      return {
+        isoDate,
+        data: isoToBr(isoDate),
+        equipe,
+        resourceId,
+        reservado: el.className.includes('evento-reservado'),
+        horaInicio: horaInicio || '',
+        horaFim: horaFim || '',
+        controle: f['Controle'] || '',
+        domicilio: f['Domicílio'] || '',
+        nome: f['Nome'] || '',
+        sexo: f['Sexo'] || '',
+        dtNascimento: f['Dt. Nascimento'] || '',
+        idade: f['Idade'] || '',
+        endereco: f['Endereço'] || '',
+        telefone: f['Telefone'] || '',
+        zonas: f['Zonas'] || '',
+        observacao: f['Observação'] || '',
+      };
+    });
+
+    rows.sort((a, b) =>
+      a.isoDate.localeCompare(b.isoDate) ||
+      a.horaInicio.localeCompare(b.horaInicio) ||
+      a.equipe.localeCompare(b.equipe)
+    );
+    return rows;
+  }
+
+  // Minimum date (Date, local midnight) a new slot could still realistically
+  // be scheduled for, counting forward from refDate: +3 calendar days, or
+  // +4 if refDate is a Friday (coordination decided Sat/Sun get no special
+  // treatment — just the plain +3 rule). Used to flag open slots that fall
+  // inside a window too close to today to still be actionable.
+  function agendaMinScheduleDate(refDate) {
+    const base = refDate instanceof Date ? refDate : new Date();
+    const offsetDays = base.getDay() === 5 ? 4 : 3; // 5 = Friday
+    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    d.setDate(d.getDate() + offsetDays);
+    return d;
+  }
+
+  function dateToIso(d) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
   // Shared export filename (no extension):
@@ -227,6 +394,17 @@
     exportFileBase,
     parseCoord,
     cellText,
+    escapeCsvField,
+    buildCsv,
+    downloadFile,
+    onAgendaPage,
+    findAgendaToolbarChunk,
+    parseAgendaSlotTitle,
+    isoToBr,
+    dateToIso,
+    getAgendaEquipeNames,
+    readAgendaSlots,
+    agendaMinScheduleDate,
     // Set by pdf-export's own PDF-pro button before it programmatically
     // clicks the native PDF button; consumed (and cleared) by the pdfMake
     // hook, which rewrites the doc into listagem style only when this is

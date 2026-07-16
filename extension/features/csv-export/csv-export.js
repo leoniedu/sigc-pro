@@ -16,31 +16,6 @@
   const TAG = '[sigc-csv-export]';
   const BUTTON_ID = 'sigc-pro-csv-button';
 
-  function escapeCsvField(s) {
-    const v = String(s ?? '');
-    return /[;"\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-  }
-
-  // pt-BR Excel expects `;`-delimited CSV (comma is the decimal separator
-  // in that locale, so comma-delimited CSVs misparse on import).
-  function buildCsv(header, rows) {
-    const lines = [header, ...rows].map((r) => r.map(escapeCsvField).join(';'));
-    return lines.join('\r\n') + '\r\n';
-  }
-
-  function download(filename, text) {
-    // UTF-8 BOM so Excel doesn't mangle accented characters.
-    const blob = new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
-
   // On the Lista de Endereços page (a recognized pesquisa), reuse the same
   // rich filename PDF-pro/KML-pro use (controle, selecionados/completos,
   // date) instead of the generic one — same table, same naming should
@@ -72,8 +47,8 @@
       return;
     }
 
-    const csv = buildCsv(header, rows);
-    download(`${csvFileBase(rows)}.csv`, csv);
+    const csv = window.__sigcPro.buildCsv(header, rows);
+    window.__sigcPro.downloadFile(`${csvFileBase(rows)}.csv`, csv);
     console.log(`${TAG} CSV exported: ${rows.length} rows, ${header.length} columns.`);
   }
 

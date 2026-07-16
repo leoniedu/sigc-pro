@@ -33,6 +33,21 @@ Em **qualquer relatório do SIGC** com tabela (DataTables):
   da VPN — o CSV-pro lê os dados diretamente via API do DataTables, sem
   depender desses botões.
 
+Em **Administrar Agenda** (qualquer UF/pesquisa cuja URL termine em
+`/AdministracaoAgenda`):
+
+- **CSV-PRO** — exporta os slots exibidos no calendário (dia ou semana
+  atual, todas as equipes visíveis) como CSV: data, equipe, horário e os
+  campos que o SIGC só mostra dentro do texto de cada slot (Controle,
+  Domicílio, Nome, Sexo, Dt. Nascimento, Idade, Endereço, Telefone, Zonas,
+  Observação), já separados em colunas. Lê o calendário já carregado na
+  tela — não busca semanas além da exibida. Inclui tanto slots reservados
+  quanto slots abertos (ainda sem endereço atribuído).
+- **Verificar Prazo** — avisa sobre slots abertos (sem endereço atribuído)
+  agendados antes do prazo mínimo para um novo agendamento ser viável (hoje
+  + 3 dias corridos; +4 se hoje for sexta-feira). Não altera nada, não
+  bloqueia o CSV-PRO — é só um alerta sob demanda, na visualização atual.
+
 Os botões nativos de PDF/CSV/Excel do SIGC continuam intocados e visíveis —
 o PDF nativo funciona normalmente; CSV/Excel nativos funcionam pela VPN e
 podem voltar a funcionar fora dela quando o IBGE corrigir o bug.
@@ -40,8 +55,10 @@ podem voltar a funcionar fora dela quando o IBGE corrigir o bug.
 PDF-pro e KML-pro só agem na Lista de Endereços (detectada pelo cabeçalho
 `SIGC - PNS2026` + título da página) e validam o layout da tabela antes de
 qualquer leitura — em qualquer outra página do domínio `ibge.gov.br` eles
-permanecem inativos. CSV-pro não depende do layout de nenhuma pesquisa
-específica e ativa em qualquer relatório com tabela.
+permanecem inativos. CSV-pro (relatórios) não depende do layout de nenhuma
+pesquisa específica e ativa em qualquer relatório com tabela. O CSV-PRO da
+Agenda ativa em qualquer página cuja URL termine em `/AdministracaoAgenda`,
+também sem depender de pesquisa específica.
 
 ## Instalação (modo desenvolvedor)
 
@@ -52,8 +69,9 @@ específica e ativa em qualquer relatório com tabela.
 3. Ative **Modo do desenvolvedor** (canto superior direito).
 4. Clique em **Carregar sem compactação** e selecione a pasta `extension/`
    deste repositório.
-5. Abra a Lista de Endereços (ou outro relatório) no SIGC e clique em
-   **PDF-pro**, **KML-pro** ou **CSV-pro**.
+5. Abra a Lista de Endereços (ou outro relatório, ou a Agenda) no SIGC e
+   clique em **PDF-pro**, **KML-pro**, **CSV-pro**, **CSV-PRO** (Agenda) ou
+   **Verificar Prazo** (Agenda).
 
 Requer Chrome 111 ou superior.
 

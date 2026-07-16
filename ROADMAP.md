@@ -14,6 +14,20 @@ Working checklist; move items up/down freely. Specs live in
 - [x] Distribution zip auto-built on commit (`dist/sigc-pro-extension.zip`,
       includes LEIA-ME.txt manual)
 - [x] pt-BR README, landing page, privacy policy
+- [x] CSV-pro decoupled from PDF click, reading DataTables API directly
+      (`2026-07-15-csv-export-design.md`)
+- [x] Agenda CSV-PRO: exports `AdministracaoAgenda` calendar slots
+      (any UF/pesquisa, URL-suffix gated), parsing Controle/Domicílio/etc.
+      out of each slot's title, reading the rendered FullCalendar DOM (no
+      network calls) — `2026-07-16-agenda-csv-export-design.md`. CSV
+      build/escape/download helpers moved to `sigc-common.js`, shared with
+      CSV-pro.
+- [x] Agenda "Verificar Prazo": alerts on open (unbooked) slots dated
+      before the minimum scheduling lead time (today+3 days, +4 if today
+      is Friday) — standalone button, doesn't touch the CSV-PRO flow
+      (`2026-07-16-agenda-lead-time-alert-design.md`). Agenda DOM-reading
+      (`readAgendaSlots` and friends) moved to `sigc-common.js`, shared
+      between both Agenda features.
 
 ## Next
 
@@ -30,6 +44,9 @@ Working checklist; move items up/down freely. Specs live in
 
 - [ ] Field-test checklist on more report variations (other UFs, empty
       coordinates, filtered exports)
+- [ ] Field-test Agenda CSV-PRO on more UFs/pesquisas/Dia view; consider
+      whether `Endereço` should ever be sub-parsed into separate columns
+      (deliberately left raw for now, see design doc)
 - [ ] New pesquisas as they appear (add `PESQUISAS` entries; labels from the
       live table)
 - [ ] Go public: decide fate of `docs/superpowers/` on Pages, enable GitHub
