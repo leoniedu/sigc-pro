@@ -8,8 +8,8 @@ ROOT="$(git rev-parse --show-toplevel)"
 # commit already edits manifest.json's version itself (manual minor/major
 # bump takes precedence — don't double-bump).
 MANIFEST="$ROOT/extension/manifest.json"
-if ! git diff --cached --quiet -- extension/ \
-   && ! git diff --cached -- "$MANIFEST" | grep -q '"version"'; then
+if ! git diff --cached --no-ext-diff --quiet -- extension/ \
+   && ! git diff --cached --no-ext-diff -- "$MANIFEST" | grep -q '"version"'; then
   CURRENT=$(grep '"version"' "$MANIFEST" | sed -E 's/.*"version": *"([0-9]+)\.([0-9]+)\.([0-9]+)".*/\1 \2 \3/')
   read -r MAJOR MINOR PATCH <<EOF
 $CURRENT
@@ -23,7 +23,7 @@ fi
 # Keep dist/sigc-pro-extension.zip in sync: rebuild from the staged content
 # whenever the commit touches extension/ or the bundled manual, and include
 # it in the same commit. Zip layout: LEIA-ME.txt + extension/.
-if ! git diff --cached --quiet -- extension/ LEIA-ME.txt; then
+if ! git diff --cached --no-ext-diff --quiet -- extension/ LEIA-ME.txt; then
   mkdir -p "$ROOT/dist"
   TREE=$(git write-tree)
   git archive --format=zip -o "$ROOT/dist/sigc-pro-extension.zip" "$TREE" extension LEIA-ME.txt
