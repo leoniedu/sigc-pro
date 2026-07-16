@@ -29,4 +29,14 @@ if ! git diff --cached --quiet -- extension/ LEIA-ME.txt; then
   git archive --format=zip -o "$ROOT/dist/sigc-pro-extension.zip" "$TREE" extension LEIA-ME.txt
   git add "$ROOT/dist/sigc-pro-extension.zip"
   echo "dist/sigc-pro-extension.zip rebuilt from staged extension/ + LEIA-ME.txt"
+
+  # Chrome Web Store upload: manifest.json must sit at the archive root (it
+  # rejects files outside the manifest's own directory), so this zip has no
+  # LEIA-ME.txt and no extension/ wrapper folder — just extension/'s
+  # contents, flattened to the root. git archive can't flatten a subtree
+  # directly, so archive the extension/ subtree object itself.
+  SUBTREE=$(git rev-parse "$TREE:extension")
+  git archive --format=zip -o "$ROOT/dist/sigc-pro-store.zip" "$SUBTREE"
+  git add "$ROOT/dist/sigc-pro-store.zip"
+  echo "dist/sigc-pro-store.zip rebuilt (manifest.json at root, for Web Store upload)"
 fi
