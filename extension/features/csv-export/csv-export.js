@@ -41,6 +41,25 @@
     URL.revokeObjectURL(url);
   }
 
+  // On the Lista de Endereços page (a recognized pesquisa), reuse the same
+  // rich filename PDF-pro/KML-pro use (controle, selecionados/completos,
+  // date) instead of the generic one — same table, same naming should
+  // apply. Falls back to a generic name on any other SIGC report, since CSV
+  // export has no pesquisa-specific column mapping to rely on there.
+  function csvFileBase(rows) {
+    const pesquisa = window.__sigcPro.detectPesquisa();
+    if (pesquisa && window.__sigcPro.onListaEnderecos()) {
+      try {
+        return window.__sigcPro.exportFileBase(pesquisa, rows);
+      } catch (e) {
+        console.warn(`${TAG} Could not build Lista de Endereços filename, using generic:`, e);
+      }
+    }
+    const data = new Date().toISOString().slice(0, 10);
+    const hora = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+    return `sigc-pro-export_${data}_${hora}`;
+  }
+
   function exportCsv() {
     const result = window.__sigcPro.readDataTable();
     if (!result) {
@@ -54,9 +73,7 @@
     }
 
     const csv = buildCsv(header, rows);
-    const data = new Date().toISOString().slice(0, 10);
-    const hora = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
-    download(`sigc-pro-export_${data}_${hora}.csv`, csv);
+    download(`${csvFileBase(rows)}.csv`, csv);
     console.log(`${TAG} CSV exported: ${rows.length} rows, ${header.length} columns.`);
   }
 
@@ -66,15 +83,31 @@
     const btn = document.createElement('button');
     btn.id = BUTTON_ID;
     btn.type = 'button';
-    const sibling = toolbar.querySelector('button');
-    btn.className = sibling ? sibling.className : 'dt-button';
-    btn.innerHTML = '<span>CSV-pro</span>';
+    // Same classes as SIGC's own icon buttons (dt-btn-icon etc.) — their
+    // CSS controls the exact box metrics (size, padding, vertical
+    // position) that keep native buttons aligned with each other. Matching
+    // pixel values by hand kept drifting; reusing the classes guarantees
+    // identical alignment since it's the same rules. We only override
+    // color and font to make ours read as SIGC-PRO, not layout.
+    btn.className = 'dt-button buttons-html5 dt-btn-icon';
+    btn.innerHTML = '<span>CSV<br>PRO</span>';
     btn.title = 'Exportar CSV (SIGC-PRO)';
     btn.style.background = '#005a9c';
     btn.style.borderColor = '#005a9c';
     btn.style.color = '#fff';
-    btn.style.fontWeight = '600';
-    btn.style.fontSize = '0.65em';
+    btn.style.fontWeight = '700';
+    btn.style.fontSize = '7px';
+    btn.style.lineHeight = '1.15';
+    btn.style.textAlign = 'center';
+    btn.style.textTransform = 'uppercase';
+    // The native icon glyph is small/fixed-size; our two-line text label is
+    // wider, so the class's width: auto grows to fit it. Pin box dimensions
+    // only (not display/align-items, which broke vertical alignment before)
+    // to force the same square footprint as the icon buttons.
+    btn.style.width = '36px';
+    btn.style.minWidth = '36px';
+    btn.style.maxWidth = '36px';
+    btn.style.borderRadius = '4px';
     btn.addEventListener('click', exportCsv);
     toolbar.appendChild(btn);
 
