@@ -3,17 +3,22 @@ SIGC-PRO — melhorias não oficiais para o SIGC (IBGE)
 
 O que é
 -------
-Extensão do Chrome que adiciona um botão "PDF+KML" à Lista de Endereços do
-SIGC (PNS 2026). Um clique baixa dois arquivos:
+Extensão do Chrome que adiciona três botões azuis aos relatórios do SIGC:
 
-  * PDF melhorado — sem colunas pouco úteis em campo, com título
-    customizado e com as colunas constantes (Controle, Biomarcadores,
-    Nome ZONA) movidas para uma linha de subtítulo;
-  * KML (Google Earth / Google Maps / geojson.io) — endereços em duas
+Na Lista de Endereços (PNS 2026):
+  * PDF-pro — reexporta o PDF sem colunas pouco úteis em campo, com
+    título customizado e com as colunas constantes (Controle, Situação,
+    Biomarcadores, Zona, nº de selecionados) movidas para o cabeçalho;
+  * KML-pro (Google Earth / Google Maps / geojson.io) — endereços em duas
     camadas: Selecionado = Sim (vermelho, numerado) e Não (azul, menor).
 
-O botão de PDF original do SIGC continua funcionando como sempre, sem
-nenhuma alteração.
+Em qualquer relatório do SIGC com tabela:
+  * CSV-pro — exporta a tabela como CSV, contornando um bug do portalweb
+    que quebra os botões nativos de CSV/Excel fora da VPN.
+
+Os botões nativos do SIGC não são alterados — os novos botões apenas se
+somam a eles. O PDF nativo funciona normalmente; CSV e Excel nativos têm
+um bug conhecido do portalweb fora da VPN (veja Problemas abaixo).
 
 AVISO: projeto independente, sem vínculo com o IBGE. Protótipo para
 demonstração à equipe oficial do SIGC. Use por sua conta e risco.
@@ -31,11 +36,13 @@ Instalação (Chrome 111 ou superior)
 
 Como usar
 ---------
-1. Entre no SIGC e abra o relatório Lista de Endereços normalmente.
-2. Ao lado dos botões de exportação (copiar, CSV, Excel, PDF), aparece o
-   botão azul "PDF+KML".
-3. Clique nele: o PDF melhorado e o arquivo .kml são baixados juntos.
-4. Abra o .kml no Google Earth (ou arraste em geojson.io) para ver os
+1. Entre no SIGC e abra um relatório normalmente (Lista de Endereços para
+   PDF-pro/KML-pro; qualquer relatório com tabela para CSV-pro).
+2. Ao lado dos botões de exportação (copiar, CSV, Excel, PDF), aparecem os
+   botões azuis "PDF-pro", "KML-pro" e/ou "CSV-pro".
+3. Clique no que precisar — cada um baixa um arquivo, independente dos
+   outros.
+4. Abra o .kml em aplicativos como Google Earth ou QGIS para ver os
    endereços no mapa, com selecionados em vermelho (rotulados com o nº do
    domicílio) e não selecionados em azul, menores e sem rótulo (cores
    seguras para daltonismo). Endereços sem coordenadas válidas são
@@ -43,12 +50,15 @@ Como usar
 
 Problemas?
 ----------
-* O botão não aparece: confirme que a página é a Lista de Endereços do
-  SIGC e recarregue a página (Cmd+Shift+R / Ctrl+F5).
+* Os botões não aparecem: recarregue a página (Cmd+Shift+R / Ctrl+F5).
+  PDF-pro e KML-pro só aparecem na Lista de Endereços.
 * Atualizou a extensão? Em chrome://extensions, clique no ícone de
   recarregar (↻) do SIGC-PRO e recarregue a página do SIGC.
-* Mensagem "o layout da tabela não corresponde ao esperado": o SIGC mudou
-  as colunas do relatório; reporte ao mantenedor.
+* Mensagem "o layout da tabela não corresponde ao esperado" (PDF-pro ou
+  KML-pro): o SIGC mudou as colunas do relatório; reporte ao mantenedor.
+* CSV/Excel nativos não baixam nada fora da VPN: bug conhecido do
+  portalweb (proteção anti-bot quebra os botões nativos); o CSV-pro traz
+  uma alternativa.
 
 Privacidade
 -----------
