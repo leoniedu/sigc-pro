@@ -28,6 +28,9 @@ Working checklist; move items up/down freely. Specs live in
       (`2026-07-16-agenda-lead-time-alert-design.md`). Agenda DOM-reading
       (`readAgendaSlots` and friends) moved to `sigc-common.js`, shared
       between both Agenda features.
+- [x] Real icon: location-pin mark replacing the flat blue square
+- [x] Repo public, GitHub Pages (privacy policy), Chrome Web Store
+      submission (unlisted)
 
 ## Next
 
@@ -38,7 +41,6 @@ Working checklist; move items up/down freely. Specs live in
   - [ ] optional landscape / footer with page numbers
   - [x] move `parseCoord` to sigc-common (shared PDF/KML) — done 2026-07-14
         (PDF shows decimal degrees, Google Maps format)
-- [ ] Real icon (map pin / "SP" lettering) instead of blue square
 
 ## Later
 
@@ -49,18 +51,13 @@ Working checklist; move items up/down freely. Specs live in
       (deliberately left raw for now, see design doc)
 - [ ] New pesquisas as they appear (add `PESQUISAS` entries; labels from the
       live table)
-- [ ] Go public: decide fate of `docs/superpowers/` on Pages, enable GitHub
-      Pages, cut a GitHub Release with the zip
-- [ ] Chrome Web Store (unlisted) once non-technical users depend on it —
-      auto-updates, one-click install
+- [ ] Narrow `content_scripts.matches` from `https://*.ibge.gov.br/*` to the
+      actual SIGC host — likely reduces Chrome Web Store review friction
 - [ ] Zip as Release asset via GitHub Action (covers commits made without
       the local hook)
 
 ## Known minors (deliberately deferred)
 
-- [x] ~~SPA navigation loses the PDF+KML button~~ — fixed: MutationObserver
-      re-inserts whenever the toolbar is rebuilt (2026-07-14)
 - [ ] `cellText` uses `innerHTML` on a detached div; `DOMParser` would be
-      inert-safer
-- [ ] KML button copies its CSS class from the first toolbar button
-      (cosmetic fragility)
+      inert-safer — low risk (detached node, MAIN world, IBGE's own table
+      data, never inserted live), deferred rather than fixed
