@@ -1,10 +1,22 @@
 // SIGC-PRO feature: rebuild the Lista de Endereços PDF in the classic IBGE
 // listagem style (landscape, two-line entries, big Nº Domicílio) for exports
-// triggered by the PDF+KML button. The native PDF button stays untouched.
+// triggered by the PDF-pro button. The native PDF button stays untouched.
 (function () {
   'use strict';
 
   const TAG = '[sigc-pdf-tweak]';
+  const BUTTON_ID = 'sigc-pro-pdf-button';
+
+  // Finds the native PDF export button in the same toolbar as our buttons.
+  function findPdfButton(toolbar) {
+    return (
+      toolbar.querySelector('.buttons-pdf') ||
+      [...toolbar.querySelectorAll('button')].find(
+        (b) => !b.id.startsWith('sigc-pro-') && /pdf/i.test(`${b.className} ${b.textContent}`)
+      ) ||
+      null
+    );
+  }
 
   function findTableContent(doc) {
     return doc.content.find((c) => c && c.table && Array.isArray(c.table.body));
@@ -168,15 +180,13 @@
     const originalCreatePdf = pdfMake.createPdf;
     pdfMake.createPdf = function (doc) {
       // The listagem rebuild applies ONLY to exports triggered by the
-      // PDF+KML button (which sets kmlOnNextPdf). The native PDF button
+      // PDF-pro button (which sets pdfRebuildOnNext). The native PDF button
       // stays completely original.
-      const emitKml = window.__sigcPro.kmlOnNextPdf;
-      if (typeof emitKml !== 'function') {
+      if (!window.__sigcPro.pdfRebuildOnNext) {
         return originalCreatePdf.call(this, doc);
       }
-      window.__sigcPro.kmlOnNextPdf = null;
+      window.__sigcPro.pdfRebuildOnNext = false;
 
-      // Hand the KML builder the ORIGINAL table body, then rebuild the PDF.
       let body = null;
       try {
         const tableContent = doc && Array.isArray(doc.content) && findTableContent(doc);
@@ -191,12 +201,7 @@
           );
         }
       } catch (e) {
-        console.error(`${TAG} KML data extraction failed:`, e);
-      }
-      try {
-        emitKml(body);
-      } catch (e) {
-        console.error(`${TAG} KML callback failed:`, e);
+        console.error(`${TAG} Table extraction failed:`, e);
       }
 
       if (body) {
@@ -208,8 +213,6 @@
       }
 
       const pdf = originalCreatePdf.call(this, doc);
-      // Give the PDF the same descriptive filename as the KML (controle,
-      // selecionados/completos, date).
       if (body) {
         try {
           const base = window.__sigcPro.exportFileBase(pesquisa, body);
@@ -225,11 +228,65 @@
     console.log(`${TAG} Hook installed on pdfMake.createPdf (${pesquisa.id}).`);
   }
 
+  // Sets the rebuild flag and clicks the native PDF button — pdfMake's own
+  // createPdf call is the only reliable way to trigger PDF generation, and
+  // clicking the native button (proven safe — unaffected by the F5
+  // MouseEvent bug that broke native CSV/Excel) is the only proven way to
+  // reach it without reimplementing DataTables' own PDF button config.
+  function exportPdf(toolbar) {
+    const pdfBtn = findPdfButton(toolbar);
+    if (!pdfBtn) {
+      alert('SIGC-PRO: botão de PDF não encontrado — o PDF-pro depende dele.');
+      return;
+    }
+    if (!(window.pdfMake && window.pdfMake.__sigcProPdfTweak)) {
+      alert('SIGC-PRO: componente de PDF ainda não carregou; tente novamente em alguns segundos.');
+      return;
+    }
+    window.__sigcPro.pdfRebuildOnNext = true;
+    pdfBtn.click();
+  }
+
+  function insertButton(toolbar) {
+    if (document.getElementById(BUTTON_ID)) return;
+
+    const btn = document.createElement('button');
+    btn.id = BUTTON_ID;
+    btn.type = 'button';
+    const sibling = toolbar.querySelector('button');
+    btn.className = sibling ? sibling.className : 'dt-button';
+    btn.innerHTML = '<span>PDF-pro</span>';
+    btn.title = 'Exportar PDF no formato listagem (SIGC-PRO)';
+    btn.style.background = '#005a9c';
+    btn.style.borderColor = '#005a9c';
+    btn.style.color = '#fff';
+    btn.style.fontWeight = '600';
+    btn.style.fontSize = '0.65em';
+    btn.addEventListener('click', () => exportPdf(toolbar));
+    toolbar.appendChild(btn);
+
+    console.log(`${TAG} PDF-pro button added.`);
+  }
+
   window.__sigcPro.whenReady(
     () =>
       window.pdfMake && typeof window.pdfMake.createPdf === 'function'
         ? window.pdfMake
         : null,
-    installHook
+    (pesquisa, pdfMake) => {
+      installHook(pesquisa, pdfMake);
+
+      const tryInsert = () => {
+        if (!window.__sigcPro.onListaEnderecos()) return;
+        if (document.getElementById(BUTTON_ID)) return;
+        const toolbar = document.querySelector('.dt-buttons');
+        if (toolbar) insertButton(toolbar);
+      };
+      tryInsert();
+      new MutationObserver(tryInsert).observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+    }
   );
 })();

@@ -82,6 +82,57 @@
     tick();
   }
 
+  // Like whenReady, but with no pesquisa/page requirement — for features
+  // that work on any SIGC report (e.g. generic CSV export). Fires
+  // callback(prereq) once prereqFn() is truthy; same ~10 s give-up.
+  function whenReadyGeneric(prereqFn, callback) {
+    let attempts = 0;
+    const tick = () => {
+      const prereq = prereqFn();
+      if (prereq) {
+        callback(prereq);
+        return;
+      }
+      attempts += 1;
+      if (attempts <= 50) setTimeout(tick, 200);
+    };
+    tick();
+  }
+
+  // Returns the page's live DataTables instance, or null if jQuery,
+  // DataTables, or a table isn't present/initialized yet.
+  function getDataTable() {
+    const jq = window.jQuery || window.$;
+    if (!jq || !jq.fn || !jq.fn.dataTable) return null;
+    const table = jq('table').DataTable();
+    if (!table || !table.table || table.table().node() == null) return null;
+    return table;
+  }
+
+  // Reads the full current-table dataset (all pages) via the DataTables JS
+  // API — reliable under the F5 gateway (confirmed: row count matches
+  // "Showing X of Y", stable across pagination/sort, unlike raw DOM
+  // scraping of table/tr/td which the gateway's cloning made unreliable).
+  // Returns { rows, header } (plain strings, HTML stripped) or null if no
+  // table is available.
+  function readDataTable() {
+    const table = getDataTable();
+    if (!table) return null;
+    const header = table.columns().header().toArray().map((h) => h.textContent.trim());
+    const rows = table.rows().data().toArray().map((r) => Array.from(r).map((c) => cellText(c)));
+    return { rows, header };
+  }
+
+  // Lista de Endereços-specific: readDataTable() plus validation against
+  // pesquisa.columns. Returns { rows, header } or null (table unavailable,
+  // or header doesn't match — mismatch is logged by tableMatchesLayout).
+  function getTableRows(pesquisa) {
+    const result = readDataTable();
+    if (!result) return null;
+    if (!tableMatchesLayout(result.header, pesquisa.columns)) return null;
+    return result;
+  }
+
   function tableMatchesLayout(headerTexts, columns) {
     const mismatches = Object.entries(columns).filter(
       ([, c]) => normalizeLabel(headerTexts[c.index]) !== normalizeLabel(c.label)
@@ -133,14 +184,22 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  // Shared export filename (no extension) built from the ORIGINAL pdfmake
-  // table body: lista-enderecos-<pesquisa>_<controle>_<tipo>_<data>.
+  // Shared export filename (no extension):
+  // lista-enderecos-<pesquisa>_<controle>_<tipo>_<data>.
   // tipo = "selecionados" when every row has Selecionado = Sim (the report
   // was requested filtered), otherwise "completos".
-  function exportFileBase(pesquisa, body) {
+  // Accepts either the ORIGINAL pdfmake table body (rows of {text} cells,
+  // header row included — pass the full `body`) or plain-string rows from
+  // the DataTables API (no header row — pass `rows` directly).
+  function exportFileBase(pesquisa, bodyOrRows) {
     const cols = pesquisa.columns;
-    const rows = body.slice(1);
-    const val = (r, i) => (r[i] && r[i].text != null ? String(r[i].text).trim() : '');
+    const looksLikeBody = bodyOrRows[0] && bodyOrRows[0][0] && typeof bodyOrRows[0][0] === 'object';
+    const rows = looksLikeBody ? bodyOrRows.slice(1) : bodyOrRows;
+    const val = (r, i) => {
+      const c = r[i];
+      if (c && typeof c === 'object' && c.text != null) return String(c.text).trim();
+      return c != null ? String(c).trim() : '';
+    };
 
     const controles = [...new Set(rows.map((r) => val(r, cols.controle.index)).filter(Boolean))];
     const controle = controles.length === 1 ? controles[0] : 'varios-controles';
@@ -159,14 +218,20 @@
     detectPesquisa,
     onListaEnderecos,
     whenReady,
+    whenReadyGeneric,
     tableMatchesLayout,
+    getDataTable,
+    readDataTable,
+    getTableRows,
     exportFileBase,
     parseCoord,
-    // Set by kml-export before it programmatically clicks the native PDF
-    // button; consumed (and cleared) by the pdf-export hook, which passes the
-    // ORIGINAL pdfmake table body to it and then lets the PDF proceed
-    // normally — one click yields both the (tweaked) PDF and the KML.
-    kmlOnNextPdf: null,
+    cellText,
+    // Set by pdf-export's own PDF-pro button before it programmatically
+    // clicks the native PDF button; consumed (and cleared) by the pdfMake
+    // hook, which rewrites the doc into listagem style only when this is
+    // true. KML-pro/CSV-pro no longer ride the PDF click — they read table
+    // data directly via getTableRows — so this flag is PDF-only now.
+    pdfRebuildOnNext: false,
   };
   console.log(`${TAG} common runtime loaded.`);
 })();

@@ -16,17 +16,6 @@
       .replace(/'/g, '&apos;');
   }
 
-  // Finds the native PDF export button in the same toolbar as the KML button.
-  function findPdfButton(toolbar) {
-    return (
-      toolbar.querySelector('.buttons-pdf') ||
-      [...toolbar.querySelectorAll('button')].find(
-        (b) => b.id !== BUTTON_ID && /pdf/i.test(`${b.className} ${b.textContent}`)
-      ) ||
-      null
-    );
-  }
-
   function placemark(row, cols) {
     const get = (key) => row[cols[key].index] ?? '';
     const lat = window.__sigcPro.parseCoord(get('latitude'));
@@ -97,11 +86,11 @@
       // selected = vermillion #D55E00 (attention), non-selected = sky blue
       // #56B4E9 at ~70% opacity (context).
       '    <Style id="sel"><IconStyle><color>ff005ed5</color><scale>1.0</scale>' +
-        '<Icon><href>http://maps.google.com/mapfiles/kml/shapes/shaded_dot.png</href></Icon>' +
+        '<Icon><href>https://maps.google.com/mapfiles/kml/shapes/shaded_dot.png</href></Icon>' +
         '<hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/></IconStyle>' +
         '<LabelStyle><scale>0.9</scale></LabelStyle></Style>',
       '    <Style id="nsel"><IconStyle><color>b3e9b456</color><scale>0.6</scale>' +
-        '<Icon><href>http://maps.google.com/mapfiles/kml/shapes/shaded_dot.png</href></Icon>' +
+        '<Icon><href>https://maps.google.com/mapfiles/kml/shapes/shaded_dot.png</href></Icon>' +
         '<hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/></IconStyle>' +
         '<LabelStyle><scale>0</scale></LabelStyle></Style>',
       folder(`Selecionados (${selected.length})`, selected),
@@ -126,53 +115,28 @@
     URL.revokeObjectURL(url);
   }
 
-  // One click, two files: triggers the native PDF export (which our
-  // pdf-export hook tweaks as usual) and also receives the ORIGINAL pdfmake
-  // table body from that hook to build the KML.
-  function exportKml(pesquisa, toolbar) {
-    const pdfBtn = findPdfButton(toolbar);
-    if (!pdfBtn) {
-      alert('SIGC-PRO: botão de PDF não encontrado — a exportação PDF+KML depende dele.');
+  // Reads the table directly via the DataTables API (no PDF click needed —
+  // confirmed reliable under the F5 gateway; see sigc-common.js
+  // getTableRows). Validated against pesquisa.columns before building.
+  function exportKml(pesquisa) {
+    const result = window.__sigcPro.getTableRows(pesquisa);
+    if (!result) {
+      alert('SIGC-PRO: não foi possível ler a tabela (não encontrada, ou layout inesperado).');
       return;
     }
-    if (!(window.pdfMake && window.pdfMake.__sigcProPdfTweak)) {
-      alert('SIGC-PRO: componente de PDF ainda não carregou; tente novamente em alguns segundos.');
+    const { rows } = result;
+    if (rows.length === 0) {
+      alert('SIGC-PRO: a tabela está vazia.');
       return;
     }
-    if (window.__sigcPro.kmlOnNextPdf) return; // export already in flight
 
-    const timeout = setTimeout(() => {
-      if (window.__sigcPro.kmlOnNextPdf) {
-        window.__sigcPro.kmlOnNextPdf = null;
-        console.warn(`${TAG} Timed out — PDF button click produced no pdfMake call.`);
-        alert('SIGC-PRO: não foi possível gerar o KML (a exportação de PDF não respondeu).');
-      }
-    }, 8000);
+    const { kml, skipped, total } = buildKml(pesquisa, rows);
+    download(`${window.__sigcPro.exportFileBase(pesquisa, rows)}.kml`, kml);
 
-    window.__sigcPro.kmlOnNextPdf = (body) => {
-      clearTimeout(timeout);
-      if (!body || body.length < 2) {
-        alert('SIGC-PRO: a tabela está vazia ou não pôde ser lida.');
-        return;
-      }
-      const asText = (c) => (c && c.text != null ? String(c.text).trim() : '');
-      const header = body[0].map(asText);
-      if (!window.__sigcPro.tableMatchesLayout(header, pesquisa.columns)) {
-        alert('SIGC-PRO: o layout da tabela não corresponde ao esperado; exportação KML cancelada.');
-        return;
-      }
-      const rows = body.slice(1).map((r) => r.map(asText));
-
-      const { kml, skipped, total } = buildKml(pesquisa, rows);
-      download(`${window.__sigcPro.exportFileBase(pesquisa, body)}.kml`, kml);
-
-      console.log(`${TAG} KML exported: ${total} placemarks, ${skipped} skipped (source: pdf-capture).`);
-      if (skipped > 0) {
-        alert(`SIGC-PRO: ${skipped} endereço(s) sem coordenadas válidas ficaram fora do KML.`);
-      }
-    };
-
-    pdfBtn.click();
+    console.log(`${TAG} KML exported: ${total} placemarks, ${skipped} skipped.`);
+    if (skipped > 0) {
+      alert(`SIGC-PRO: ${skipped} endereço(s) sem coordenadas válidas ficaram fora do KML.`);
+    }
   }
 
   function insertButton(pesquisa, toolbar) {
@@ -183,18 +147,19 @@
     btn.type = 'button';
     const sibling = toolbar.querySelector('button');
     btn.className = sibling ? sibling.className : 'dt-button';
-    btn.innerHTML = '<span>PDF+KML</span>';
-    btn.title = 'Exportar PDF e KML (SIGC-PRO)';
+    btn.innerHTML = '<span>KML-pro</span>';
+    btn.title = 'Exportar KML (SIGC-PRO)';
     // Match the sibling export buttons' shape (via the copied class) but in
     // SIGC-PRO blue, so it reads as an add-on rather than a native button.
     btn.style.background = '#005a9c';
     btn.style.borderColor = '#005a9c';
     btn.style.color = '#fff';
     btn.style.fontWeight = '600';
-    btn.addEventListener('click', () => exportKml(pesquisa, toolbar));
+    btn.style.fontSize = '0.65em';
+    btn.addEventListener('click', () => exportKml(pesquisa));
     toolbar.appendChild(btn);
 
-    console.log(`${TAG} KML button added (${pesquisa.id}).`);
+    console.log(`${TAG} KML-pro button added (${pesquisa.id}).`);
   }
 
   window.__sigcPro.whenReady(
