@@ -15,13 +15,16 @@ zero-network guarantee.
 
 - New feature `extension/features/agenda-day-guide/agenda-day-guide.js`,
   registered after the other agenda features in `manifest.json`.
-- Button **"Guia do Dia"** on the Agenda toolbar chunk, same classes,
-  colors, idempotent insert + MutationObserver re-insert as CSV-PRO /
-  Verificar Slots.
-- **Dia view only** (decided): if the active view isn't Dia (no
-  `.fc-resourceTimeGridDay-button.fc-button-active` /
-  `.fc-timeGridDay-button.fc-button-active`), alert asking the user to
-  switch to the Dia view and stop.
+- Button **"Guia do Dia"** on the Agenda toolbar chunk, same classes and
+  colors as CSV-PRO / Verificar Slots.
+- **Dia view only, enforced by visibility** (decided): the button exists
+  only while the Dia view is active
+  (`.fc-resourceTimeGridDay-button.fc-button-active` /
+  `.fc-timeGridDay-button.fc-button-active`). The MutationObserver tick
+  inserts the button when Dia is active and removes it otherwise
+  (observing `childList` + `subtree` + `attributes`/`class` so both
+  toolbar re-renders and the active-class toggle fire it). A click-time
+  Dia re-check alerts and stops as a never-expected fallback.
 - No rendered slots → same "nenhum slot encontrado" alert as CSV-PRO.
 
 ## Data flow
@@ -85,7 +88,7 @@ drops its local copy.
 
 ## Edge cases
 
-- Semana view → alert, no file.
+- Semana view → button not shown (alert only via the fallback re-check).
 - Zero slots → alert, no file.
 - Equipe with only open slots → tab still rendered (all-LIVRE day is
   information too); "equipes com reserva" stat distinguishes it.
