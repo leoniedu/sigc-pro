@@ -40,10 +40,11 @@
       .toLowerCase();
   }
 
-  // sigc-pro-agenda_<uf>_<período do cabeçalho>_<hora>. Period comes
+  // sigc-pro-agenda_<uf>_<período do cabeçalho>_<data>_<hora>. Period comes
   // straight from the calendar's own toolbar title (e.g. "12/07/2026 –
   // 18/07/2026" or a single date in Dia view), so it always matches what
-  // was actually exported.
+  // was actually exported; data/hora are the export timestamp itself (same
+  // fields csv-export's generic filename uses, via timestampSlug()).
   function agendaFileBase() {
     const titleEl = document.querySelector('.fc-toolbar-title');
     const periodo = titleEl ? titleEl.textContent.trim() : '';
@@ -51,8 +52,8 @@
     const uf = ufSelect && ufSelect.selectedIndex > 0
       ? ufSelect.options[ufSelect.selectedIndex].text.trim()
       : '';
-    const hora = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
-    return ['sigc-pro-agenda', slug(uf), slug(periodo), hora].filter(Boolean).join('_');
+    const { data, hora } = window.__sigcPro.timestampSlug();
+    return ['sigc-pro-agenda', slug(uf), slug(periodo), data, hora].filter(Boolean).join('_');
   }
 
   function exportAgendaCsv() {

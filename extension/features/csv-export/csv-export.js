@@ -30,8 +30,7 @@
         console.warn(`${TAG} Could not build Lista de Endereços filename, using generic:`, e);
       }
     }
-    const data = new Date().toISOString().slice(0, 10);
-    const hora = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+    const { data, hora } = window.__sigcPro.timestampSlug();
     return `sigc-pro-export_${data}_${hora}`;
   }
 

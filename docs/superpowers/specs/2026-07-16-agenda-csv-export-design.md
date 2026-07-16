@@ -137,9 +137,11 @@ Header (pt-BR, matches the on-screen labels where the title uses them):
 `Data;Equipe;Hora Início;Hora Fim;Controle;Domicílio;Nome;Sexo;Dt.
 Nascimento;Idade;Endereço;Telefone;Zonas;Observação`
 
-Filename: `sigc-pro-agenda_<uf>_<período-do-cabeçalho>_<hora>.csv` — UF
-from `#selectUf`'s selected option text, período straight from
-`.fc-toolbar-title` (e.g. `12/07/2026 – 18/07/2026`), both slugified
+Filename: `sigc-pro-agenda_<uf>_<período-do-cabeçalho>_<data>_<hora>.csv` —
+UF from `#selectUf`'s selected option text, período straight from
+`.fc-toolbar-title` (e.g. `12/07/2026 – 18/07/2026`), both slugified;
+data/hora are the export timestamp (`window.__sigcPro.timestampSlug()`,
+shared with csv-export.js's generic filename)
 (diacritics stripped, non-alphanumerics -> `-`).
 
 ## Component layout

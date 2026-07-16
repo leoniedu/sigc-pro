@@ -187,6 +187,17 @@
     URL.revokeObjectURL(url);
   }
 
+  // { data: 'YYYY-MM-DD', hora: 'HHMMSS' } for the current instant — shared
+  // by every feature's fallback/generic filename builder (csv-export,
+  // agenda-csv-export), so the format stays identical across them.
+  function timestampSlug() {
+    const now = new Date();
+    return {
+      data: now.toISOString().slice(0, 10),
+      hora: now.toTimeString().slice(0, 8).replace(/:/g, ''),
+    };
+  }
+
   // Parses a coordinate cell to signed decimal degrees, or null.
   // SIGC shows DMS: "dd mm ss.sss S" (also tolerates °'" marks; hemisphere
   // N/S/E/W, plus O = Oeste). Decimal seconds may use comma. Plain decimal
@@ -397,6 +408,7 @@
     escapeCsvField,
     buildCsv,
     downloadFile,
+    timestampSlug,
     onAgendaPage,
     findAgendaToolbarChunk,
     parseAgendaSlotTitle,
