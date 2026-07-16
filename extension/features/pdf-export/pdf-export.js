@@ -228,12 +228,25 @@
     console.log(`${TAG} Hook installed on pdfMake.createPdf (${pesquisa.id}).`);
   }
 
+  // The listagem layout's header prints a single CONTROLE value and its
+  // pageBreak/section logic assumes one report — mixing controles just
+  // silently produced a misleading "vários (N)" header. Refuse up front
+  // instead, before ever clicking the native button.
+  function hasSingleControle(pesquisa) {
+    const result = window.__sigcPro.getTableRows(pesquisa);
+    if (!result) return true; // let the native click path surface the real error
+    const cols = pesquisa.columns;
+    const val = (r) => (r[cols.controle.index] ?? '').trim();
+    const controles = new Set(result.rows.map(val).filter(Boolean));
+    return controles.size <= 1;
+  }
+
   // Sets the rebuild flag and clicks the native PDF button — pdfMake's own
   // createPdf call is the only reliable way to trigger PDF generation, and
   // clicking the native button (proven safe — unaffected by the F5
   // MouseEvent bug that broke native CSV/Excel) is the only proven way to
   // reach it without reimplementing DataTables' own PDF button config.
-  function exportPdf(toolbar) {
+  function exportPdf(toolbar, pesquisa) {
     const pdfBtn = findPdfButton(toolbar);
     if (!pdfBtn) {
       alert('SIGC-PRO: botão de PDF não encontrado — o PDF-pro depende dele.');
@@ -243,11 +256,17 @@
       alert('SIGC-PRO: componente de PDF ainda não carregou; tente novamente em alguns segundos.');
       return;
     }
+    if (!hasSingleControle(pesquisa)) {
+      alert(
+        'SIGC-PRO: o PDF-pro só funciona com um único Controle por vez. Filtre a lista para um Controle antes de exportar.'
+      );
+      return;
+    }
     window.__sigcPro.pdfRebuildOnNext = true;
     pdfBtn.click();
   }
 
-  function insertButton(toolbar) {
+  function insertButton(toolbar, pesquisa) {
     if (document.getElementById(BUTTON_ID)) return;
 
     const btn = document.createElement('button');
@@ -278,7 +297,7 @@
     btn.style.minWidth = '36px';
     btn.style.maxWidth = '36px';
     btn.style.borderRadius = '4px';
-    btn.addEventListener('click', () => exportPdf(toolbar));
+    btn.addEventListener('click', () => exportPdf(toolbar, pesquisa));
     toolbar.appendChild(btn);
 
     console.log(`${TAG} PDF-pro button added.`);
@@ -296,7 +315,7 @@
         if (!window.__sigcPro.onListaEnderecos()) return;
         if (document.getElementById(BUTTON_ID)) return;
         const toolbar = document.querySelector('.dt-buttons');
-        if (toolbar) insertButton(toolbar);
+        if (toolbar) insertButton(toolbar, pesquisa);
       };
       tryInsert();
       new MutationObserver(tryInsert).observe(document.body, {
