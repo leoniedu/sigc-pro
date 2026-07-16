@@ -20,6 +20,17 @@ EOF
   echo "extension/manifest.json version bumped to $NEW"
 fi
 
+# Keep the GitHub Pages version marker in sync with the (possibly
+# just-bumped) staged manifest version.
+if ! git diff --cached --no-ext-diff --quiet -- extension/; then
+  VER=$(git show :extension/manifest.json | grep '"version"' | sed -E 's/.*"version": *"([0-9.]+)".*/\1/')
+  if [ -n "$VER" ] && grep -qE 'versão [0-9]+\.[0-9]+\.[0-9]+' "$ROOT/docs/index.html"; then
+    sed -i '' -E "s/versão [0-9]+\.[0-9]+\.[0-9]+/versão $VER/" "$ROOT/docs/index.html"
+    git add "$ROOT/docs/index.html"
+    echo "docs/index.html version marker synced to $VER"
+  fi
+fi
+
 # Keep dist/sigc-pro-extension.zip in sync: rebuild from the staged content
 # whenever the commit touches extension/ or the bundled manual, and include
 # it in the same commit. Zip layout: LEIA-ME.txt + extension/.

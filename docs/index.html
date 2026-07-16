@@ -27,6 +27,7 @@
 <header>
   <h1>SIGC-PRO</h1>
   <p>Melhorias não oficiais para o SIGC — Sistema Integrado de Gestão da Coleta (IBGE)</p>
+  <p style="opacity:.75; font-size:.85rem; margin-top:.4rem;">versão 0.2.8</p>
 </header>
 <main>
   <div class="aviso">⚠️ Projeto independente, sem vínculo com o IBGE. Funcionalidades
@@ -34,25 +35,53 @@
 
   <h2>Funcionalidades</h2>
   <div class="card">
-    <h3>📄🗺️ Botão PDF+KML — Lista de Endereços</h3>
-    <p>Novo botão azul junto aos botões de exportação. Um clique baixa dois
-    arquivos: o <strong>PDF melhorado</strong> (oculta colunas pouco úteis em
-    campo, título customizado, colunas constantes movidas para o subtítulo) e
-    o <strong>KML</strong> (Google Earth / Maps) com camadas separadas para
-    Selecionado = Sim (vermelho, numerado) e Não (azul, menor). O botão de PDF original do
-    SIGC continua intocado.</p>
+    <h3>📄 PDF-PRO — Lista de Endereços</h3>
+    <p>PDF em estilo listagem do IBGE: paisagem, cabeçalho repetido em cada
+    página, colunas pouco úteis em campo removidas, coordenadas em graus
+    decimais (formato Google Maps). O botão de PDF original do SIGC continua
+    intocado.</p>
+  </div>
+  <div class="card">
+    <h3>🗺️ KML-PRO — Lista de Endereços</h3>
+    <p>Arquivo KML (Google Earth / Maps) com camadas separadas para
+    Selecionado = Sim e Não, cores seguras para daltonismo e endereço
+    completo no balão de cada ponto.</p>
+  </div>
+  <div class="card">
+    <h3>📊 CSV-PRO — qualquer relatório</h3>
+    <p>Exporta a tabela de qualquer relatório do SIGC em CSV pronto para o
+    Excel brasileiro (separador <code>;</code>, acentuação preservada),
+    incluindo todas as páginas da tabela, não só a visível.</p>
+  </div>
+  <div class="card">
+    <h3>📅 CSV-PRO — Agenda</h3>
+    <p>Exporta os slots do calendário (Administrar Agenda) — data, equipe,
+    horário, Controle, Domicílio, nome, endereço, telefone etc. — da semana
+    ou dia em exibição.</p>
+  </div>
+  <div class="card">
+    <h3>⏰ Verificar Prazo — Agenda</h3>
+    <p>Alerta sobre slots ainda abertos (sem reserva) marcados para datas
+    dentro do prazo mínimo de agendamento (hoje + 3 dias; + 4 na
+    sexta-feira).</p>
   </div>
 
-  <h2>Instalação (modo desenvolvedor)</h2>
+  <h2>Instalação</h2>
+  <p><strong>Equipes de campo:</strong> a extensão é distribuída pela Chrome
+  Web Store em modo não listado — o link de instalação é repassado
+  internamente às equipes, com atualização automática.</p>
+  <p><strong>Avaliação / desenvolvimento</strong> (modo desenvolvedor):</p>
   <ol>
     <li>Baixe o repositório e descompacte (ou <code>git clone</code>).</li>
     <li>No Chrome, abra <code>chrome://extensions</code>.</li>
     <li>Ative o <strong>Modo do desenvolvedor</strong>.</li>
     <li>Clique em <strong>Carregar sem compactação</strong> e selecione a pasta <code>extension/</code>.</li>
-    <li>Abra a Lista de Endereços no SIGC e use o PDF ou o botão <strong>KML</strong>.</li>
+    <li>Abra a Lista de Endereços ou a Agenda no SIGC e use os botões <strong>PRO</strong>.</li>
   </ol>
-  <p>Requer Chrome 111+. A extensão só age em páginas do SIGC e valida o
-  layout da tabela antes de alterar qualquer coisa.</p>
+  <p>Requer Chrome 111+. A extensão só age em páginas do SIGC, valida o
+  layout da tabela antes de alterar qualquer coisa e não pede nenhuma
+  permissão: nenhuma chamada de rede, nenhum armazenamento — os arquivos
+  exportados ficam somente no computador do usuário.</p>
 </main>
 <footer>SIGC-PRO · projeto não oficial · MIT · <a href="PRIVACY_POLICY.html">Política de Privacidade</a></footer>
 </body>

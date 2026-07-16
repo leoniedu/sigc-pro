@@ -19,4 +19,21 @@ if [ -n "$MATCHES" ]; then
   echo "$MATCHES" >&2
   exit 1
 fi
+
+# Unlisted-distribution gate: the Chrome Web Store item is unlisted, so its
+# URL must never land in this public repo (docs, README, Pages, anywhere) —
+# publishing the link would effectively de-unlist it. Checked repo-wide,
+# not just extension/.
+STORE_PATTERN='chromewebstore\.google\.com/detail|chrome\.google\.com/webstore/detail'
+if [ "$1" = "--staged" ]; then
+  STORE_MATCHES=$(git grep --cached -nE "$STORE_PATTERN" -- . 2>/dev/null)
+else
+  STORE_MATCHES=$(git grep -nE "$STORE_PATTERN" -- . 2>/dev/null)
+fi
+
+if [ -n "$STORE_MATCHES" ]; then
+  echo "PRIVACY GATE FAILED — unlisted Chrome Web Store URL found in repo:" >&2
+  echo "$STORE_MATCHES" >&2
+  exit 1
+fi
 echo "privacy gate: CLEAN"
