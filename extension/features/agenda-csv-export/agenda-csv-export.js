@@ -10,7 +10,7 @@
 // FullCalendar resource-timegrid markup was reverse-engineered, and why
 // this keeps SIGC-PRO's zero-network-calls guarantee intact. Exports both
 // reserved and open/unbooked slots — "all the slots" — sharing this
-// reading logic with agenda-lead-time-alert.js.
+// reading logic with agenda-slot-checks.js.
 (function () {
   'use strict';
 

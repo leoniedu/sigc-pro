@@ -231,7 +231,7 @@
   }
 
   // --- Agenda (AdministracaoAgenda) shared reading -------------------
-  // Used by both agenda-csv-export and agenda-lead-time-alert, which both
+  // Used by both agenda-csv-export and agenda-slot-checks, which both
   // need "every slot in the currently rendered calendar, parsed" — kept
   // here so the DOM-reading/title-parsing logic exists in exactly one
   // place. See docs/superpowers/specs/2026-07-16-agenda-csv-export-design.md

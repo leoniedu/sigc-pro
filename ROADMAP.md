@@ -28,6 +28,13 @@ Working checklist; move items up/down freely. Specs live in
       (`2026-07-16-agenda-lead-time-alert-design.md`). Agenda DOM-reading
       (`readAgendaSlots` and friends) moved to `sigc-common.js`, shared
       between both Agenda features.
+- [x] Agenda "Verificar Prazo" renamed to "Verificar Slots"
+      (`agenda-slot-checks/`) and extended with a name-consistency check:
+      equipe names must fit `UF_Equipe_Local(_n)` (2–3 underscores) and
+      every zona in a slot must share the equipe's key — the name up to the
+      third underscore (`29_Linus_Lauro_1` → `29_Linus_Lauro`); malformed
+      equipes and zona/equipe mismatches reported in the same alert as the
+      lead-time check (all slots, not just open ones)
 - [x] Real icon: location-pin mark replacing the flat blue square
 - [x] Repo public, GitHub Pages (privacy policy), Chrome Web Store
       submission (unlisted)
