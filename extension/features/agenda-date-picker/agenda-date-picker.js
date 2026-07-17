@@ -9,13 +9,13 @@
 // (with a visited-set to survive the tree's circular refs) rather than
 // filtering by key name. calendar.gotoDate(iso) navigates the real
 // calendar exactly like SIGC's own atualizarCalendario() helper does
-// internally. Visible in both Dia and Semana view, next to the other
-// Agenda buttons.
+// internally. Visible in both Dia and Semana view, right after the
+// toolbar's date-range title.
 (function () {
   'use strict';
 
   const TAG = '[sigc-agenda-date-picker]';
-  const BUTTON_ID = 'sigc-pro-agenda-date-picker';
+  const WRAP_ID = 'sigc-pro-agenda-date-picker';
 
   function isoDate(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -46,32 +46,56 @@
     return root ? findCalendarApi(root) : null;
   }
 
-  function insertButton(chunk) {
-    if (document.getElementById(BUTTON_ID)) return;
+  // Placed right after the toolbar's date-range title (e.g. "12/07/2026 –
+  // 18/07/2026"), not the Dia/Semana chunk other SIGC-PRO buttons use —
+  // this reads more like "the date, and a way to change it" together.
+  function findTitle() {
+    return document.querySelector('.fc-toolbar-title');
+  }
+
+  // Native <input type="date"> can't be styled down to just its icon —
+  // Chrome renders dd/mm/yyyy as separate focusable segments that fight
+  // shrinking/hiding. Instead: a plain icon button the user actually
+  // sees/clicks, plus an invisible (opacity:0, but layout-participating —
+  // showPicker() throws on display:none) date input right behind it that
+  // supplies the native calendar popup and fires gotoDate on change.
+  function insertButton(title) {
+    if (document.getElementById(WRAP_ID)) return;
+
+    const wrap = document.createElement('span');
+    wrap.id = WRAP_ID;
+    wrap.style.position = 'relative';
+    wrap.style.display = 'inline-flex';
+    wrap.style.verticalAlign = 'middle';
+    wrap.style.marginLeft = '.5em';
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'fc-button fc-button-primary';
+    btn.title = 'Ir para a data (SIGC-PRO)';
+    btn.textContent = '📅';
+    btn.style.background = '#005a9c';
+    btn.style.borderColor = '#005a9c';
+    btn.style.lineHeight = '1';
+    btn.style.padding = '.2em .3em';
 
     const input = document.createElement('input');
-    input.id = BUTTON_ID;
     input.type = 'date';
-    input.title = 'Ir para a data (SIGC-PRO)';
-    input.className = 'fc-button fc-button-primary';
-    input.style.background = '#005a9c';
-    input.style.borderColor = '#005a9c';
-    input.style.color = 'transparent';
-    input.style.marginLeft = '4px';
-    input.style.colorScheme = 'dark';
-    // Icon-only: shrink to the native picker-indicator's width and hide
-    // the dd/mm/yyyy text (still present, just transparent) so only the
-    // calendar glyph the browser draws is visible/clickable.
-    input.style.width = '2.1em';
-    input.style.padding = '.35em .3em';
-    input.style.overflow = 'hidden';
+    input.tabIndex = -1;
+    input.style.position = 'absolute';
+    input.style.inset = '0';
+    input.style.width = '100%';
+    input.style.height = '100%';
+    input.style.opacity = '0';
+    input.style.pointerEvents = 'none';
 
-    input.addEventListener('focus', () => {
+    btn.addEventListener('click', () => {
       const api = getCalendarApi();
       if (api) input.value = isoDate(api.getDate());
+      if (typeof input.showPicker === 'function') input.showPicker();
     });
 
-    function goToPicked() {
+    input.addEventListener('change', () => {
       if (!input.value) return;
       const api = getCalendarApi();
       if (!api) {
@@ -79,21 +103,22 @@
         return;
       }
       api.gotoDate(input.value);
-    }
-    input.addEventListener('change', goToPicked);
+    });
 
-    chunk.appendChild(input);
+    wrap.appendChild(btn);
+    wrap.appendChild(input);
+    title.appendChild(wrap);
     console.log(`${TAG} date picker added.`);
   }
 
   window.__sigcPro.whenReadyGeneric(
-    () => window.__sigcPro.onAgendaPage() && window.__sigcPro.findAgendaToolbarChunk(),
+    () => window.__sigcPro.onAgendaPage() && findTitle(),
     () => {
       const tryUpdate = () => {
-        const existing = document.getElementById(BUTTON_ID);
-        const chunk = window.__sigcPro.findAgendaToolbarChunk();
-        if (window.__sigcPro.onAgendaPage() && chunk) {
-          if (!existing) insertButton(chunk);
+        const existing = document.getElementById(WRAP_ID);
+        const title = findTitle();
+        if (window.__sigcPro.onAgendaPage() && title) {
+          if (!existing) insertButton(title);
         } else if (existing) {
           existing.remove();
         }
