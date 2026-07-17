@@ -35,6 +35,11 @@ Working checklist; move items up/down freely. Specs live in
       third underscore (`29_Linus_Lauro_1` → `29_Linus_Lauro`); malformed
       equipes and zona/equipe mismatches reported in the same alert as the
       lead-time check (all slots, not just open ones)
+- [x] Agenda "Guia do Dia": Dia-view-only button downloading a
+      self-contained HTML day guide (CSS-only tabs, no JS/network) —
+      Resumo tab with day stats plus one tab per equipe with visit cards
+      and LIVRE rows; printable per team
+      (`2026-07-16-agenda-day-guide-design.md`)
 - [x] Real icon: location-pin mark replacing the flat blue square
 - [x] Repo public, GitHub Pages (privacy policy), Chrome Web Store
       submission (unlisted)
