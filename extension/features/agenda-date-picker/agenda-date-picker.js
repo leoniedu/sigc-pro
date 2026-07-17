@@ -2,13 +2,15 @@
 // page holds a live FullCalendar instance, but not at a stable global —
 // `window.calendar` resolves to the `<div id="calendar">` element itself
 // (DOM's automatic named-element access), not the Calendar object.
-// The real instance only lives inside Preact's internal fiber tree
-// attached to that element (confirmed 2026-07-17 via DevTools: walking
-// __k/__reactFiber*/__reactProps* until an object exposes both
-// getDate/gotoDate finds it, and calendar.gotoDate(iso) navigates the
-// real calendar exactly like SIGC's own atualizarCalendario() helper
-// does internally). Visible in both Dia and Semana view, next to the
-// other Agenda buttons.
+// The real instance lives deep inside Preact's fiber tree (confirmed
+// 2026-07-17 via DevTools), at __k.props.children[0].props.emitter.
+// thisContext — an ordinary-looking property path, not a
+// framework-prefixed one, so the search below walks any object property
+// (with a visited-set to survive the tree's circular refs) rather than
+// filtering by key name. calendar.gotoDate(iso) navigates the real
+// calendar exactly like SIGC's own atualizarCalendario() helper does
+// internally. Visible in both Dia and Semana view, next to the other
+// Agenda buttons.
 (function () {
   'use strict';
 
@@ -21,21 +23,22 @@
 
   // Preact re-renders can replace the fiber tree, so this is re-run on
   // every use rather than cached — same reasoning as the MutationObserver
-  // below that keeps re-inserting our own button.
-  function findCalendarApi(el, depth) {
-    depth = depth || 0;
-    if (!el || depth > 25) return null;
-    if (typeof el === 'object' && typeof el.getDate === 'function' && typeof el.gotoDate === 'function') {
-      return el;
-    }
-    if (typeof el !== 'object') return null;
-    for (const key of Object.keys(el)) {
-      if (key.startsWith('__k') || key.startsWith('__reactFiber') || key.startsWith('__reactProps')) {
-        const found = findCalendarApi(el[key], depth + 1);
+  // below that keeps re-inserting our own button. The tree has circular
+  // references (fiber.__ / .__P / .base point back at ancestors), hence
+  // the visited set; depth is capped as a second safety net.
+  function findCalendarApi(root) {
+    const seen = new Set();
+    function walk(el, depth) {
+      if (!el || typeof el !== 'object' || depth > 12 || seen.has(el)) return null;
+      seen.add(el);
+      if (typeof el.getDate === 'function' && typeof el.gotoDate === 'function') return el;
+      for (const key of Object.keys(el)) {
+        const found = walk(el[key], depth + 1);
         if (found) return found;
       }
+      return null;
     }
-    return null;
+    return walk(root, 0);
   }
 
   function getCalendarApi() {
