@@ -60,14 +60,9 @@
     return den > 0 ? (num / den).toFixed(1).replace('.', ',') : null;
   }
 
-  // --- coordinates: geo links, Google Maps route, GPX ---------------
+  // --- coordinates: geo links, Google Maps route ---------------------
   // All optional: every builder below is a no-op when coords is null,
   // keeping the plain Guia do Dia byte-identical.
-
-  function escapeXml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
-  }
 
   function coordKey(r) {
     return `${r.controle}|${r.domicilio}`;
@@ -104,21 +99,6 @@
     return 'https://www.google.com/maps/dir/?api=1&travelmode=driving' +
       (way ? `&waypoints=${encodeURIComponent(way)}` : '') +
       `&destination=${encodeURIComponent(dest)}`;
-  }
-
-  function buildGpx(points) {
-    const wpts = points.map((p) =>
-      `  <wpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}"><name>${escapeXml(p.name)}</name></wpt>`);
-    return [
-      '<?xml version="1.0" encoding="UTF-8"?>',
-      '<gpx version="1.1" creator="SIGC-PRO" xmlns="http://www.topografix.com/GPX/1/1">',
-      ...wpts,
-      '</gpx>',
-    ].join('\n');
-  }
-
-  function gpxDataUri(gpx) {
-    return 'data:application/gpx+xml;charset=utf-8,' + encodeURIComponent(gpx);
   }
 
   // --- HTML builders ------------------------------------------------
@@ -223,8 +203,6 @@
       const legs = chunkRoute(stops, 10);
       const links = legs.map((leg, i) =>
         `<a href="${e(gmapsRouteUrl(leg))}">Google Maps${legs.length > 1 ? ` ${i + 1}` : ''}</a>`);
-      links.push(
-        `<a href="${e(gpxDataUri(buildGpx(stops)))}" download="rota-${e(window.__sigcPro.slug(group.equipe))}.gpx">GPX</a>`);
       rota = `<div class="rota">Rota: ${links.join(' &nbsp;·&nbsp; ')}</div>`;
     }
     return [

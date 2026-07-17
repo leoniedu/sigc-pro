@@ -6,8 +6,12 @@ extends).
 
 ## Purpose
 
-Give the Guia do Dia navigation: per-visit `geo:` links, a per-team GPX,
-and an optional Google Maps route link. Coordinates come from SIGC's own
+Give the Guia do Dia navigation: per-visit `geo:` links and an optional
+Google Maps route link. (A per-team GPX download was shipped and then
+removed 2026-07-17: its `data:` URI link doesn't open from a printed/PDF
+guide — most PDF viewers don't support non-`http(s)` link schemes — only
+from the live HTML in a browser, which made it not worth the surface.)
+Coordinates come from SIGC's own
 Lista de Endereços endpoint via an **opt-in, click-triggered, same-origin
 fetch** — the first and only network call in SIGC-PRO, deliberately
 quarantined (decided 2026-07-17; the in-memory Lista→Agenda join was
@@ -94,10 +98,7 @@ Exposed as `window.__sigcPro.agendaMap = { fetchCoords(uf, controles) }`
     Documented trade-off: tapping sends the leg's coordinates to Google —
     a deliberate user action, never automatic (stance recorded
     2026-07-16: no third-party map queries in normal flow).
-  - `GPX`: `<a download="rota-<equipe>.gpx" href="data:application/gpx+xml;base64,…">` —
-    a data: URI embedded in the guide (still zero external refs), one
-    waypoint per visit named `<hora> <nome-or-controle>`, importable by
-    Organic Maps / OsmAnd for fully offline routing.
+  - ~~`GPX`~~ — removed 2026-07-17 (see Purpose above).
 - The guide file itself remains `<script>`-free and self-contained.
 
 ## Out of scope
