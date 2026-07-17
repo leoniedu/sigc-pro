@@ -27,7 +27,7 @@ Os botões nativos do SIGC (PDF, CSV, Excel) não são alterados — o
 SIGC-PRO apenas adiciona alternativas ao lado deles.
 
 PRIVACIDADE: nenhum dado sai do computador do usuário. A extensão não
-solicita nenhuma permissão do navegador, não faz nenhuma chamada de rede
+solicita nenhuma permissão do navegador, não faz chamadas de rede — exceto o recurso opcional "Guia + Mapa", que consulta o próprio servidor do SIGC mediante clique e confirmação (nada vai a terceiros)
 e não armazena nada — todos os arquivos são gerados localmente e salvos
 pelo mecanismo padrão de download do Chrome. Essa garantia é verificada
 automaticamente a cada alteração no código-fonte (veja o repositório).

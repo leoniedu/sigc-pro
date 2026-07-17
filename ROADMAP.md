@@ -40,6 +40,11 @@ Working checklist; move items up/down freely. Specs live in
       Resumo tab with day stats plus one tab per equipe with visit cards
       and LIVRE rows; printable per team
       (`2026-07-16-agenda-day-guide-design.md`)
+- [x] Agenda "Guia + Mapa": opt-in coordinates fetch from SIGC's own
+      /relatorio/filtrar (same-origin, click+confirm, quarantined in
+      features/agenda-map/ by the reworked privacy gate) feeding the day
+      guide with geo: links, per-team GPX (data: URI), and chunked
+      Google Maps route links (`2026-07-16-agenda-map-design.md`)
 - [x] Real icon: location-pin mark replacing the flat blue square
 - [x] Repo public, GitHub Pages (privacy policy), Chrome Web Store
       submission (unlisted)

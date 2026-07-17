@@ -85,14 +85,14 @@ Novas pesquisas são adicionadas como novas entradas no mesmo formato.
 ## Privacidade
 
 **Nenhum dado sai do seu computador.** A extensão não solicita nenhuma
-permissão do navegador, não faz nenhuma chamada de rede, não armazena nada
+permissão do navegador, não faz chamadas de rede — exceto o recurso opcional "Guia + Mapa", que consulta o próprio servidor do SIGC mediante clique e confirmação (nada vai a terceiros), não armazena nada
 (nem `localStorage`) e não tem código remoto — o arquivo KML é gerado em
 memória e salvo localmente. Detalhes em
 [PRIVACY_POLICY](docs/PRIVACY_POLICY.html).
 
 Essa garantia é verificada por um *gate* automático
 (`scripts/check-privacy.sh`): um hook de pre-commit bloqueia qualquer commit
-que introduza APIs de rede ou armazenamento em `extension/`. Para ativá-lo
+que introduza APIs de rede ou armazenamento em `extension/` (exceção única e auditada: `fetch` em `features/agenda-map/`, que não pode conter URLs absolutas). Para ativá-lo
 após clonar o repositório:
 
 ```sh

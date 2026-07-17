@@ -21,11 +21,9 @@
 <body>
 <header><h1>SIGC-PRO — Política de Privacidade</h1></header>
 <main>
-  <p><em>Última atualização: 14 de julho de 2026.</em></p>
+  <p><em>Última atualização: 17 de julho de 2026.</em></p>
 
-  <div class="destaque"><strong>Resumo: o SIGC-PRO NÃO coleta, NÃO transmite e
-  NÃO armazena nenhum dado — pessoal ou não. Nenhuma informação sai do seu
-  computador.</strong></div>
+  <div class="destaque"><strong>Resumo: o SIGC-PRO NÃO coleta, NÃO transmite e NÃO armazena nenhum dado para o desenvolvedor ou para terceiros. A única comunicação de rede é uma consulta opcional, acionada por clique e confirmada pelo usuário, ao próprio servidor do SIGC — dentro da sessão já autenticada. Nenhuma informação sai do circuito usuário–IBGE.</strong></div>
 
   <h2>1. O que a extensão faz</h2>
   <p>O SIGC-PRO opera exclusivamente dentro das páginas do SIGC já abertas no
@@ -34,10 +32,7 @@
   download do navegador.</p>
 
   <h2>2. Coleta e transmissão de dados</h2>
-  <p>Nenhuma. O código não contém chamadas de rede (<code>fetch</code>,
-  <code>XMLHttpRequest</code>, <code>sendBeacon</code>, <code>WebSocket</code>)
-  nem carrega recursos externos. Não há telemetria, análise de uso ou
-  qualquer integração com serviços de terceiros.</p>
+  <p>Quase nenhuma. O recurso opcional "Guia + Mapa" faz, somente quando o usuário clica e confirma, uma requisição ao próprio servidor do SIGC (mesma origem da página) para obter as coordenadas dos endereços do dia; a resposta é processada localmente e nada é retransmitido. Fora isso, o código não contém chamadas de rede nem carrega recursos externos — a verificação automática do repositório (scripts/check-privacy.sh) garante que requisições só podem existir nesse único módulo e só para a própria origem. Não há telemetria, análise de uso ou qualquer integração com serviços de terceiros.</p>
 
   <h2>3. Armazenamento</h2>
   <p>Nenhum. A extensão não usa <code>chrome.storage</code>,
@@ -52,7 +47,7 @@
   <code>manifest.json</code>.</p>
 
   <h2>5. Código aberto e auditoria</h2>
-  <p>Todo o código executável são três arquivos JavaScript publicados neste
+  <p>Todo o código executável são os arquivos JavaScript publicados neste
   repositório. O Manifest V3 do Chrome proíbe código remoto: o que está no
   repositório é exatamente o que roda no navegador.</p>
 
