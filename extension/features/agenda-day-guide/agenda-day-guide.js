@@ -60,6 +60,67 @@
     return den > 0 ? (num / den).toFixed(1).replace('.', ',') : null;
   }
 
+  // --- coordinates: geo links, Google Maps route, GPX ---------------
+  // All optional: every builder below is a no-op when coords is null,
+  // keeping the plain Guia do Dia byte-identical.
+
+  function escapeXml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
+  }
+
+  function coordKey(r) {
+    return `${r.controle}|${r.domicilio}`;
+  }
+
+  function slotCoord(r, coords) {
+    return (r.reservado && coords && coords.get(coordKey(r))) || null;
+  }
+
+  function fmtCoord(p) {
+    return `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
+  }
+
+  // Splits a day into Google-Maps-sized legs (max 10 stops = 9 waypoints
+  // + destination; origin omitted = the device's current location).
+  // Consecutive legs share their boundary stop so navigation is seamless.
+  function chunkRoute(points, maxStops) {
+    const max = maxStops || 10;
+    if (points.length <= max) return [points];
+    const chunks = [];
+    let start = 0;
+    while (start < points.length - 1) {
+      const end = Math.min(start + max, points.length);
+      chunks.push(points.slice(start, end));
+      if (end >= points.length) break;
+      start = end - 1;
+    }
+    return chunks;
+  }
+
+  function gmapsRouteUrl(points) {
+    const way = points.slice(0, -1).map(fmtCoord).join('|');
+    const dest = fmtCoord(points[points.length - 1]);
+    return 'https://www.google.com/maps/dir/?api=1&travelmode=driving' +
+      (way ? `&waypoints=${encodeURIComponent(way)}` : '') +
+      `&destination=${encodeURIComponent(dest)}`;
+  }
+
+  function buildGpx(points) {
+    const wpts = points.map((p) =>
+      `  <wpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}"><name>${escapeXml(p.name)}</name></wpt>`);
+    return [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<gpx version="1.1" creator="SIGC-PRO" xmlns="http://www.topografix.com/GPX/1/1">',
+      ...wpts,
+      '</gpx>',
+    ].join('\n');
+  }
+
+  function gpxDataUri(gpx) {
+    return 'data:application/gpx+xml;charset=utf-8,' + encodeURIComponent(gpx);
+  }
+
   // --- HTML builders ------------------------------------------------
 
   function escapeHtml(s) {
@@ -84,7 +145,7 @@
   // reserved cards don't (the visit already has an address). Missing
   // fields (already normalized to '' by readAgendaSlots) are omitted
   // line by line — a sparse card never breaks.
-  function buildSlotCard(r) {
+  function buildSlotCard(r, coords) {
     const e = escapeHtml;
     const hora = `${e(r.horaInicio)}–${e(r.horaFim)}`;
     if (!r.reservado) {
@@ -116,6 +177,8 @@
       '<div class="card">',
       `<div class="hora">${hora} <span class="badge">RESERVADO</span></div>`,
       r.endereco ? `<div class="endereco">${e(r.endereco)}</div>` : '',
+      (() => { const p = slotCoord(r, coords);
+        return p ? `<div class="geo"><a href="geo:${fmtCoord(p)}">abrir no mapa</a></div>` : ''; })(),
       morador,
       ids ? `<div class="ids">${ids}</div>` : '',
       r.observacao ? `<div class="obs">Obs: ${e(r.observacao)}</div>` : '',
@@ -123,7 +186,7 @@
     ].filter(Boolean).join('\n');
   }
 
-  function buildTeamPanel(group) {
+  function buildTeamPanel(group, coords) {
     const e = escapeHtml;
     const s = computeStats(group.rows);
     const zonas = zonasUnion(group.rows);
@@ -143,12 +206,32 @@
       [...group.rows].reverse().findIndex((r) => r.reservado);
     const cards = group.rows.map((r, i) => {
       const edge = first === -1 || i < first || i > last;
-      return !r.reservado && edge ? buildLivreEdgeRow(r) : buildSlotCard(r);
+      return !r.reservado && edge ? buildLivreEdgeRow(r) : buildSlotCard(r, coords);
     });
+    // Route links only when >= 2 reserved visits have coordinates.
+    // Tapping the Google Maps link sends that leg's coordinates to
+    // Google — a deliberate user action, never automatic.
+    const stops = group.rows
+      .filter((r) => r.reservado)
+      .map((r) => {
+        const p = slotCoord(r, coords);
+        return p ? { lat: p.lat, lon: p.lon, name: `${r.horaInicio} ${r.nome || r.controle}` } : null;
+      })
+      .filter(Boolean);
+    let rota = '';
+    if (stops.length >= 2) {
+      const legs = chunkRoute(stops, 10);
+      const links = legs.map((leg, i) =>
+        `<a href="${e(gmapsRouteUrl(leg))}">Google Maps${legs.length > 1 ? ` ${i + 1}` : ''}</a>`);
+      links.push(
+        `<a href="${e(gpxDataUri(buildGpx(stops)))}" download="rota-${e(window.__sigcPro.slug(group.equipe))}.gpx">GPX</a>`);
+      rota = `<div class="rota">Rota: ${links.join(' &nbsp;·&nbsp; ')}</div>`;
+    }
     return [
       `<h2>${e(group.equipe)}</h2>`,
       `<div class="teamstats">${statBits}</div>`,
       zonas.length ? `<div class="zonas">Zonas: ${zonas.map(e).join(', ')}</div>` : '',
+      rota,
       ...cards,
     ].filter(Boolean).join('\n');
   }
@@ -188,11 +271,11 @@
   // Complete standalone document. Tabs are CSS-only: one hidden radio per
   // tab as direct children of <main>, so #tab-i:checked ~ #panel-i works;
   // @media print hides the tab bar and prints only the checked panel.
-  function buildGuideHtml(meta, groups, allRows) {
+  function buildGuideHtml(meta, groups, allRows, coords) {
     const e = escapeHtml;
     const panels = [
       { label: 'Resumo', html: buildSummaryPanel(groups, allRows) },
-      ...groups.map((g) => ({ label: g.equipe, html: buildTeamPanel(g) })),
+      ...groups.map((g) => ({ label: g.equipe, html: buildTeamPanel(g, coords) })),
     ];
     const radios = panels.map((_, i) =>
       `<input type="radio" name="tab" id="tab-${i}"${i === 0 ? ' checked' : ''}>`).join('\n');
@@ -232,11 +315,13 @@ h3 { margin: .8rem 0 .2rem; font-size: 1rem; }
 .card.livre { border-style: dashed; background: #fafafa; }
 .badge-livre { background: #8a8f98; }
 .livre-edge { color: #666; border: 1px dashed #bbb; border-radius: 6px; padding: .25rem .8rem; margin: .5rem 0; font-size: .9rem; }
+a { color: #005a9c; }
+.geo, .rota { font-size: .92rem; margin-top: .1rem; }
 .teamstats { color: #333; margin: .2rem 0 .4rem; font-size: .92rem; }
 table.stats { border-collapse: collapse; margin: .6rem 0; }
 table.stats th, table.stats td { border: 1px solid #d0d7de; padding: .25rem .6rem; text-align: left; font-size: .92rem; }
 ${tabRules}
-@media print { .tabs { display: none; } }
+@media print { .tabs, .geo, .rota { display: none; } }
 </style>
 </head>
 <body>
@@ -291,7 +376,7 @@ ${sections}
       .filter(Boolean).join('_') + '.html';
   }
 
-  function exportGuide() {
+  function generate(coords) {
     // Never expected: the button only exists in Dia view. Kept as a
     // fallback in case a click lands mid view-switch.
     if (!diaViewActive()) {
@@ -305,9 +390,13 @@ ${sections}
     }
     const groups = groupByEquipe(rows);
     const meta = guideMeta(rows);
-    const html = buildGuideHtml(meta, groups, rows);
+    const html = buildGuideHtml(meta, groups, rows, coords || null);
     window.__sigcPro.downloadFile(fileName(meta), html, 'text/html;charset=utf-8');
     console.log(`${TAG} guide exported: ${groups.length} equipe(s), ${rows.length} slot(s).`);
+  }
+
+  function exportGuide() {
+    generate(null);
   }
 
   function insertButton(chunk) {
@@ -325,6 +414,9 @@ ${sections}
     chunk.appendChild(btn);
     console.log(`${TAG} Guia do Dia button added.`);
   }
+
+  // Consumed by agenda-map ("Guia + Mapa"): same pipeline, plus coords.
+  window.__sigcPro.dayGuide = { generate, diaViewActive };
 
   // Unlike the other agenda buttons, this one exists only while the Dia
   // view is active: each observer tick inserts or REMOVES it. attributes:
