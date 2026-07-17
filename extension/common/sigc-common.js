@@ -418,6 +418,7 @@
   window.__sigcPro = {
     PESQUISAS,
     MISSING_VALUES,
+    normalizeLabel,
     detectPesquisa,
     onListaEnderecos,
     whenReady,
