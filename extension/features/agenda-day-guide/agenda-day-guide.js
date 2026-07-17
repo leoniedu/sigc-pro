@@ -321,7 +321,7 @@ a { color: #005a9c; }
 table.stats { border-collapse: collapse; margin: .6rem 0; }
 table.stats th, table.stats td { border: 1px solid #d0d7de; padding: .25rem .6rem; text-align: left; font-size: .92rem; }
 ${tabRules}
-@media print { .tabs, .geo, .rota { display: none; } }
+@media print { .tabs { display: none; } }
 </style>
 </head>
 <body>

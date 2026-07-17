@@ -25,9 +25,15 @@
     input.className = 'fc-button fc-button-primary';
     input.style.background = '#005a9c';
     input.style.borderColor = '#005a9c';
-    input.style.color = '#fff';
+    input.style.color = 'transparent';
     input.style.marginLeft = '4px';
     input.style.colorScheme = 'dark';
+    // Icon-only: shrink to the native picker-indicator's width and hide
+    // the dd/mm/yyyy text (still present, just transparent) so only the
+    // calendar glyph the browser draws is visible/clickable.
+    input.style.width = '2.1em';
+    input.style.padding = '.35em .3em';
+    input.style.overflow = 'hidden';
 
     input.addEventListener('focus', () => {
       if (typeof window.calendar !== 'object' || !window.calendar) return;
