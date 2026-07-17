@@ -82,4 +82,128 @@
       [...tr.querySelectorAll('td')].map((td) => td.textContent.trim()));
     return tableToCoordsMap(headers, rows);
   }
+
+  // --- network (the sanctioned exception) -----------------------------
+
+  // Tries the simple prefixed URL first, then the full captured F5 form
+  // (identical on the direct host, where the Set collapses them).
+  async function postFiltrar(uf, controle) {
+    const urls = [...new Set([
+      filtrarUrl(location.origin, location.pathname, true),
+      filtrarUrl(location.origin, location.pathname, false),
+    ])];
+    let lastErr = new Error('sem resposta');
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: filtroBody(uf, controle),
+        });
+        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
+        const map = parseEnderecosHtml(await res.text());
+        if (map) return map;
+        lastErr = new Error('tabela não reconhecida');
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
+  }
+
+  // One sequential POST per distinct Controle (typically 1-5 per day).
+  async function fetchCoords(uf, controles) {
+    const all = new Map();
+    for (const c of controles) {
+      (await postFiltrar(uf, c)).forEach((v, k) => all.set(k, v));
+    }
+    return all;
+  }
+
+  // --- UI --------------------------------------------------------------
+
+  const BUTTON_ID = 'sigc-pro-agenda-mapa-button';
+
+  // In-memory only (zero-storage guarantee): re-asked on every page load.
+  let consentGiven = false;
+  const CONSENT_MSG =
+    'SIGC-PRO: isto fará uma consulta ao próprio servidor do SIGC para ' +
+    'obter as coordenadas dos endereços. Nenhum dado sai do IBGE. Continuar?';
+
+  async function exportGuideMap(btn) {
+    if (!consentGiven) {
+      if (!confirm(CONSENT_MSG)) return;
+      consentGiven = true;
+    }
+    const rows = window.__sigcPro.readAgendaSlots();
+    if (rows.length === 0) {
+      alert('SIGC-PRO: nenhum slot encontrado na agenda — confira se UF/dia já carregaram.');
+      return;
+    }
+    const ufSelect = document.getElementById('selectUf');
+    const uf = ufSelect ? ufSelect.value : '';
+    const controles = [...new Set(
+      rows.filter((r) => r.reservado).map((r) => r.controle).filter(Boolean))];
+
+    let coords = null;
+    if (uf && controles.length > 0) {
+      btn.disabled = true;
+      try {
+        coords = await fetchCoords(uf, controles);
+        console.log(`${TAG} ${coords.size} coordenada(s) de ${controles.length} controle(s).`);
+      } catch (err) {
+        alert(`SIGC-PRO: não foi possível obter coordenadas (${err && err.message}); ` +
+          'o guia será gerado sem mapa.');
+      } finally {
+        btn.disabled = false;
+      }
+    } else {
+      alert('SIGC-PRO: nenhum controle reservado no dia — o guia será gerado sem mapa.');
+    }
+    window.__sigcPro.dayGuide.generate(coords);
+  }
+
+  function insertButton(chunk) {
+    if (document.getElementById(BUTTON_ID)) return;
+    const btn = document.createElement('button');
+    btn.id = BUTTON_ID;
+    btn.type = 'button';
+    btn.className = 'fc-button fc-button-primary';
+    btn.textContent = 'Guia + Mapa';
+    btn.title = 'Guia do dia com mapa — faz uma consulta ao servidor do SIGC (SIGC-PRO)';
+    btn.style.background = '#005a9c';
+    btn.style.borderColor = '#005a9c';
+    btn.style.marginLeft = '4px';
+    btn.addEventListener('click', () => { exportGuideMap(btn); });
+    chunk.appendChild(btn);
+    console.log(`${TAG} Guia + Mapa button added.`);
+  }
+
+  // Same Dia-only visibility as Guia do Dia, reusing its detector.
+  window.__sigcPro.whenReadyGeneric(
+    () => window.__sigcPro.onAgendaPage() && window.__sigcPro.findAgendaToolbarChunk() &&
+      window.__sigcPro.dayGuide,
+    () => {
+      const tryUpdate = () => {
+        const existing = document.getElementById(BUTTON_ID);
+        const chunk = window.__sigcPro.findAgendaToolbarChunk();
+        if (window.__sigcPro.onAgendaPage() && chunk && window.__sigcPro.dayGuide.diaViewActive()) {
+          if (!existing) insertButton(chunk);
+        } else if (existing) {
+          existing.remove();
+        }
+      };
+      tryUpdate();
+      new MutationObserver(tryUpdate).observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class'],
+      });
+    }
+  );
 })();

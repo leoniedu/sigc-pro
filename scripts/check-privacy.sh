@@ -12,8 +12,12 @@
 # docs/superpowers/specs/2026-07-16-agenda-map-design.md). Every other
 # API stays banned there too, and agenda-map may not contain absolute
 # URLs, so its requests physically cannot leave location.origin.
-PATTERN='fetch\(|["'\''"]fetch["'\''"]|import\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src\s*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
-PATTERN_NOFETCH='import\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src\s*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
+# XMLHttpRequest is matched only as `new XMLHttpRequest` (actual API
+# usage), not as a bare identifier — the standard AJAX header value
+# "X-Requested-With: XMLHttpRequest" is a string literal, not a call,
+# and agenda-map's sanctioned fetch() legitimately sends that header.
+PATTERN='fetch\(|["'\''"]fetch["'\''"]|import\(|new\s+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src\s*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
+PATTERN_NOFETCH='import\(|new\s+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src\s*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
 URL_PATTERN='https?://'
 
 if [ "$1" = "--staged" ]; then
