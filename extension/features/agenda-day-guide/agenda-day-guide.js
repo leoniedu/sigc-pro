@@ -77,10 +77,13 @@
 
     const detalhes = [r.sexo && e(r.sexo), r.idade && `${e(r.idade)} anos`]
       .filter(Boolean).join(', ');
-    const nasc = r.dtNascimento ? ` (${e(r.dtNascimento)})` : '';
-    const morador = r.nome || detalhes || nasc
-      ? `<div class="morador"><strong>${e(r.nome)}</strong>` +
-        `${r.nome && (detalhes || nasc) ? ' — ' : ''}${detalhes}${nasc}</div>`
+    const nasc = r.dtNascimento ? `(${e(r.dtNascimento)})` : '';
+    const partes = [
+      r.nome ? `<strong>${e(r.nome)}</strong>` : '',
+      [detalhes, nasc].filter(Boolean).join(' '),
+    ].filter(Boolean);
+    const morador = partes.length
+      ? `<div class="morador">${partes.join(' — ')}</div>`
       : '';
     const ids = [
       r.telefone && `Tel: ${e(r.telefone)}`,
@@ -206,7 +209,7 @@ ${tabRules}
 <body>
 <header>
 <h1>SIGC-PRO — Guia do Dia</h1>
-<div class="meta">${[e(meta.uf), `${e(meta.dataBr)} (${e(meta.diaSemana)})`, `gerado em ${e(meta.geradoEm)}`].filter(Boolean).join(' · ')}</div>
+<div class="meta">${[e(meta.uf), meta.dataBr ? `${e(meta.dataBr)} (${e(meta.diaSemana)})` : '', `gerado em ${e(meta.geradoEm)}`].filter(Boolean).join(' · ')}</div>
 </header>
 <main>
 ${radios}
@@ -235,12 +238,14 @@ ${sections}
       ? ufSelect.options[ufSelect.selectedIndex].text.trim()
       : '';
     const isoDate = (rows.find((r) => r.isoDate) || {}).isoDate || '';
-    const d = isoDate ? new Date(`${isoDate}T00:00:00`) : new Date();
+    // No isoDate on any row (unexpected) -> blank date AND blank weekday,
+    // rather than showing today's weekday next to an empty date.
+    const d = isoDate ? new Date(`${isoDate}T00:00:00`) : null;
     const { data, hora } = window.__sigcPro.timestampSlug();
     return {
       uf,
       dataBr: window.__sigcPro.isoToBr(isoDate),
-      diaSemana: window.__sigcPro.WEEKDAYS_PT[d.getDay()],
+      diaSemana: d ? window.__sigcPro.WEEKDAYS_PT[d.getDay()] : '',
       geradoEm: `${data} ${hora.slice(0, 2)}:${hora.slice(2, 4)}`,
     };
   }
