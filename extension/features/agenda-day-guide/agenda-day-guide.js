@@ -67,13 +67,34 @@
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  // One card per reserved slot; a slim dashed row for open slots.
-  // Missing fields (already normalized to '' by readAgendaSlots) are
-  // omitted line by line — a sparse card never breaks.
+  // Leading/trailing open slots: real information (the day could start
+  // earlier / run later) but not route gaps — kept low-key as a slim
+  // row, zonas inline since that's what matters while the slot can
+  // still be filled.
+  function buildLivreEdgeRow(r) {
+    const e = escapeHtml;
+    const zonas = r.zonas ? ` — Zonas: ${e(r.zonas)}` : '';
+    return `<div class="livre-edge">${e(r.horaInicio)}–${e(r.horaFim)} — LIVRE${zonas}</div>`;
+  }
+
+  // One card per slot at full visual weight: reserved visits, and open
+  // slots BETWEEN visits — a mid-day gap is route information (where a
+  // callback or re-visit fits) and must not be overlooked. Open cards
+  // show their zonas (useful while the slot can still be filled);
+  // reserved cards don't (the visit already has an address). Missing
+  // fields (already normalized to '' by readAgendaSlots) are omitted
+  // line by line — a sparse card never breaks.
   function buildSlotCard(r) {
     const e = escapeHtml;
     const hora = `${e(r.horaInicio)}–${e(r.horaFim)}`;
-    if (!r.reservado) return `<div class="livre">${hora} — LIVRE</div>`;
+    if (!r.reservado) {
+      return [
+        '<div class="card livre">',
+        `<div class="hora">${hora} <span class="badge badge-livre">LIVRE</span></div>`,
+        r.zonas ? `<div class="zonas">Zonas: ${e(r.zonas)}</div>` : '',
+        '</div>',
+      ].filter(Boolean).join('\n');
+    }
 
     const detalhes = [r.sexo && e(r.sexo), r.idade && `${e(r.idade)} anos`]
       .filter(Boolean).join(', ');
@@ -97,7 +118,6 @@
       r.endereco ? `<div class="endereco">${e(r.endereco)}</div>` : '',
       morador,
       ids ? `<div class="ids">${ids}</div>` : '',
-      r.zonas ? `<div class="zonas">Zonas: ${e(r.zonas)}</div>` : '',
       r.observacao ? `<div class="obs">Obs: ${e(r.observacao)}</div>` : '',
       '</div>',
     ].filter(Boolean).join('\n');
@@ -114,11 +134,22 @@
       s.ultimo ? `último ${e(s.ultimo.hora)}` : null,
       s.controles.length ? `${s.controles.length} controle(s) distinto(s)` : null,
     ].filter(Boolean).join(' &nbsp;·&nbsp; ');
+    // Open slots outside the reserved span (before the first visit,
+    // after the last, or the whole day when nothing is reserved) render
+    // as slim livre-edge rows; open slots between visits get full card
+    // weight via buildSlotCard.
+    const first = group.rows.findIndex((r) => r.reservado);
+    const last = group.rows.length - 1 -
+      [...group.rows].reverse().findIndex((r) => r.reservado);
+    const cards = group.rows.map((r, i) => {
+      const edge = first === -1 || i < first || i > last;
+      return !r.reservado && edge ? buildLivreEdgeRow(r) : buildSlotCard(r);
+    });
     return [
       `<h2>${e(group.equipe)}</h2>`,
       `<div class="teamstats">${statBits}</div>`,
       zonas.length ? `<div class="zonas">Zonas: ${zonas.map(e).join(', ')}</div>` : '',
-      ...group.rows.map(buildSlotCard),
+      ...cards,
     ].filter(Boolean).join('\n');
   }
 
@@ -198,7 +229,9 @@ h3 { margin: .8rem 0 .2rem; font-size: 1rem; }
 .endereco { font-size: 1.05rem; font-weight: 600; margin: .15rem 0; }
 .morador, .ids, .zonas, .obs { font-size: .92rem; margin-top: .1rem; }
 .ids, .zonas { color: #555; }
-.livre { color: #666; border: 1px dashed #bbb; border-radius: 6px; padding: .25rem .8rem; margin: .5rem 0; }
+.card.livre { border-style: dashed; background: #fafafa; }
+.badge-livre { background: #8a8f98; }
+.livre-edge { color: #666; border: 1px dashed #bbb; border-radius: 6px; padding: .25rem .8rem; margin: .5rem 0; font-size: .9rem; }
 .teamstats { color: #333; margin: .2rem 0 .4rem; font-size: .92rem; }
 table.stats { border-collapse: collapse; margin: .6rem 0; }
 table.stats th, table.stats td { border: 1px solid #d0d7de; padding: .25rem .6rem; text-align: left; font-size: .92rem; }
