@@ -1,10 +1,14 @@
 // SIGC-PRO feature: date-picker button on the Agenda toolbar. SIGC's own
-// page exposes a live FullCalendar instance at window.calendar (confirmed
-// 2026-07-17 via DevTools: window.calendar.gotoDate(iso) navigates the
-// real calendar, same as its own atualizarCalendario() helper does
-// internally) — so this jumps straight to a date instead of simulating
-// clicks on the prev/next arrows. Visible in both Dia and Semana view,
-// next to the other Agenda buttons.
+// page holds a live FullCalendar instance, but not at a stable global —
+// `window.calendar` resolves to the `<div id="calendar">` element itself
+// (DOM's automatic named-element access), not the Calendar object.
+// The real instance only lives inside Preact's internal fiber tree
+// attached to that element (confirmed 2026-07-17 via DevTools: walking
+// __k/__reactFiber*/__reactProps* until an object exposes both
+// getDate/gotoDate finds it, and calendar.gotoDate(iso) navigates the
+// real calendar exactly like SIGC's own atualizarCalendario() helper
+// does internally). Visible in both Dia and Semana view, next to the
+// other Agenda buttons.
 (function () {
   'use strict';
 
@@ -13,6 +17,30 @@
 
   function isoDate(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  // Preact re-renders can replace the fiber tree, so this is re-run on
+  // every use rather than cached — same reasoning as the MutationObserver
+  // below that keeps re-inserting our own button.
+  function findCalendarApi(el, depth) {
+    depth = depth || 0;
+    if (!el || depth > 25) return null;
+    if (typeof el === 'object' && typeof el.getDate === 'function' && typeof el.gotoDate === 'function') {
+      return el;
+    }
+    if (typeof el !== 'object') return null;
+    for (const key of Object.keys(el)) {
+      if (key.startsWith('__k') || key.startsWith('__reactFiber') || key.startsWith('__reactProps')) {
+        const found = findCalendarApi(el[key], depth + 1);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  function getCalendarApi() {
+    const root = document.getElementById('calendar');
+    return root ? findCalendarApi(root) : null;
   }
 
   function insertButton(chunk) {
@@ -36,18 +64,20 @@
     input.style.overflow = 'hidden';
 
     input.addEventListener('focus', () => {
-      if (typeof window.calendar !== 'object' || !window.calendar) return;
-      input.value = isoDate(window.calendar.getDate());
+      const api = getCalendarApi();
+      if (api) input.value = isoDate(api.getDate());
     });
 
-    input.addEventListener('change', () => {
+    function goToPicked() {
       if (!input.value) return;
-      if (typeof window.calendar !== 'object' || !window.calendar) {
-        console.warn(`${TAG} window.calendar não encontrado — não foi possível navegar.`);
+      const api = getCalendarApi();
+      if (!api) {
+        console.warn(`${TAG} instância do FullCalendar não encontrada — não foi possível navegar.`);
         return;
       }
-      window.calendar.gotoDate(input.value);
-    });
+      api.gotoDate(input.value);
+    }
+    input.addEventListener('change', goToPicked);
 
     chunk.appendChild(input);
     console.log(`${TAG} date picker added.`);
