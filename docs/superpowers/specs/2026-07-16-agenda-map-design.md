@@ -105,7 +105,8 @@ Exposed as `window.__sigcPro.agendaMap = { fetchCoords(uf, controles) }`
 - Inline SVG route sketch; travel-sanity check in Verificar Slots
   (future, both feasible on the same coords map).
 - Open-slot mapping (no household → no coordinate).
-- Caching coordinates across clicks/pages (each click fetches fresh).
+- Caching across page loads/reloads (in-memory per-Controle caching
+  across repeat clicks within one page load was added post-launch).
 
 ## Testing
 

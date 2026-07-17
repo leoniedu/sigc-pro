@@ -6,7 +6,9 @@
 // It fetches the Lista de Endereços report per Controle (POST
 // /relatorio/filtrar, an HTML fragment), extracts coordinates, and
 // hands them to window.__sigcPro.dayGuide.generate(coords) — the same
-// day-guide pipeline, now with geo links, GPX, and route links.
+// day-guide pipeline, now with geo links, GPX, and route links. Results
+// are cached in memory per Controle for the page's lifetime (never
+// persisted) so repeat clicks in one session don't re-fetch.
 // Spec: docs/superpowers/specs/2026-07-16-agenda-map-design.md
 (function () {
   'use strict';
@@ -115,11 +117,20 @@
     throw lastErr;
   }
 
-  // One sequential POST per distinct Controle (typically 1-5 per day).
+  // In-memory only, reset on page load: avoids a redundant POST for a
+  // Controle already fetched earlier in the same session (e.g. the user
+  // regenerates the guide after fixing a slot).
+  const coordsCache = new Map(); // controle -> Map("controle|domicilio" -> {lat,lon})
+
+  // One sequential POST per distinct Controle not already cached
+  // (typically 1-5 per day).
   async function fetchCoords(uf, controles) {
     const all = new Map();
     for (const c of controles) {
-      (await postFiltrar(uf, c)).forEach((v, k) => all.set(k, v));
+      if (!coordsCache.has(c)) {
+        coordsCache.set(c, await postFiltrar(uf, c));
+      }
+      coordsCache.get(c).forEach((v, k) => all.set(k, v));
     }
     return all;
   }
