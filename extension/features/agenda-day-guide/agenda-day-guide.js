@@ -219,4 +219,98 @@ ${sections}
 </html>
 `;
   }
+
+  // --- wiring ---------------------------------------------------------
+
+  function diaViewActive() {
+    return !!document.querySelector(
+      '.fc-resourceTimeGridDay-button.fc-button-active, ' +
+        '.fc-timeGridDay-button.fc-button-active'
+    );
+  }
+
+  function guideMeta(rows) {
+    const ufSelect = document.getElementById('selectUf');
+    const uf = ufSelect && ufSelect.selectedIndex > 0
+      ? ufSelect.options[ufSelect.selectedIndex].text.trim()
+      : '';
+    const isoDate = (rows.find((r) => r.isoDate) || {}).isoDate || '';
+    const d = isoDate ? new Date(`${isoDate}T00:00:00`) : new Date();
+    const { data, hora } = window.__sigcPro.timestampSlug();
+    return {
+      uf,
+      dataBr: window.__sigcPro.isoToBr(isoDate),
+      diaSemana: window.__sigcPro.WEEKDAYS_PT[d.getDay()],
+      geradoEm: `${data} ${hora.slice(0, 2)}:${hora.slice(2, 4)}`,
+    };
+  }
+
+  // sigc-pro-guia_<uf>_<dd-mm-aaaa do dia>_<data>_<hora>.html
+  function fileName(meta) {
+    const { data, hora } = window.__sigcPro.timestampSlug();
+    const dia = meta.dataBr.replace(/\//g, '-');
+    return ['sigc-pro-guia', window.__sigcPro.slug(meta.uf), dia, data, hora]
+      .filter(Boolean).join('_') + '.html';
+  }
+
+  function exportGuide() {
+    // Never expected: the button only exists in Dia view. Kept as a
+    // fallback in case a click lands mid view-switch.
+    if (!diaViewActive()) {
+      alert('SIGC-PRO: mude para a visualização "Dia" para gerar o Guia do Dia.');
+      return;
+    }
+    const rows = window.__sigcPro.readAgendaSlots();
+    if (rows.length === 0) {
+      alert('SIGC-PRO: nenhum slot encontrado na agenda — confira se UF/dia já carregaram.');
+      return;
+    }
+    const groups = groupByEquipe(rows);
+    const meta = guideMeta(rows);
+    const html = buildGuideHtml(meta, groups, rows);
+    window.__sigcPro.downloadFile(fileName(meta), html, 'text/html;charset=utf-8');
+    console.log(`${TAG} guide exported: ${groups.length} equipe(s), ${rows.length} slot(s).`);
+  }
+
+  function insertButton(chunk) {
+    if (document.getElementById(BUTTON_ID)) return;
+    const btn = document.createElement('button');
+    btn.id = BUTTON_ID;
+    btn.type = 'button';
+    btn.className = 'fc-button fc-button-primary';
+    btn.textContent = 'Guia do Dia';
+    btn.title = 'Baixar guia do dia por equipe (SIGC-PRO)';
+    btn.style.background = '#005a9c';
+    btn.style.borderColor = '#005a9c';
+    btn.style.marginLeft = '4px';
+    btn.addEventListener('click', exportGuide);
+    chunk.appendChild(btn);
+    console.log(`${TAG} Guia do Dia button added.`);
+  }
+
+  // Unlike the other agenda buttons, this one exists only while the Dia
+  // view is active: each observer tick inserts or REMOVES it. attributes:
+  // ['class'] is observed so the fc-button-active toggle itself fires a
+  // tick even if the toolbar isn't re-rendered.
+  window.__sigcPro.whenReadyGeneric(
+    () => window.__sigcPro.onAgendaPage() && window.__sigcPro.findAgendaToolbarChunk(),
+    () => {
+      const tryUpdate = () => {
+        const existing = document.getElementById(BUTTON_ID);
+        const chunk = window.__sigcPro.findAgendaToolbarChunk();
+        if (window.__sigcPro.onAgendaPage() && chunk && diaViewActive()) {
+          if (!existing) insertButton(chunk);
+        } else if (existing) {
+          existing.remove();
+        }
+      };
+      tryUpdate();
+      new MutationObserver(tryUpdate).observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class'],
+      });
+    }
+  );
 })();
