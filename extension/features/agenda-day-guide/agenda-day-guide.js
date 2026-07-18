@@ -382,7 +382,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     ].filter(Boolean).join('\n');
   }
 
-  function buildTeamPanel(group, enderecos) {
+  function buildTeamPanel(group, enderecos, colorIndex) {
     const e = escapeHtml;
     const s = computeStats(group.rows);
     const zonas = zonasUnion(group.rows, enderecos);
@@ -422,16 +422,23 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
         `<a href="${e(gmapsRouteUrl(leg))}">Google Maps${legs.length > 1 ? ` ${i + 1}` : ''}</a>`);
       rota = `<div class="rota">Rota: ${links.join(' &nbsp;·&nbsp; ')}</div>`;
     }
+    const teamMap = enderecos
+      ? buildRouteMapSvg(
+          [{ rows: group.rows.filter((r) => r.reservado), color: teamColor(colorIndex) }],
+          enderecos, 480, 320
+        )
+      : '';
     return [
       `<h2>${e(group.equipe)}</h2>`,
       `<div class="teamstats">${statBits}</div>`,
       zonas.length ? `<div class="zonas">Zonas: ${zonas.map(e).join(', ')}</div>` : '',
       rota,
       ...cards,
+      teamMap,
     ].filter(Boolean).join('\n');
   }
 
-  function buildSummaryPanel(groups, allRows, lab) {
+  function buildSummaryPanel(groups, allRows, lab, enderecos) {
     const e = escapeHtml;
     const day = computeStats(allRows);
     const comReserva = groups.filter((g) => g.rows.some((r) => r.reservado)).length;
@@ -451,12 +458,26 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       ['Média de agendamentos por equipe ativa', media1(day.reservados, groups.length) ?? '—'],
       ['Média de agendamentos por controle', media1(day.reservados, day.controles.length) ?? '—'],
     ].map(([k, v]) => `<tr><th>${e(k)}</th><td>${e(v)}</td></tr>`).join('\n');
+    // Combined day-route map: every team's reserved, coordinate-having
+    // visits overlaid, one color per team. Lab tab (the shareable,
+    // privacy-stripped view) never gets a map — see spec Placement.
+    const routeMap = !lab && enderecos
+      ? [
+          '<h3>Mapa do dia</h3>',
+          buildLegend(groups),
+          buildRouteMapSvg(
+            groups.map((g, i) => ({ rows: g.rows.filter((r) => r.reservado), color: teamColor(i) })),
+            enderecos, 640, 420
+          ),
+        ].filter(Boolean).join('\n')
+      : '';
     return [
       `<h2>${e(titulo)}</h2>`,
       `<table class="stats">\n${linhas}\n</table>`,
       '<h3>Slots do dia</h3>',
       buildDayGrid(groups, lab),
-    ].join('\n');
+      routeMap,
+    ].filter(Boolean).join('\n');
   }
 
   // Full day at a glance: rows = fixed half-hour marks (slot starts
@@ -519,9 +540,9 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     // truncated to 11 digits, no Domicílio, no personal data) — Ctrl+P
     // on it prints just that page for the laboratory.
     const panels = [
-      { label: 'Resumo', html: buildSummaryPanel(groups, allRows) },
-      { label: 'Lab', html: buildSummaryPanel(groups, allRows, true) },
-      ...groups.map((g) => ({ label: g.equipe, html: buildTeamPanel(g, enderecos) })),
+      { label: 'Resumo', html: buildSummaryPanel(groups, allRows, false, enderecos) },
+      { label: 'Lab', html: buildSummaryPanel(groups, allRows, true, enderecos) },
+      ...groups.map((g, i) => ({ label: g.equipe, html: buildTeamPanel(g, enderecos, i) })),
     ];
     const radios = panels.map((_, i) =>
       `<input type="radio" name="tab" id="tab-${i}"${i === 0 ? ' checked' : ''}>`).join('\n');
@@ -564,6 +585,11 @@ h3 { margin: .8rem 0 .2rem; font-size: 1rem; }
 a { color: #005a9c; }
 .geo, .rota { font-size: .92rem; margin-top: .1rem; }
 .teamstats { color: #333; margin: .2rem 0 .4rem; font-size: .92rem; }
+.route-map { margin: .6rem 0; page-break-inside: avoid; }
+.route-map-missing { color: #666; font-size: .85rem; margin-top: .3rem; }
+.route-map-legend { display: flex; flex-wrap: wrap; gap: .6rem; margin: .4rem 0; font-size: .85rem; }
+.route-map-legend-item { display: inline-flex; align-items: center; gap: .3rem; }
+.route-map-swatch { display: inline-block; width: .7rem; height: .7rem; border-radius: 2px; }
 ${TABLE_CSS}
 ${tabRules}
 @media print { .tabs { display: none; } }
