@@ -34,9 +34,9 @@ Em Administrar Agenda:
     os cartões de cada visita (endereço, morador, telefone,
     Controle/Domicílio, observações) e os horários livres. Ctrl+P
     imprime a aba aberta.
-  * Guia + Mapa (opcional) — o mesmo guia, com links de navegação (geo:)
-    e rota no Google Maps; para isso, mediante clique e confirmação,
-    consulta as coordenadas no próprio servidor do SIGC (nada vai a
+  * Guia + Mapa (opcional) — o mesmo guia, com links de navegação (geo:),
+    rota no Google Maps e a zona real de cada visita; para isso, mediante
+    clique e confirmação, consulta o próprio servidor do SIGC (nada vai a
     terceiros).
 
 Os botões nativos do SIGC não são alterados — os novos botões apenas se

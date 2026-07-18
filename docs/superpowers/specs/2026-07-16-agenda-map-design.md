@@ -70,16 +70,23 @@ sequential POST each (typically 1–5). Parse each response with
 `DOMParser` (inert), locate `#tableRelatorio`, resolve columns **by
 header label** (normalized-label match against the existing
 `PESQUISAS.PNS2026.columns` labels; indexes not assumed), and build
-`Map("controle|domicilio" -> { lat, lon })` via the existing
-`parseCoord` (handles `13 28 41.5514 S` / `39 06 20.4723 O`).
+`Map("controle|domicilio" -> { lat, lon, zona })` via the existing
+`parseCoord` (handles `13 28 41.5514 S` / `39 06 20.4723 O`). `zona`
+(added 2026-07-18) is the table's Nome ZONA — the household's real zona,
+unlike the Agenda slot text, which lists every zona from slot creation.
+Zona is only filled for selecionados, which is exactly what the filtro
+requests (`TipoVisualizacao: "S"`). A household with zona but invalid
+coordinates keeps an entry with `lat`/`lon` null.
 
 Failures (HTTP error, missing table, header mismatch, zero coords):
 alert once — "não foi possível obter coordenadas (…); o guia será gerado
 sem mapa" — and fall through to the plain guide. A per-row miss just
 omits that card's link.
 
-As shipped, `fetchCoords` stays private to agenda-map, which calls
-`window.__sigcPro.dayGuide.generate(coords)` directly — nothing is
+As shipped, the fetch (`fetchEnderecos`, né `fetchCoords` — renamed
+2026-07-18 when entries gained `zona` and nullable coordinates) stays
+private to agenda-map, which calls
+`window.__sigcPro.dayGuide.generate(enderecos)` directly — nothing is
 exposed on `__sigcPro` (an `agendaMap.fetchCoords` export was planned
 here; add it only when a second consumer appears, e.g. the future
 travel-sanity check). All other code stays fetch-free.
@@ -91,8 +98,12 @@ travel-sanity check). All other code stays fetch-free.
 
 - **Reserved card**: appends
   `<a class="geo" href="geo:<lat>,<lon>">abrir no mapa</a>` when
-  `coords` has `controle|domicilio`. `geo:` fetches nothing; on the
-  phone it opens the user's map app (offline apps included).
+  `coords` has `controle|domicilio` with valid lat/lon. `geo:` fetches
+  nothing; on the phone it opens the user's map app (offline apps
+  included). Also shows `Zona: <real zona>` (2026-07-18) on the card's
+  ids row, and the team panel's Zonas line uses the real zona for
+  reserved slots (open slots keep the slot-text list — they can still
+  be filled from any of those zonas).
 - **Team panel "Rota" row** (only when ≥2 reserved visits have coords):
   - `Google Maps`: `https://www.google.com/maps/dir/?api=1&travelmode=driving&waypoints=<v1>%7C…%7C<vn-1>&destination=<vn>` —
     visits in time order, origin omitted (= current location), max 9

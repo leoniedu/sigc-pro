@@ -53,6 +53,12 @@ Working checklist; move items up/down freely. Specs live in
 - [x] Guia do Dia "Lab" tab: the Resumo repeated in shareable form for
       the lab — Controle truncated to 11 digits, no Domicílio, no
       personal data; Ctrl+P on the tab prints just that page
+- [x] Guia + Mapa: reserved slots get their real zona from the fetched
+      Lista de Endereços (Nome ZONA column) — the slot text lists every
+      zona from slot creation, even though a filled slot belongs to
+      exactly one. Shown on the visit card and used in the team-panel
+      Zonas line; zona is only filled for selecionados, which is what
+      the filtro requests (TipoVisualizacao S)
 - [x] Real icon: location-pin mark replacing the flat blue square
 - [x] Repo public, GitHub Pages (privacy policy), Chrome Web Store
       submission (unlisted)
@@ -68,10 +74,6 @@ Working checklist; move items up/down freely. Specs live in
         (PDF shows decimal degrees, Google Maps format)
 
 ## Later
-
-- [ ] Get each Controle's zona from the endereços/coordinates table (the
-      Lista de Endereços response agenda-map already fetches has a Zona
-      column) instead of relying on slot text
 
 - [ ] Field-test checklist on more report variations (other UFs, empty
       coordinates, filtered exports)

@@ -43,15 +43,6 @@
     return String(name ?? '').trim().split('_').slice(0, 3).join('_');
   }
 
-  // Comma-separated Zonas field -> individual entries, e.g.
-  // "29.3.03.03 29_Linus_Pituba, 29.3.02.03 29_Linus_Pituba" -> two
-  // entries, each "código nome". Entries are kept whole; matching against
-  // the equipe is done on the entry's tail (zonaMatchesKey), so the code
-  // format never needs parsing.
-  function parseZonaEntries(zonas) {
-    return String(zonas ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  }
-
   function escapeRegex(s) {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
@@ -87,7 +78,8 @@
         return;
       }
       const key = nameKey(r.equipe);
-      const badZonas = parseZonaEntries(r.zonas).filter((z) => !zonaMatchesKey(z, key));
+      const badZonas = window.__sigcPro.parseZonaEntries(r.zonas)
+        .filter((z) => !zonaMatchesKey(z, key));
       if (badZonas.length > 0) mismatches.push({ row: r, badZonas });
     });
     return { badEquipes: [...badEquipes], mismatches };

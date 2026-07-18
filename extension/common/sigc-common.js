@@ -290,6 +290,15 @@
     return fields;
   }
 
+  // Comma-separated Zonas field -> individual entries, e.g.
+  // "29.3.03.03 29_Linus_Pituba, 29.3.02.03 29_Linus_Pituba" -> two
+  // entries, each "código nome". Entries are kept whole; callers that
+  // match against the equipe do so on the entry's tail, so the code
+  // format never needs parsing.
+  function parseZonaEntries(zonas) {
+    return String(zonas ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  }
+
   function isoToBr(iso) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
     return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso || '');
@@ -439,6 +448,7 @@
     onAgendaPage,
     findAgendaToolbarChunk,
     parseAgendaSlotTitle,
+    parseZonaEntries,
     isoToBr,
     dateToIso,
     getAgendaEquipeNames,

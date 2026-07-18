@@ -50,11 +50,21 @@
     };
   }
 
-  // Distinct comma-separated zona entries across rows, first-seen order.
-  function zonasUnion(rows) {
+  // Distinct zona entries across rows, first-seen order. Reserved slots
+  // take their real zona from the endereços fetch when available — the
+  // slot text lists every zona from slot creation, even though a filled
+  // slot belongs to exactly one. Open slots keep the slot-text list
+  // (they can still be filled from any of those zonas).
+  function zonasUnion(rows, enderecos) {
     const set = new Set();
-    rows.forEach((r) => String(r.zonas || '').split(',').map((s) => s.trim())
-      .filter(Boolean).forEach((z) => set.add(z)));
+    rows.forEach((r) => {
+      const info = slotInfo(r, enderecos);
+      if (info && info.zona) {
+        set.add(info.zona);
+        return;
+      }
+      window.__sigcPro.parseZonaEntries(r.zonas).forEach((z) => set.add(z));
+    });
     return [...set];
   }
 
@@ -63,16 +73,18 @@
     return den > 0 ? (num / den).toFixed(1).replace('.', ',') : null;
   }
 
-  // --- coordinates: geo links, Google Maps route ---------------------
-  // All optional: every builder below is a no-op when coords is null,
-  // keeping the plain Guia do Dia byte-identical.
+  // --- endereços data: geo links, Google Maps route, real zona -------
+  // All optional: every builder below is a no-op when enderecos is null,
+  // keeping the plain Guia do Dia byte-identical. Entries are
+  // { lat, lon, zona }; lat/lon may be null (household without valid
+  // coordinates), so map/route builders check lat before using them.
 
-  function coordKey(r) {
+  function enderecoKey(r) {
     return `${r.controle}|${r.domicilio}`;
   }
 
-  function slotCoord(r, coords) {
-    return (r.reservado && coords && coords.get(coordKey(r))) || null;
+  function slotInfo(r, enderecos) {
+    return (r.reservado && enderecos && enderecos.get(enderecoKey(r))) || null;
   }
 
   function fmtCoord(p) {
@@ -140,11 +152,12 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
   // One card per slot at full visual weight: reserved visits, and open
   // slots BETWEEN visits — a mid-day gap is route information (where a
   // callback or re-visit fits) and must not be overlooked. Open cards
-  // show their zonas (useful while the slot can still be filled);
-  // reserved cards don't (the visit already has an address). Missing
+  // show their slot-text zonas (useful while the slot can still be
+  // filled); reserved cards show only the real zona from the endereços
+  // fetch, when available — never the inflated slot-text list. Missing
   // fields (already normalized to '' by readAgendaSlots) are omitted
   // line by line — a sparse card never breaks.
-  function buildSlotCard(r, coords) {
+  function buildSlotCard(r, enderecos) {
     const e = escapeHtml;
     const hora = `${e(r.horaInicio)}–${e(r.horaFim)}`;
     if (!r.reservado) {
@@ -166,18 +179,20 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     const morador = partes.length
       ? `<div class="morador">${partes.join(' — ')}</div>`
       : '';
+    const info = slotInfo(r, enderecos);
     const ids = [
       r.telefone && `Tel: ${e(r.telefone)}`,
       r.controle && `Controle: ${e(r.controle)}`,
       r.domicilio && `Dom: ${e(r.domicilio)}`,
+      info && info.zona && `Zona: ${e(info.zona)}`,
     ].filter(Boolean).join(' &nbsp;·&nbsp; ');
 
     return [
       '<div class="card">',
       `<div class="hora">${hora} <span class="badge">RESERVADO</span></div>`,
       r.endereco ? `<div class="endereco">${e(r.endereco)}</div>` : '',
-      (() => { const p = slotCoord(r, coords);
-        return p ? `<div class="geo"><a href="geo:${fmtCoord(p)}">abrir no mapa</a></div>` : ''; })(),
+      info && info.lat != null
+        ? `<div class="geo"><a href="geo:${fmtCoord(info)}">abrir no mapa</a></div>` : '',
       morador,
       ids ? `<div class="ids">${ids}</div>` : '',
       r.observacao ? `<div class="obs">Obs: ${e(r.observacao)}</div>` : '',
@@ -185,10 +200,10 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     ].filter(Boolean).join('\n');
   }
 
-  function buildTeamPanel(group, coords) {
+  function buildTeamPanel(group, enderecos) {
     const e = escapeHtml;
     const s = computeStats(group.rows);
-    const zonas = zonasUnion(group.rows);
+    const zonas = zonasUnion(group.rows, enderecos);
     const statBits = [
       `${s.reservados} reservado(s) × ${s.livres} livre(s)`,
       s.ocupacaoPct != null ? `ocupação ${s.ocupacaoPct}%` : null,
@@ -205,7 +220,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       [...group.rows].reverse().findIndex((r) => r.reservado);
     const cards = group.rows.map((r, i) => {
       const edge = first === -1 || i < first || i > last;
-      return !r.reservado && edge ? buildLivreEdgeRow(r) : buildSlotCard(r, coords);
+      return !r.reservado && edge ? buildLivreEdgeRow(r) : buildSlotCard(r, enderecos);
     });
     // Route links only when >= 2 reserved visits have coordinates.
     // Tapping the Google Maps link sends that leg's coordinates to
@@ -213,8 +228,9 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     const stops = group.rows
       .filter((r) => r.reservado)
       .map((r) => {
-        const p = slotCoord(r, coords);
-        return p ? { lat: p.lat, lon: p.lon, name: `${r.horaInicio} ${r.nome || r.controle}` } : null;
+        const p = slotInfo(r, enderecos);
+        return p && p.lat != null
+          ? { lat: p.lat, lon: p.lon, name: `${r.horaInicio} ${r.nome || r.controle}` } : null;
       })
       .filter(Boolean);
     let rota = '';
@@ -315,7 +331,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
   // Complete standalone document. Tabs are CSS-only: one hidden radio per
   // tab as direct children of <main>, so #tab-i:checked ~ #panel-i works;
   // @media print hides the tab bar and prints only the checked panel.
-  function buildGuideHtml(meta, groups, allRows, coords) {
+  function buildGuideHtml(meta, groups, allRows, enderecos) {
     const e = escapeHtml;
     // The Lab tab repeats the Resumo in shareable form (Controle
     // truncated to 11 digits, no Domicílio, no personal data) — Ctrl+P
@@ -323,7 +339,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     const panels = [
       { label: 'Resumo', html: buildSummaryPanel(groups, allRows) },
       { label: 'Lab', html: buildSummaryPanel(groups, allRows, true) },
-      ...groups.map((g) => ({ label: g.equipe, html: buildTeamPanel(g, coords) })),
+      ...groups.map((g) => ({ label: g.equipe, html: buildTeamPanel(g, enderecos) })),
     ];
     const radios = panels.map((_, i) =>
       `<input type="radio" name="tab" id="tab-${i}"${i === 0 ? ' checked' : ''}>`).join('\n');
@@ -440,12 +456,12 @@ ${sections}
     return rows;
   }
 
-  function generate(coords) {
+  function generate(enderecos) {
     const rows = readDayRows();
     if (!rows) return;
     const groups = groupByEquipe(rows);
     const meta = guideMeta(rows);
-    const html = buildGuideHtml(meta, groups, rows, coords || null);
+    const html = buildGuideHtml(meta, groups, rows, enderecos || null);
     window.__sigcPro.downloadFile(fileName(meta), html, 'text/html;charset=utf-8');
     console.log(`${TAG} guide exported: ${groups.length} equipe(s), ${rows.length} slot(s).`);
   }
@@ -470,7 +486,7 @@ ${sections}
     console.log(`${TAG} Guia do Dia button added.`);
   }
 
-  // Consumed by agenda-map ("Guia + Mapa"): same pipeline, plus coords.
+  // Consumed by agenda-map ("Guia + Mapa"): same pipeline, plus enderecos.
   window.__sigcPro.dayGuide = { generate, diaViewActive };
 
   // Unlike the other agenda buttons, this one exists only while the Dia

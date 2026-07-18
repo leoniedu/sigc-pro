@@ -4,9 +4,11 @@
 // privacy gate rejects absolute URLs in this directory). Opt-in: each
 // page load, the first click asks for confirmation before any request.
 // It fetches the Lista de Endereços report per Controle (POST
-// /relatorio/filtrar, an HTML fragment), extracts coordinates, and
-// hands them to window.__sigcPro.dayGuide.generate(coords) — the same
-// day-guide pipeline, now with geo links, GPX, and route links. Results
+// /relatorio/filtrar, an HTML fragment), extracts coordinates and each
+// household's real zona (the Agenda slot text lists every zona from
+// slot creation, even though a filled slot belongs to exactly one), and
+// hands them to window.__sigcPro.dayGuide.generate(enderecos) — the same
+// day-guide pipeline, now with geo links, route links and zona. Results
 // are cached in memory per Controle for the page's lifetime (never
 // persisted) so repeat clicks in one session don't re-fetch.
 // Spec: docs/superpowers/specs/2026-07-16-agenda-map-design.md
@@ -50,11 +52,11 @@
   // are resolved by label against the shared PESQUISAS registry, so a
   // backend column reorder can never silently join the wrong columns —
   // unknown headers return null (caller treats as failure).
-  function tableToCoordsMap(headers, rows) {
+  function tableToEnderecosMap(headers, rows) {
     const P = window.__sigcPro;
     const cols = P.PESQUISAS.PNS2026.columns;
     const idx = {};
-    for (const key of ['controle', 'nDomicilio', 'latitude', 'longitude']) {
+    for (const key of ['controle', 'nDomicilio', 'latitude', 'longitude', 'nomeZona']) {
       const i = headers.findIndex(
         (h) => P.normalizeLabel(h) === P.normalizeLabel(cols[key].label));
       if (i === -1) return null;
@@ -66,14 +68,27 @@
       const domicilio = String(cells[idx.nDomicilio] || '').trim();
       const lat = P.parseCoord(cells[idx.latitude]);
       const lon = P.parseCoord(cells[idx.longitude]);
-      if (controle && domicilio && lat != null && lon != null) {
-        map.set(`${controle}|${domicilio}`, { lat, lon });
+      const zona = String(cells[idx.nomeZona] || '').trim();
+      const coordsOk = lat != null && lon != null;
+      // Zona is only filled in for selecionado households — fine here,
+      // since the filtro requests TipoVisualizacao 'S' (selecionados
+      // only) and Agenda visits are always with selecionados; an empty
+      // zona cell just falls back to the slot text in the guide.
+      // A household with zona but no valid coordinates still gets an
+      // entry (lat/lon null): the guide can show its real zona even
+      // when it can't map it.
+      if (controle && domicilio && (coordsOk || zona)) {
+        map.set(`${controle}|${domicilio}`, {
+          lat: coordsOk ? lat : null,
+          lon: coordsOk ? lon : null,
+          zona,
+        });
       }
     });
     return map;
   }
 
-  // Response HTML fragment -> coords map. DOMParser is inert: nothing
+  // Response HTML fragment -> endereços map. DOMParser is inert: nothing
   // in the fetched markup can load resources or run handlers.
   function parseEnderecosHtml(html) {
     const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
@@ -82,7 +97,7 @@
     const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
     const rows = [...table.querySelectorAll('tbody tr')].map((tr) =>
       [...tr.querySelectorAll('td')].map((td) => td.textContent.trim()));
-    return tableToCoordsMap(headers, rows);
+    return tableToEnderecosMap(headers, rows);
   }
 
   // --- network (the sanctioned exception) -----------------------------
@@ -120,17 +135,17 @@
   // In-memory only, reset on page load: avoids a redundant POST for a
   // Controle already fetched earlier in the same session (e.g. the user
   // regenerates the guide after fixing a slot).
-  const coordsCache = new Map(); // controle -> Map("controle|domicilio" -> {lat,lon})
+  const enderecosCache = new Map(); // controle -> Map("controle|domicilio" -> {lat,lon,zona})
 
   // One sequential POST per distinct Controle not already cached
   // (typically 1-5 per day).
-  async function fetchCoords(uf, controles) {
+  async function fetchEnderecos(uf, controles) {
     const all = new Map();
     for (const c of controles) {
-      if (!coordsCache.has(c)) {
-        coordsCache.set(c, await postFiltrar(uf, c));
+      if (!enderecosCache.has(c)) {
+        enderecosCache.set(c, await postFiltrar(uf, c));
       }
-      coordsCache.get(c).forEach((v, k) => all.set(k, v));
+      enderecosCache.get(c).forEach((v, k) => all.set(k, v));
     }
     return all;
   }
@@ -160,12 +175,12 @@
     const controles = [...new Set(
       rows.filter((r) => r.reservado).map((r) => r.controle).filter(Boolean))];
 
-    let coords = null;
+    let enderecos = null;
     if (uf && controles.length > 0) {
       btn.disabled = true;
       try {
-        coords = await fetchCoords(uf, controles);
-        console.log(`${TAG} ${coords.size} coordenada(s) de ${controles.length} controle(s).`);
+        enderecos = await fetchEnderecos(uf, controles);
+        console.log(`${TAG} ${enderecos.size} endereço(s) de ${controles.length} controle(s).`);
       } catch (err) {
         alert(`SIGC-PRO: não foi possível obter coordenadas (${err && err.message}); ` +
           'o guia será gerado sem mapa.');
@@ -175,7 +190,7 @@
     } else {
       alert('SIGC-PRO: nenhum controle reservado no dia — o guia será gerado sem mapa.');
     }
-    window.__sigcPro.dayGuide.generate(coords);
+    window.__sigcPro.dayGuide.generate(enderecos);
   }
 
   function insertButton(chunk) {
