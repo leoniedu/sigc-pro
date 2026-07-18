@@ -17,10 +17,6 @@
   const TAG = '[sigc-agenda-date-picker]';
   const WRAP_ID = 'sigc-pro-agenda-date-picker';
 
-  function isoDate(d) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
-
   // Preact re-renders can replace the fiber tree, so this is re-run on
   // every use rather than cached — same reasoning as the MutationObserver
   // below that keeps re-inserting our own button. The tree has circular
@@ -91,7 +87,7 @@
 
     btn.addEventListener('click', () => {
       const api = getCalendarApi();
-      if (api) input.value = isoDate(api.getDate());
+      if (api) input.value = window.__sigcPro.dateToIso(api.getDate());
       if (typeof input.showPicker === 'function') input.showPicker();
     });
 

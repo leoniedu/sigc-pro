@@ -40,10 +40,7 @@
   function agendaFileBase() {
     const titleEl = document.querySelector('.fc-toolbar-title');
     const periodo = titleEl ? titleEl.textContent.trim() : '';
-    const ufSelect = document.getElementById('selectUf');
-    const uf = ufSelect && ufSelect.selectedIndex > 0
-      ? ufSelect.options[ufSelect.selectedIndex].text.trim()
-      : '';
+    const uf = window.__sigcPro.getAgendaUf().name;
     const { data, hora } = window.__sigcPro.timestampSlug();
     return ['sigc-pro-agenda', window.__sigcPro.slug(uf), window.__sigcPro.slug(periodo), data, hora].filter(Boolean).join('_');
   }

@@ -7,14 +7,9 @@
   const TAG = '[sigc-kml-export]';
   const BUTTON_ID = 'sigc-pro-kml-button';
 
-  function escapeXml(s) {
-    return String(s ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;');
-  }
+  // Shared escaper covers XML too (it emits the numeric &#39; entity,
+  // valid in both HTML and XML).
+  const escapeXml = (s) => window.__sigcPro.escapeHtml(s);
 
   function placemark(row, cols) {
     const get = (key) => row[cols[key].index] ?? '';
@@ -103,18 +98,6 @@
     return { kml, skipped, total: selected.length + notSelected.length };
   }
 
-  function download(filename, text) {
-    const blob = new Blob([text], { type: 'application/vnd.google-earth.kml+xml' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
-
   // Reads the table directly via the DataTables API (no PDF click needed —
   // confirmed reliable under the F5 gateway; see sigc-common.js
   // getTableRows). Validated against pesquisa.columns before building.
@@ -131,7 +114,9 @@
     }
 
     const { kml, skipped, total } = buildKml(pesquisa, rows);
-    download(`${window.__sigcPro.exportFileBase(pesquisa, rows)}.kml`, kml);
+    // No BOM: KML is XML with its own encoding declaration.
+    window.__sigcPro.downloadFile(`${window.__sigcPro.exportFileBase(pesquisa, rows)}.kml`, kml,
+      'application/vnd.google-earth.kml+xml', { bom: false });
 
     console.log(`${TAG} KML exported: ${total} placemarks, ${skipped} skipped.`);
     if (skipped > 0) {
@@ -187,8 +172,10 @@
       // pages without a full reload. insertButton is idempotent and the
       // getElementById guard keeps the observer cheap.
       const tryInsert = () => {
-        if (!window.__sigcPro.onListaEnderecos()) return;
+        // O(1) button-exists check first: it neutralizes the steady-state
+        // cost of this tick, which otherwise scans every <h6> per mutation.
         if (document.getElementById(BUTTON_ID)) return;
+        if (!window.__sigcPro.onListaEnderecos()) return;
         const toolbar = document.querySelector('.dt-buttons');
         if (toolbar) insertButton(pesquisa, toolbar);
       };

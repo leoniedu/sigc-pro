@@ -118,10 +118,7 @@
 
   // --- HTML builders ------------------------------------------------
 
-  function escapeHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  }
+  const escapeHtml = (s) => window.__sigcPro.escapeHtml(s);
 
   // Stats/grid table styles, shared by the full guide and the lab page.
   const TABLE_CSS = `table.stats { border-collapse: collapse; margin: .6rem 0; }
@@ -414,10 +411,7 @@ ${sections}
   }
 
   function guideMeta(rows) {
-    const ufSelect = document.getElementById('selectUf');
-    const uf = ufSelect && ufSelect.selectedIndex > 0
-      ? ufSelect.options[ufSelect.selectedIndex].text.trim()
-      : '';
+    const uf = window.__sigcPro.getAgendaUf().name;
     const isoDate = (rows.find((r) => r.isoDate) || {}).isoDate || '';
     // No isoDate on any row (unexpected) -> blank date AND blank weekday,
     // rather than showing today's weekday next to an empty date.

@@ -7,6 +7,19 @@
 
   const TAG = '[sigc-pro]';
 
+  // Column labels every pesquisa's Lista de Endereços is expected to
+  // share. agenda-map resolves fetched-response columns against THESE
+  // (the Agenda page has no report title to detectPesquisa against), so
+  // it must never depend on any single pesquisa's registry entry — that
+  // would silently pin it to the wrong survey once a second one exists.
+  const LISTA_COMMON_LABELS = {
+    controle: 'Controle',
+    nDomicilio: 'N.º Domicilio',
+    latitude: 'Latitude',
+    longitude: 'Longitude',
+    nomeZona: 'Nome ZONA',
+  };
+
   // One entry per pesquisa. `columns` describes the Lista de Endereços table
   // (0-based, left to right); `label` is the expected header text — features
   // refuse to act when labels don't match, so a SIGC layout change can't
@@ -15,17 +28,17 @@
     PNS2026: {
       titlePattern: /SIGC\s*-\s*PNS2026/i,
       columns: {
-        controle:      { index: 0,  label: 'Controle' },
+        controle:      { index: 0,  label: LISTA_COMMON_LABELS.controle },
         idCnefe:       { index: 1,  label: 'ID_CNEFE' },
-        nDomicilio:    { index: 2,  label: 'N.º Domicilio' },
+        nDomicilio:    { index: 2,  label: LISTA_COMMON_LABELS.nDomicilio },
         quadra:        { index: 3,  label: 'Quadra' },
         face:          { index: 4,  label: 'Face' },
         logradouro:    { index: 5,  label: 'Logradouro' },
         numero:        { index: 6,  label: 'Número' },
         complemento:   { index: 7,  label: 'Complemento' },
         bairro:        { index: 8,  label: 'Bairro' },
-        latitude:      { index: 9,  label: 'Latitude' },
-        longitude:     { index: 10, label: 'Longitude' },
+        latitude:      { index: 9,  label: LISTA_COMMON_LABELS.latitude },
+        longitude:     { index: 10, label: LISTA_COMMON_LABELS.longitude },
         telefone:      { index: 11, label: 'Telefone' },
         morador:       { index: 12, label: 'Morador' },
         situacao:      { index: 13, label: 'Situação' },
@@ -33,7 +46,7 @@
         antropometria: { index: 15, label: 'Antropometria' },
         biomarcadores: { index: 16, label: 'Biomarcadores' },
         idZona:        { index: 17, label: 'ID Zona' },
-        nomeZona:      { index: 18, label: 'Nome ZONA' },
+        nomeZona:      { index: 18, label: LISTA_COMMON_LABELS.nomeZona },
       },
     },
   };
@@ -161,9 +174,8 @@
     return (doc.body.textContent || '').trim();
   }
 
-  // Shared CSV building/download — used by csv-export and
-  // agenda-csv-export (and any future CSV feature) so escaping, delimiter,
-  // and BOM rules live in one place instead of being copy-pasted per file.
+  // CSV building/download shared via buildCsv/downloadFile, so escaping,
+  // delimiter, and BOM rules live in one place.
   function escapeCsvField(s) {
     let v = String(s ?? '');
     // Excel formula-injection guard: a leading = + - @ or tab makes Excel
@@ -180,9 +192,11 @@
     return lines.join('\r\n') + '\r\n';
   }
 
-  function downloadFile(filename, text, mimeType) {
-    // UTF-8 BOM so Excel doesn't mangle accented characters.
-    const blob = new Blob(['﻿' + text], { type: mimeType || 'text/csv;charset=utf-8' });
+  function downloadFile(filename, text, mimeType, opts) {
+    // UTF-8 BOM so Excel doesn't mangle accented CSVs; pass
+    // { bom: false } for formats that declare their own encoding (KML/XML).
+    const bom = !(opts && opts.bom === false);
+    const blob = new Blob([bom ? '﻿' + text : text], { type: mimeType || 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -290,6 +304,13 @@
     return fields;
   }
 
+  // Minimal HTML escaper; the numeric &#39; entity is valid in XML too,
+  // so the KML export shares it as its XML escaper.
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
   // Comma-separated Zonas field -> individual entries, e.g.
   // "29.3.03.03 29_Linus_Pituba, 29.3.02.03 29_Linus_Pituba" -> two
   // entries, each "código nome". Entries are kept whole; callers that
@@ -302,6 +323,17 @@
   function isoToBr(iso) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
     return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso || '');
+  }
+
+  // UF <select> on the Agenda page: option 0 is the placeholder. `code`
+  // is the option value (used in request bodies), `name` the visible
+  // text (used in filenames and headers).
+  function getAgendaUf() {
+    const s = document.getElementById('selectUf');
+    return {
+      code: s ? s.value : '',
+      name: s && s.selectedIndex > 0 ? s.options[s.selectedIndex].text.trim() : '',
+    };
   }
 
   // idEquipe (uuid) -> team name. Prefers the calendar's own resource
@@ -424,8 +456,12 @@
     return `lista-enderecos-${pesquisa.id.toLowerCase()}_${controle}_${tipo}_${data}`;
   }
 
+  // Note: agenda-day-guide additionally injects `dayGuide` (generate /
+  // diaViewActive) onto this object at load time, consumed by agenda-map;
+  // manifest load order guarantees day-guide runs first.
   window.__sigcPro = {
     PESQUISAS,
+    LISTA_COMMON_LABELS,
     MISSING_VALUES,
     normalizeLabel,
     detectPesquisa,
@@ -438,8 +474,7 @@
     getTableRows,
     exportFileBase,
     parseCoord,
-    cellText,
-    escapeCsvField,
+    escapeHtml,
     buildCsv,
     downloadFile,
     timestampSlug,
@@ -447,19 +482,12 @@
     WEEKDAYS_PT,
     onAgendaPage,
     findAgendaToolbarChunk,
-    parseAgendaSlotTitle,
     parseZonaEntries,
     isoToBr,
     dateToIso,
-    getAgendaEquipeNames,
+    getAgendaUf,
     readAgendaSlots,
     agendaMinScheduleDate,
-    // Set by pdf-export's own PDF-pro button before it programmatically
-    // clicks the native PDF button; consumed (and cleared) by the pdfMake
-    // hook, which rewrites the doc into listagem style only when this is
-    // true. KML-pro/CSV-pro no longer ride the PDF click — they read table
-    // data directly via getTableRows — so this flag is PDF-only now.
-    pdfRebuildOnNext: false,
   };
   console.log(`${TAG} common runtime loaded.`);
 })();

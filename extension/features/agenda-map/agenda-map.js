@@ -49,16 +49,17 @@
   }
 
   // headers/rows: plain string arrays from the response table. Columns
-  // are resolved by label against the shared PESQUISAS registry, so a
+  // are resolved by label against LISTA_COMMON_LABELS (pesquisa-neutral:
+  // the Agenda page has no report title to detect a pesquisa from), so a
   // backend column reorder can never silently join the wrong columns —
   // unknown headers return null (caller treats as failure).
   function tableToEnderecosMap(headers, rows) {
     const P = window.__sigcPro;
-    const cols = P.PESQUISAS.PNS2026.columns;
+    const labels = P.LISTA_COMMON_LABELS;
     const idx = {};
-    for (const key of ['controle', 'nDomicilio', 'latitude', 'longitude', 'nomeZona']) {
+    for (const key of Object.keys(labels)) {
       const i = headers.findIndex(
-        (h) => P.normalizeLabel(h) === P.normalizeLabel(cols[key].label));
+        (h) => P.normalizeLabel(h) === P.normalizeLabel(labels[key]));
       if (i === -1) return null;
       idx[key] = i;
     }
@@ -170,8 +171,7 @@
       alert('SIGC-PRO: nenhum slot encontrado na agenda — confira se UF/dia já carregaram.');
       return;
     }
-    const ufSelect = document.getElementById('selectUf');
-    const uf = ufSelect ? ufSelect.value : '';
+    const uf = window.__sigcPro.getAgendaUf().code;
     const controles = [...new Set(
       rows.filter((r) => r.reservado).map((r) => r.controle).filter(Boolean))];
 

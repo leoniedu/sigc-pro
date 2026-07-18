@@ -174,18 +174,23 @@
     console.log(`${TAG} PDF rebuilt as listagem (${rows.length} endereços, ${tipo}).`);
   }
 
+  // Set by the PDF-pro button just before it clicks the native PDF button;
+  // read (and cleared) by the pdfMake hook below. Module-local: both ends
+  // live in this file, only the call stack in between is foreign.
+  let rebuildOnNext = false;
+
   function installHook(pesquisa, pdfMake) {
     if (pdfMake.__sigcProPdfTweak) return;
 
     const originalCreatePdf = pdfMake.createPdf;
     pdfMake.createPdf = function (doc) {
       // The listagem rebuild applies ONLY to exports triggered by the
-      // PDF-pro button (which sets pdfRebuildOnNext). The native PDF button
+      // PDF-pro button (which sets rebuildOnNext). The native PDF button
       // stays completely original.
-      if (!window.__sigcPro.pdfRebuildOnNext) {
+      if (!rebuildOnNext) {
         return originalCreatePdf.call(this, doc);
       }
-      window.__sigcPro.pdfRebuildOnNext = false;
+      rebuildOnNext = false;
 
       let body = null;
       try {
@@ -262,7 +267,7 @@
       );
       return;
     }
-    window.__sigcPro.pdfRebuildOnNext = true;
+    rebuildOnNext = true;
     pdfBtn.click();
   }
 
@@ -312,8 +317,10 @@
       installHook(pesquisa, pdfMake);
 
       const tryInsert = () => {
-        if (!window.__sigcPro.onListaEnderecos()) return;
+        // O(1) button-exists check first: it neutralizes the steady-state
+        // cost of this tick, which otherwise scans every <h6> per mutation.
         if (document.getElementById(BUTTON_ID)) return;
+        if (!window.__sigcPro.onListaEnderecos()) return;
         const toolbar = document.querySelector('.dt-buttons');
         if (toolbar) insertButton(toolbar, pesquisa);
       };
