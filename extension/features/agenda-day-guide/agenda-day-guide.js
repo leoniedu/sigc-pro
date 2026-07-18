@@ -200,9 +200,8 @@
     return TEAM_COLORS[equipeIndex % TEAM_COLORS.length];
   }
 
-  // One plottable stop: { seq, hora, label, x, y } for an svg dot; label is
-  // the escaped name-or-controle fallback used in the coordinate-less note
-  // too, so both stay consistent.
+  // Name-or-controle fallback for a row's display label, used in the
+  // coordinate-less note below the map.
   function stopLabel(r) {
     return r.nome || r.controle || '';
   }
@@ -222,7 +221,7 @@
       set.rows.forEach((r) => {
         const info = slotInfo(r, enderecos);
         if (info && info.lat != null) {
-          plottable.push({ lat: info.lat, lon: info.lon, hora: r.horaInicio, label: stopLabel(r) });
+          plottable.push({ lat: info.lat, lon: info.lon, hora: r.horaInicio });
         } else {
           missing.push(r);
         }
@@ -252,14 +251,14 @@
       }
 
       pts.forEach((p, i) => {
-        const stop = set.plottable[i];
+        const hora = set.plottable[i].hora;
         const seq = i + 1;
         svgParts.push(
           `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="${set.color}" stroke="#fff" stroke-width="1.5"/>` +
           `<text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central" ` +
             `font-size="9" font-weight="700" fill="#fff">${seq}</text>` +
           `<text x="${p.x.toFixed(1)}" y="${(p.y + 20).toFixed(1)}" text-anchor="middle" ` +
-            `font-size="9" fill="#333">${escapeHtml(stop.hora)}</text>`
+            `font-size="9" fill="#333">${escapeHtml(hora)}</text>`
         );
       });
     });
