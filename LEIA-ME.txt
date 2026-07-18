@@ -35,9 +35,10 @@ Em Administrar Agenda:
     Controle/Domicílio, observações) e os horários livres. Ctrl+P
     imprime a aba aberta.
   * Guia + Mapa (opcional) — o mesmo guia, com links de navegação (geo:),
-    rota no Google Maps e a zona real de cada visita; para isso, mediante
-    clique e confirmação, consulta o próprio servidor do SIGC (nada vai a
-    terceiros).
+    rota no Google Maps, a zona real de cada visita e um mapa-esquema
+    (SVG, sem imagens externas) da rota do dia em cada aba; para isso,
+    mediante clique e confirmação, consulta o próprio servidor do SIGC
+    (nada vai a terceiros).
 
 Os botões nativos do SIGC não são alterados — os novos botões apenas se
 somam a eles. O PDF nativo funciona normalmente; CSV e Excel nativos têm

@@ -59,6 +59,11 @@ Working checklist; move items up/down freely. Specs live in
       exactly one. Shown on the visit card and used in the team-panel
       Zonas line; zona is only filled for selecionados, which is what
       the filtro requests (TipoVisualizacao S)
+- [x] Guia + Mapa: inline SVG day-route sketch on Resumo (combined, all
+      teams, colored legend) and each team tab (its own visits) — numbered
+      stops in visit order, start-time labels, scale bar, north arrow, no
+      tiles/imagery/network; Lab tab stays map-free
+      (`2026-07-18-agenda-day-route-map-design.md`)
 - [x] Real icon: location-pin mark replacing the flat blue square
 - [x] Repo public, GitHub Pages (privacy policy), Chrome Web Store
       submission (unlisted)

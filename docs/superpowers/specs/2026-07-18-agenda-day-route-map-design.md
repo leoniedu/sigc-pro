@@ -1,6 +1,6 @@
 # Agenda day-route map: inline SVG sketch — design
 
-2026-07-18. Status: approved direction, pre-implementation.
+2026-07-18. Status: implemented 2026-07-18.
 Prereq reading: `2026-07-16-agenda-map-design.md` (the `enderecos` map
 this consumes) and `2026-07-16-agenda-day-guide-design.md` (the guide
 this extends). Supersedes that spec's "Inline SVG route sketch" item
