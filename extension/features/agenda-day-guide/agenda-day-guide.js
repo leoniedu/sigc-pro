@@ -206,6 +206,23 @@
     return r.nome || r.controle || '';
   }
 
+  // enderecoKey -> sequence number (1-based, time order) for a row set's
+  // PLOTTABLE reserved visits — the exact same numbering buildRouteMapSvg
+  // assigns that set on the map, so a card's badge always matches its
+  // dot. A coordinate-less reserved visit gets no entry (it has no dot).
+  function stopSequenceMap(rows, enderecos) {
+    const map = new Map();
+    let seq = 0;
+    rows.forEach((r) => {
+      const info = slotInfo(r, enderecos);
+      if (info && info.lat != null) {
+        seq += 1;
+        map.set(enderecoKey(r), seq);
+      }
+    });
+    return map;
+  }
+
   // rowSets: Array<{ rows: Array<row>, color: string }>, each already this
   // team's reserved rows in time order. Builds one shared projection across
   // ALL plottable points from every set (so a combined map's teams share
@@ -338,7 +355,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
   // fetch, when available — never the inflated slot-text list. Missing
   // fields (already normalized to '' by readAgendaSlots) are omitted
   // line by line — a sparse card never breaks.
-  function buildSlotCard(r, enderecos) {
+  function buildSlotCard(r, enderecos, seqMap, color) {
     const e = escapeHtml;
     const hora = `${e(r.horaInicio)}–${e(r.horaFim)}`;
     if (!r.reservado) {
@@ -368,10 +385,16 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       r.domicilio && `Dom: ${e(r.domicilio)}`,
       zona && `Zona: ${e(zona)}`,
     ].filter(Boolean).join(' &nbsp;·&nbsp; ');
+    // Matches the number and color of the visit's dot in the map below
+    // (same per-set sequence, computed by stopSequenceMap) — absent when
+    // the visit has no valid coordinates, since it has no dot to match.
+    const seq = seqMap && seqMap.get(enderecoKey(r));
+    const seqBadge = seq != null
+      ? `<span class="badge badge-seq" style="background:${e(color || '#005a9c')}">${seq}</span> ` : '';
 
     return [
       '<div class="card">',
-      `<div class="hora">${hora} <span class="badge">RESERVADO</span></div>`,
+      `<div class="hora">${hora} ${seqBadge}<span class="badge">RESERVADO</span></div>`,
       r.endereco ? `<div class="endereco">${e(r.endereco)}</div>` : '',
       info && info.lat != null
         ? `<div class="geo"><a href="geo:${fmtCoord(info)}">abrir no mapa</a></div>` : '',
@@ -400,9 +423,11 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     const first = group.rows.findIndex((r) => r.reservado);
     const last = group.rows.length - 1 -
       [...group.rows].reverse().findIndex((r) => r.reservado);
+    const seqMap = stopSequenceMap(group.rows, enderecos);
+    const color = teamColor(colorIndex);
     const cards = group.rows.map((r, i) => {
       const edge = first === -1 || i < first || i > last;
-      return !r.reservado && edge ? buildLivreEdgeRow(r) : buildSlotCard(r, enderecos);
+      return !r.reservado && edge ? buildLivreEdgeRow(r) : buildSlotCard(r, enderecos, seqMap, color);
     });
     // Route links only when >= 2 reserved visits have coordinates.
     // Tapping the Google Maps link sends that leg's coordinates to
@@ -581,6 +606,7 @@ h3 { margin: .8rem 0 .2rem; font-size: 1rem; }
 .ids, .zonas { color: #555; }
 .card.livre { border-style: dashed; background: #fafafa; }
 .badge-livre { background: #8a8f98; }
+.badge-seq { border-radius: 50%; width: 1.3em; height: 1.3em; display: inline-flex; align-items: center; justify-content: center; padding: 0; font-weight: 700; }
 .livre-edge { color: #666; border: 1px dashed #bbb; border-radius: 6px; padding: .25rem .8rem; margin: .5rem 0; font-size: .9rem; }
 a { color: #005a9c; }
 .geo, .rota { font-size: .92rem; margin-top: .1rem; }
