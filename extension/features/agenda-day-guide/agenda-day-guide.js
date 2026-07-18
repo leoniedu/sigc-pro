@@ -200,6 +200,107 @@
     return TEAM_COLORS[equipeIndex % TEAM_COLORS.length];
   }
 
+  // One plottable stop: { seq, hora, label, x, y } for an svg dot; label is
+  // the escaped name-or-controle fallback used in the coordinate-less note
+  // too, so both stay consistent.
+  function stopLabel(r) {
+    return r.nome || r.controle || '';
+  }
+
+  // rowSets: Array<{ rows: Array<row>, color: string }>, each already this
+  // team's reserved rows in time order. Builds one shared projection across
+  // ALL plottable points from every set (so a combined map's teams share
+  // one coordinate frame), then draws each set's dots/line in its color,
+  // each set numbered independently starting at 1. Rows whose slotInfo has
+  // no usable lat/lon are excluded from plotting and listed in a single
+  // combined coordinate-less note below the map (never silently dropped).
+  function buildRouteMapSvg(rowSets, enderecos, width, height) {
+    const PADDING = 28;
+    const plottableSets = rowSets.map((set) => {
+      const plottable = [];
+      const missing = [];
+      set.rows.forEach((r) => {
+        const info = slotInfo(r, enderecos);
+        if (info && info.lat != null) {
+          plottable.push({ lat: info.lat, lon: info.lon, hora: r.horaInicio, label: stopLabel(r) });
+        } else {
+          missing.push(r);
+        }
+      });
+      return { plottable, missing, color: set.color };
+    });
+
+    const allPoints = plottableSets.flatMap((s) => s.plottable);
+    if (allPoints.length === 0) return '';
+
+    const { projected, scaleBarKm, scaleBarPx } = projectPoints(allPoints, width, height, PADDING);
+
+    // Walk projected in the same flattened order to hand each set back its
+    // own slice (projectPoints doesn't know about sets, only points).
+    let cursor = 0;
+    const svgParts = [];
+    plottableSets.forEach((set) => {
+      const pts = projected.slice(cursor, cursor + set.plottable.length);
+      cursor += set.plottable.length;
+      if (pts.length === 0) return;
+
+      if (pts.length >= 2) {
+        const line = pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+        svgParts.push(
+          `<polyline points="${line}" fill="none" stroke="${set.color}" stroke-width="1.5" opacity="0.7"/>`
+        );
+      }
+
+      pts.forEach((p, i) => {
+        const stop = set.plottable[i];
+        const seq = i + 1;
+        svgParts.push(
+          `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="${set.color}" stroke="#fff" stroke-width="1.5"/>` +
+          `<text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central" ` +
+            `font-size="9" font-weight="700" fill="#fff">${seq}</text>` +
+          `<text x="${p.x.toFixed(1)}" y="${(p.y + 20).toFixed(1)}" text-anchor="middle" ` +
+            `font-size="9" fill="#333">${escapeHtml(stop.hora)}</text>`
+        );
+      });
+    });
+
+    // Scale bar: bottom-left corner.
+    const barX = PADDING, barY = height - 12;
+    svgParts.push(
+      `<line x1="${barX}" y1="${barY}" x2="${(barX + scaleBarPx).toFixed(1)}" y2="${barY}" stroke="#333" stroke-width="1.5"/>` +
+      `<text x="${barX}" y="${barY - 4}" font-size="9" fill="#333">${scaleBarKm} km</text>`
+    );
+
+    // North arrow: top-right corner. The projection keeps lat-increasing
+    // "up" by construction, so a fixed arrow is legitimate here.
+    const arrowX = width - PADDING, arrowY = PADDING;
+    svgParts.push(
+      `<text x="${arrowX}" y="${arrowY}" text-anchor="middle" font-size="11" font-weight="700" fill="#333">N ↑</text>`
+    );
+
+    const svg = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" ` +
+      `style="border:1px solid #d0d7de;background:#fff;max-width:100%;">${svgParts.join('')}</svg>`;
+
+    const allMissing = plottableSets.flatMap((s) => s.missing);
+    const missingNote = allMissing.length
+      ? `<div class="route-map-missing">${allMissing.length} visita(s) sem coordenadas válidas: ` +
+        allMissing.map((r) => `${escapeHtml(r.horaInicio)} ${escapeHtml(stopLabel(r))}`).join(', ') +
+        '</div>'
+      : '';
+
+    return `<div class="route-map">${svg}${missingNote}</div>`;
+  }
+
+  // Small color-key legend for the combined Resumo map: one swatch + name
+  // per team, in groups' existing (name-sorted) order.
+  function buildLegend(groups) {
+    if (groups.length === 0) return '';
+    const items = groups.map((g, i) =>
+      `<span class="route-map-legend-item"><span class="route-map-swatch" style="background:${teamColor(i)}"></span>${escapeHtml(g.equipe)}</span>`
+    ).join('');
+    return `<div class="route-map-legend">${items}</div>`;
+  }
+
   // --- HTML builders ------------------------------------------------
 
   const escapeHtml = (s) => window.__sigcPro.escapeHtml(s);
