@@ -4,6 +4,11 @@ ROOT="$(git rev-parse --show-toplevel)"
 
 "$ROOT/scripts/check-privacy.sh" --staged
 
+# Re-prove the gate itself whenever it (or its self-test) changes.
+if ! git diff --cached --no-ext-diff --quiet -- scripts/check-privacy.sh scripts/test-privacy-gate.sh; then
+  "$ROOT/scripts/test-privacy-gate.sh"
+fi
+
 # Auto-bump the patch version whenever extension/ changes, unless this
 # commit already edits manifest.json's version itself (manual minor/major
 # bump takes precedence — don't double-bump).
