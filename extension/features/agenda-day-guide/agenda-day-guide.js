@@ -122,6 +122,70 @@
       `&destination=${encodeURIComponent(dest)}`;
   }
 
+  // --- SVG day-route map ----------------------------------------------
+  // Spec: docs/superpowers/specs/2026-07-18-agenda-day-route-map-design.md
+
+  // Fits `points` (lat/lon) into an SVG-pixel box of `width`x`height` with
+  // `padding` on every side, using an equirectangular projection corrected
+  // for longitude compression at this latitude: physical x is proportional
+  // to lon * cos(meanLat), physical y to lat. A single point centers with a
+  // small fixed default span (nothing to fit a scale to). Also returns a
+  // friendly rounded scale-bar length (scaleBarKm) and its pixel width
+  // (scaleBarPx) for the caller to draw.
+  function projectPoints(points, width, height, padding) {
+    const meanLat = points.reduce((s, p) => s + p.lat, 0) / points.length;
+    const cosLat = Math.cos(meanLat * Math.PI / 180);
+    // Physical-ish units: degrees, with longitude compressed by cosLat so
+    // equal physical distances in lat and lon map to equal plot distances.
+    const px = (p) => p.lon * cosLat;
+    const py = (p) => p.lat;
+
+    const innerW = width - 2 * padding;
+    const innerH = height - 2 * padding;
+
+    let minX, maxX, minY, maxY, spanX, spanY;
+    if (points.length === 1) {
+      // No spread to fit: center with a small fixed default span so the
+      // single dot sits in the middle rather than at a degenerate corner.
+      const DEFAULT_SPAN_DEG = 0.01; // ~1.1km of latitude, plenty for one dot
+      const x0 = px(points[0]), y0 = py(points[0]);
+      minX = x0 - DEFAULT_SPAN_DEG / 2; maxX = x0 + DEFAULT_SPAN_DEG / 2;
+      minY = y0 - DEFAULT_SPAN_DEG / 2; maxY = y0 + DEFAULT_SPAN_DEG / 2;
+    } else {
+      const xs = points.map(px), ys = points.map(py);
+      minX = Math.min(...xs); maxX = Math.max(...xs);
+      minY = Math.min(...ys); maxY = Math.max(...ys);
+    }
+    spanX = maxX - minX || 1e-9;
+    spanY = maxY - minY || 1e-9;
+
+    // Preserve aspect ratio: scale by whichever axis is tighter, so the
+    // sketch's shape isn't stretched to fill a non-matching viewport.
+    const scale = Math.min(innerW / spanX, innerH / spanY);
+    const usedW = spanX * scale, usedH = spanY * scale;
+    const offX = padding + (innerW - usedW) / 2;
+    const offY = padding + (innerH - usedH) / 2;
+
+    const projected = points.map((p) => ({
+      x: offX + (px(p) - minX) * scale,
+      // y grows downward in SVG; lat grows northward, so flip.
+      y: offY + (maxY - py(p)) * scale,
+    }));
+
+    // Scale bar: a friendly rounded real-world distance approximating a
+    // fraction of the plotted span, converted back to pixels via the same
+    // scale. 1 degree of latitude ~= 111.32 km.
+    const KM_PER_DEG_LAT = 111.32;
+    const spanKm = spanY * KM_PER_DEG_LAT;
+    const targetKm = spanKm > 0 ? spanKm / 4 : 0.5;
+    const NICE = [0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 50, 100];
+    const scaleBarKm = NICE.reduce((best, n) =>
+      Math.abs(n - targetKm) < Math.abs(best - targetKm) ? n : best, NICE[0]);
+    const scaleBarPx = (scaleBarKm / KM_PER_DEG_LAT) * scale;
+
+    return { projected, scaleBarKm, scaleBarPx };
+  }
+
   // --- HTML builders ------------------------------------------------
 
   const escapeHtml = (s) => window.__sigcPro.escapeHtml(s);
