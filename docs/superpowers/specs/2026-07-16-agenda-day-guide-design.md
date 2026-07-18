@@ -114,3 +114,16 @@ drops its local copy.
   ROADMAP "Later").
 - pdfMake PDF generation (availability on the Agenda page unverified;
   browser print covers it).
+
+## Post-launch additions (2026-07-17)
+
+- Resumo tab gained a "Slots do dia" grid: fixed half-hour-mark rows ×
+  equipe columns; a slot lands in the mark containing its (possibly
+  misaligned) start and the cell shows the real start time, plus
+  Controle/Domicílio or LIVRE. Per-equipe stats moved into the grid's
+  footer rows, replacing the separate "Por equipe" table.
+- New "Lab" tab (second tab, before the team tabs): the Resumo repeated
+  in a form shareable with the lab — Controle truncated to its first 11
+  digits, no Domicílio, and none of the guide's personal data (names,
+  addresses, phones, observations). Ctrl+P on the tab prints just that
+  page.

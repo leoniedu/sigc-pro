@@ -1,7 +1,10 @@
 // SIGC-PRO feature: "Guia do Dia" — downloads a self-contained HTML day
-// guide from the Agenda's Dia view: a Resumo tab (day stats) plus one tab
+// guide from the Agenda's Dia view: a Resumo tab (day stats + a time ×
+// equipe slot grid with per-team totals) plus one tab
 // per equipe with a card per slot (reserved: endereço/morador/telefone/
-// Controle/observação; open: LIVRE row). Data comes exclusively from
+// Controle/observação; open: LIVRE row). A "Lab" tab repeats the Resumo
+// in shareable form: Controle truncated to 11 digits, no Domicílio, no
+// personal data — print it to share. Data comes exclusively from
 // window.__sigcPro.readAgendaSlots() (already-rendered FullCalendar DOM,
 // no network); the file itself is inline-CSS-only with CSS radio tabs —
 // no <script>, no external refs — so it opens anywhere from file:// and
@@ -106,6 +109,22 @@
   function escapeHtml(s) {
     return String(s ?? '').replace(/[&<>"']/g, (c) =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // Stats/grid table styles, shared by the full guide and the lab page.
+  const TABLE_CSS = `table.stats { border-collapse: collapse; margin: .6rem 0; }
+table.stats th, table.stats td { border: 1px solid #d0d7de; padding: .25rem .6rem; text-align: left; font-size: .92rem; }
+table.grid td { text-align: center; }
+table.grid .grid-hora { font-weight: 600; }
+table.grid .grid-livre { color: #8a8f98; font-size: .85em; }
+table.grid .grid-dom { color: #555; font-size: .8em; }
+table.grid td.sem-slot { background: #fafafa; }
+table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`;
+
+  function metaLine(meta) {
+    const e = escapeHtml;
+    return [e(meta.uf), meta.dataBr ? `${e(meta.dataBr)} (${e(meta.diaSemana)})` : '',
+      `gerado em ${e(meta.geradoEm)}`].filter(Boolean).join(' · ');
   }
 
   // Leading/trailing open slots: real information (the day could start
@@ -214,10 +233,13 @@
     ].filter(Boolean).join('\n');
   }
 
-  function buildSummaryPanel(groups, allRows) {
+  function buildSummaryPanel(groups, allRows, lab) {
     const e = escapeHtml;
     const day = computeStats(allRows);
     const comReserva = groups.filter((g) => g.rows.some((r) => r.reservado)).length;
+    const titulo = lab
+      ? 'Resumo do dia — Lab (Controle truncado, sem dados pessoais)'
+      : 'Resumo do dia';
     const linhas = [
       ['Equipes ativas', String(groups.length)],
       ['Equipes com reserva', String(comReserva)],
@@ -231,19 +253,63 @@
       ['Média de agendamentos por equipe ativa', media1(day.reservados, groups.length) ?? '—'],
       ['Média de agendamentos por controle', media1(day.reservados, day.controles.length) ?? '—'],
     ].map(([k, v]) => `<tr><th>${e(k)}</th><td>${e(v)}</td></tr>`).join('\n');
-    const porEquipe = groups.map((g) => {
-      const s = computeStats(g.rows);
-      const oc = s.ocupacaoPct != null ? `${s.ocupacaoPct}%` : '—';
-      return `<tr><td>${e(g.equipe)}</td><td>${s.reservados}</td><td>${s.livres}</td><td>${oc}</td></tr>`;
-    }).join('\n');
     return [
-      '<h2>Resumo do dia</h2>',
+      `<h2>${e(titulo)}</h2>`,
       `<table class="stats">\n${linhas}\n</table>`,
-      '<h3>Por equipe</h3>',
-      '<table class="stats"><tr><th>Equipe</th><th>Reservados</th><th>Livres</th><th>Ocupação</th></tr>',
-      porEquipe,
-      '</table>',
+      '<h3>Slots do dia</h3>',
+      buildDayGrid(groups, lab),
     ].join('\n');
+  }
+
+  // Full day at a glance: rows = fixed half-hour marks (slot starts
+  // don't necessarily align to :00/:30, so each slot lands in the mark
+  // containing its start and the cell shows the actual start time),
+  // columns = equipes; cells show LIVRE or Controle/Domicílio. The
+  // per-equipe stats live in the grid's footer rows, so this table
+  // replaces the old separate "Por equipe" one. lab = the shareable
+  // variant: Controle truncated to its first 11 digits, no Domicílio.
+  function buildDayGrid(groups, lab) {
+    const e = escapeHtml;
+    const toMin = (hhmm) => {
+      const m = /^(\d{1,2}):(\d{2})/.exec(hhmm || '');
+      return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+    };
+    const fmtMin = (min) =>
+      `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+    const starts = groups.flatMap((g) => g.rows.map((r) => toMin(r.horaInicio)))
+      .filter((v) => v != null);
+    if (!starts.length) return '';
+    const marks = [];
+    for (let t = Math.min(...starts) - (Math.min(...starts) % 30);
+      t <= Math.max(...starts); t += 30) marks.push(t);
+    const head = `<tr><th>Hora</th>${groups.map((g) => `<th>${e(g.equipe)}</th>`).join('')}</tr>`;
+    const body = marks.map((t) => {
+      const cells = groups.map((g) => {
+        const slots = g.rows.filter((r) => {
+          const s = toMin(r.horaInicio);
+          return s != null && s - (s % 30) === t;
+        });
+        if (!slots.length) return '<td class="sem-slot"></td>';
+        const conteudo = slots.map((r) => {
+          const hora = `<span class="grid-hora">${e(r.horaInicio)}</span>`;
+          if (!r.reservado) return `${hora} <span class="grid-livre">LIVRE</span>`;
+          const ctrl = lab ? String(r.controle).slice(0, 11) : r.controle;
+          const dom = !lab && r.domicilio ? ` <span class="grid-dom">Dom ${e(r.domicilio)}</span>` : '';
+          return `${hora}<br><span class="grid-ctrl">${e(ctrl) || '—'}</span>${dom}`;
+        }).join('<br>');
+        return `<td>${conteudo}</td>`;
+      }).join('');
+      return `<tr><th>${fmtMin(t)}</th>${cells}</tr>`;
+    }).join('\n');
+    const stats = groups.map((g) => computeStats(g.rows));
+    const foot = [
+      ['Reservados', stats.map((s) => String(s.reservados))],
+      ['Livres', stats.map((s) => String(s.livres))],
+      ['Ocupação', stats.map((s) => (s.ocupacaoPct != null ? `${s.ocupacaoPct}%` : '—'))],
+    ].map(([rotulo, vals]) =>
+      `<tr class="grid-foot"><th>${e(rotulo)}</th>${vals.map((v) => `<td>${e(v)}</td>`).join('')}</tr>`
+    ).join('\n');
+    return `<table class="stats grid">\n${head}\n${body}\n${foot}\n</table>`;
   }
 
   // Complete standalone document. Tabs are CSS-only: one hidden radio per
@@ -251,8 +317,12 @@
   // @media print hides the tab bar and prints only the checked panel.
   function buildGuideHtml(meta, groups, allRows, coords) {
     const e = escapeHtml;
+    // The Lab tab repeats the Resumo in shareable form (Controle
+    // truncated to 11 digits, no Domicílio, no personal data) — Ctrl+P
+    // on it prints just that page for the laboratory.
     const panels = [
       { label: 'Resumo', html: buildSummaryPanel(groups, allRows) },
+      { label: 'Lab', html: buildSummaryPanel(groups, allRows, true) },
       ...groups.map((g) => ({ label: g.equipe, html: buildTeamPanel(g, coords) })),
     ];
     const radios = panels.map((_, i) =>
@@ -296,8 +366,7 @@ h3 { margin: .8rem 0 .2rem; font-size: 1rem; }
 a { color: #005a9c; }
 .geo, .rota { font-size: .92rem; margin-top: .1rem; }
 .teamstats { color: #333; margin: .2rem 0 .4rem; font-size: .92rem; }
-table.stats { border-collapse: collapse; margin: .6rem 0; }
-table.stats th, table.stats td { border: 1px solid #d0d7de; padding: .25rem .6rem; text-align: left; font-size: .92rem; }
+${TABLE_CSS}
 ${tabRules}
 @media print { .tabs { display: none; } }
 </style>
@@ -305,7 +374,7 @@ ${tabRules}
 <body>
 <header>
 <h1>SIGC-PRO — Guia do Dia</h1>
-<div class="meta">${[e(meta.uf), meta.dataBr ? `${e(meta.dataBr)} (${e(meta.diaSemana)})` : '', `gerado em ${e(meta.geradoEm)}`].filter(Boolean).join(' · ')}</div>
+<div class="meta">${metaLine(meta)}</div>
 </header>
 <main>
 ${radios}
@@ -354,18 +423,26 @@ ${sections}
       .filter(Boolean).join('_') + '.html';
   }
 
-  function generate(coords) {
+  // Shared click-time guards; returns null (after alerting) when the
+  // guide can't be generated.
+  function readDayRows() {
     // Never expected: the button only exists in Dia view. Kept as a
     // fallback in case a click lands mid view-switch.
     if (!diaViewActive()) {
       alert('SIGC-PRO: mude para a visualização "Dia" para gerar o Guia do Dia.');
-      return;
+      return null;
     }
     const rows = window.__sigcPro.readAgendaSlots();
     if (rows.length === 0) {
       alert('SIGC-PRO: nenhum slot encontrado na agenda — confira se UF/dia já carregaram.');
-      return;
+      return null;
     }
+    return rows;
+  }
+
+  function generate(coords) {
+    const rows = readDayRows();
+    if (!rows) return;
     const groups = groupByEquipe(rows);
     const meta = guideMeta(rows);
     const html = buildGuideHtml(meta, groups, rows, coords || null);

@@ -47,6 +47,12 @@ Working checklist; move items up/down freely. Specs live in
       (`2026-07-16-agenda-map-design.md`; a per-team GPX download shipped
       then was removed — its data: URI link doesn't open from a
       printed/PDF guide)
+- [x] Resumo tab slot grid: half-hour-mark rows × equipe columns, each
+      slot in the mark containing its (possibly misaligned) start with
+      the real start time shown; per-equipe stats embedded as footer rows
+- [x] Guia do Dia "Lab" tab: the Resumo repeated in shareable form for
+      the lab — Controle truncated to 11 digits, no Domicílio, no
+      personal data; Ctrl+P on the tab prints just that page
 - [x] Real icon: location-pin mark replacing the flat blue square
 - [x] Repo public, GitHub Pages (privacy policy), Chrome Web Store
       submission (unlisted)
@@ -62,6 +68,10 @@ Working checklist; move items up/down freely. Specs live in
         (PDF shows decimal degrees, Google Maps format)
 
 ## Later
+
+- [ ] Get each Controle's zona from the endereços/coordinates table (the
+      Lista de Endereços response agenda-map already fetches has a Zona
+      column) instead of relying on slot text
 
 - [ ] Field-test checklist on more report variations (other UFs, empty
       coordinates, filtered exports)

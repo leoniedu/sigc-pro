@@ -22,9 +22,22 @@ Em Administrar Agenda:
     equipes visíveis) como CSV, já com Controle, Domicílio, Nome, Sexo,
     Endereço etc. separados em colunas (o SIGC só mostra isso dentro do
     texto de cada slot). Inclui slots reservados e slots abertos.
-  * Verificar Prazo — avisa quantos slots abertos (sem endereço atribuído)
-    estão agendados antes do prazo mínimo para ainda serem preenchidos a
-    tempo (hoje + 3 dias corridos; +4 se hoje for sexta-feira).
+  * Verificar Slots — duas verificações em um clique: slots abertos (sem
+    endereço atribuído) agendados antes do prazo mínimo para ainda serem
+    preenchidos a tempo (hoje + 3 dias corridos; +4 se hoje for
+    sexta-feira) e zonas cujo nome não corresponde à equipe da coluna
+    (padrão UF_Equipe_Local).
+  * Guia do Dia (só na visualização Dia) — baixa um guia HTML autônomo
+    com abas: resumo do dia (com grade horário × equipe dos slots), uma
+    aba Lab compartilhável com o laboratório (Controle truncado aos 11
+    primeiros dígitos, sem domicílio nem dados pessoais) e, por equipe,
+    os cartões de cada visita (endereço, morador, telefone,
+    Controle/Domicílio, observações) e os horários livres. Ctrl+P
+    imprime a aba aberta.
+  * Guia + Mapa (opcional) — o mesmo guia, com links de navegação (geo:)
+    e rota no Google Maps; para isso, mediante clique e confirmação,
+    consulta as coordenadas no próprio servidor do SIGC (nada vai a
+    terceiros).
 
 Os botões nativos do SIGC não são alterados — os novos botões apenas se
 somam a eles. O PDF nativo funciona normalmente; CSV e Excel nativos têm
@@ -51,8 +64,8 @@ Como usar
    Agenda para o CSV-PRO da Agenda).
 2. Ao lado dos botões de exportação (copiar, CSV, Excel, PDF) — ou, na
    Agenda, ao lado dos botões "Dia"/"Semana" — aparece o botão azul
-   correspondente: "PDF-pro", "KML-pro", "CSV-pro", "CSV-PRO" ou
-   "Verificar Prazo".
+   correspondente: "PDF-pro", "KML-pro", "CSV-pro", "CSV-PRO",
+   "Verificar Slots", "Guia do Dia" ou "Guia + Mapa".
 3. Clique no que precisar — cada um baixa um arquivo, independente dos
    outros. Na Agenda, o CSV reflete exatamente o que está na tela — para
    outra semana/UF, mude a visualização e clique de novo.
@@ -77,9 +90,11 @@ Problemas?
 
 Privacidade
 -----------
-Nenhum dado sai do seu computador. A extensão não pede nenhuma permissão
-do navegador, não faz nenhuma chamada de rede e não armazena nada; os
-arquivos são gerados localmente. Isso é verificado automaticamente a cada
-alteração do código.
+Nenhum dado sai do seu computador para o desenvolvedor ou para
+terceiros. A extensão não pede nenhuma permissão do navegador e não
+armazena nada; os arquivos são gerados localmente. A única chamada de
+rede é a consulta opcional do "Guia + Mapa" ao próprio servidor do SIGC
+— somente quando você clica e confirma, dentro da sessão já autenticada.
+Isso é verificado automaticamente a cada alteração do código.
 
 Código-fonte e contato: https://github.com/leoniedu/sigc-pro
