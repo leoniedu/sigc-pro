@@ -70,19 +70,21 @@
       const lat = P.parseCoord(cells[idx.latitude]);
       const lon = P.parseCoord(cells[idx.longitude]);
       const zona = String(cells[idx.nomeZona] || '').trim();
+      const idZona = String(cells[idx.idZona] || '').trim();
       const coordsOk = lat != null && lon != null;
-      // Zona is only filled in for selecionado households — fine here,
-      // since the filtro requests TipoVisualizacao 'S' (selecionados
-      // only) and Agenda visits are always with selecionados; an empty
-      // zona cell just falls back to the slot text in the guide.
-      // A household with zona but no valid coordinates still gets an
-      // entry (lat/lon null): the guide can show its real zona even
-      // when it can't map it.
-      if (controle && domicilio && (coordsOk || zona)) {
+      // Zona columns are only filled in for selecionado households —
+      // fine here, since the filtro requests TipoVisualizacao 'S'
+      // (selecionados only) and Agenda visits are always with
+      // selecionados; empty zona cells just fall back to the slot text
+      // in the guide. A household with zona but no valid coordinates
+      // still gets an entry (lat/lon null): the guide can show its real
+      // zona even when it can't map it.
+      if (controle && domicilio && (coordsOk || zona || idZona)) {
         map.set(`${controle}|${domicilio}`, {
           lat: coordsOk ? lat : null,
           lon: coordsOk ? lon : null,
           zona,
+          idZona,
         });
       }
     });
@@ -136,7 +138,7 @@
   // In-memory only, reset on page load: avoids a redundant POST for a
   // Controle already fetched earlier in the same session (e.g. the user
   // regenerates the guide after fixing a slot).
-  const enderecosCache = new Map(); // controle -> Map("controle|domicilio" -> {lat,lon,zona})
+  const enderecosCache = new Map(); // controle -> Map("controle|domicilio" -> {lat,lon,zona,idZona})
 
   // One sequential POST per distinct Controle not already cached
   // (typically 1-5 per day).

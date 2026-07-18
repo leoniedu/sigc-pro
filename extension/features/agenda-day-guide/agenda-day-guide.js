@@ -58,9 +58,9 @@
   function zonasUnion(rows, enderecos) {
     const set = new Set();
     rows.forEach((r) => {
-      const info = slotInfo(r, enderecos);
-      if (info && info.zona) {
-        set.add(info.zona);
+      const real = zonaLabel(slotInfo(r, enderecos));
+      if (real) {
+        set.add(real);
         return;
       }
       window.__sigcPro.parseZonaEntries(r.zonas).forEach((z) => set.add(z));
@@ -85,6 +85,12 @@
 
   function slotInfo(r, enderecos) {
     return (r.reservado && enderecos && enderecos.get(enderecoKey(r))) || null;
+  }
+
+  // "ID Zona Nome ZONA" (either alone when the other is missing) — the
+  // same "código nome" shape the slot-text zonas use.
+  function zonaLabel(info) {
+    return info ? [info.idZona, info.zona].filter(Boolean).join(' ') : '';
   }
 
   function fmtCoord(p) {
@@ -177,11 +183,12 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       ? `<div class="morador">${partes.join(' — ')}</div>`
       : '';
     const info = slotInfo(r, enderecos);
+    const zona = zonaLabel(info);
     const ids = [
       r.telefone && `Tel: ${e(r.telefone)}`,
       r.controle && `Controle: ${e(r.controle)}`,
       r.domicilio && `Dom: ${e(r.domicilio)}`,
-      info && info.zona && `Zona: ${e(info.zona)}`,
+      zona && `Zona: ${e(zona)}`,
     ].filter(Boolean).join(' &nbsp;·&nbsp; ');
 
     return [

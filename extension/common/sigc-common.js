@@ -17,6 +17,7 @@
     nDomicilio: 'N.º Domicilio',
     latitude: 'Latitude',
     longitude: 'Longitude',
+    idZona: 'ID Zona',
     nomeZona: 'Nome ZONA',
   };
 
@@ -45,7 +46,7 @@
         selecionado:   { index: 14, label: 'Selecionado' },
         antropometria: { index: 15, label: 'Antropometria' },
         biomarcadores: { index: 16, label: 'Biomarcadores' },
-        idZona:        { index: 17, label: 'ID Zona' },
+        idZona:        { index: 17, label: LISTA_COMMON_LABELS.idZona },
         nomeZona:      { index: 18, label: LISTA_COMMON_LABELS.nomeZona },
       },
     },

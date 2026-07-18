@@ -70,10 +70,12 @@ sequential POST each (typically 1–5). Parse each response with
 `DOMParser` (inert), locate `#tableRelatorio`, resolve columns **by
 header label** (normalized-label match against the existing
 `PESQUISAS.PNS2026.columns` labels; indexes not assumed), and build
-`Map("controle|domicilio" -> { lat, lon, zona })` via the existing
-`parseCoord` (handles `13 28 41.5514 S` / `39 06 20.4723 O`). `zona`
-(added 2026-07-18) is the table's Nome ZONA — the household's real zona,
-unlike the Agenda slot text, which lists every zona from slot creation.
+`Map("controle|domicilio" -> { lat, lon, zona, idZona })` via the existing
+`parseCoord` (handles `13 28 41.5514 S` / `39 06 20.4723 O`). `zona` and
+`idZona` (added 2026-07-18) are the table's Nome ZONA / ID Zona — the
+household's real zona, unlike the Agenda slot text, which lists every
+zona from slot creation; the guide shows them together as "id nome",
+the same shape the slot text uses.
 Zona is only filled for selecionados, which is exactly what the filtro
 requests (`TipoVisualizacao: "S"`). A household with zona but invalid
 coordinates keeps an entry with `lat`/`lon` null.
