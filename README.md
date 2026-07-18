@@ -43,10 +43,12 @@ Em **Administrar Agenda** (qualquer UF/pesquisa cuja URL termine em
   Observação), já separados em colunas. Lê o calendário já carregado na
   tela — não busca semanas além da exibida. Inclui tanto slots reservados
   quanto slots abertos (ainda sem endereço atribuído).
-- **Verificar Prazo** — avisa sobre slots abertos (sem endereço atribuído)
-  agendados antes do prazo mínimo para um novo agendamento ser viável (hoje
-  + 3 dias corridos; +4 se hoje for sexta-feira). Não altera nada, não
-  bloqueia o CSV-PRO — é só um alerta sob demanda, na visualização atual.
+- **Verificar Slots** — duas verificações em um clique: slots abertos (sem
+  endereço atribuído) agendados antes do prazo mínimo para um novo
+  agendamento ser viável (hoje + 3 dias corridos; +4 se hoje for
+  sexta-feira) e zonas cujo nome não corresponde à equipe da coluna
+  (padrão `UF_Equipe_Local`). Não altera nada, não bloqueia o CSV-PRO —
+  é só um alerta sob demanda, na visualização atual.
 
 Os botões nativos de PDF/CSV/Excel do SIGC continuam intocados e visíveis —
 o PDF nativo funciona normalmente; CSV/Excel nativos funcionam pela VPN e
@@ -71,7 +73,7 @@ também sem depender de pesquisa específica.
    deste repositório.
 5. Abra a Lista de Endereços (ou outro relatório, ou a Agenda) no SIGC e
    clique em **PDF-pro**, **KML-pro**, **CSV-pro**, **CSV-PRO** (Agenda) ou
-   **Verificar Prazo** (Agenda).
+   **Verificar Slots** (Agenda).
 
 Requer Chrome 111 ou superior.
 

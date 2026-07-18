@@ -32,7 +32,7 @@
   download do navegador.</p>
 
   <h2>2. Coleta e transmissão de dados</h2>
-  <p>Quase nenhuma. O recurso opcional "Guia + Mapa" faz, somente quando o usuário clica e confirma, uma requisição ao próprio servidor do SIGC (mesma origem da página) para obter as coordenadas dos endereços do dia; a resposta é processada localmente e nada é retransmitido. Fora isso, o código não contém chamadas de rede nem carrega recursos externos — a verificação automática do repositório (scripts/check-privacy.sh) garante que requisições só podem existir nesse único módulo e só para a própria origem. Não há telemetria, análise de uso ou qualquer integração com serviços de terceiros.</p>
+  <p>Quase nenhuma. O recurso opcional "Guia + Mapa" faz, somente quando o usuário clica e confirma, uma requisição ao próprio servidor do SIGC (mesma origem da página) para obter as coordenadas dos endereços do dia; a resposta é processada localmente e nada é retransmitido. Fora isso, o código não contém chamadas de rede nem carrega recursos externos — uma verificação automática do repositório (scripts/check-privacy.sh) confere, a cada alteração, que requisições só existem nesse único módulo e só para a própria origem, complementando as garantias de base: a lista vazia de permissões no manifest.json e a auditoria do código aberto. Não há telemetria, análise de uso ou qualquer integração com serviços de terceiros.</p>
 
   <h2>3. Armazenamento</h2>
   <p>Nenhum. A extensão não usa <code>chrome.storage</code>,

@@ -78,8 +78,11 @@ alert once — "não foi possível obter coordenadas (…); o guia será gerado
 sem mapa" — and fall through to the plain guide. A per-row miss just
 omits that card's link.
 
-Exposed as `window.__sigcPro.agendaMap = { fetchCoords(uf, controles) }`
-(async). All other code stays fetch-free.
+As shipped, `fetchCoords` stays private to agenda-map, which calls
+`window.__sigcPro.dayGuide.generate(coords)` directly — nothing is
+exposed on `__sigcPro` (an `agendaMap.fetchCoords` export was planned
+here; add it only when a second consumer appears, e.g. the future
+travel-sanity check). All other code stays fetch-free.
 
 ## Guide integration (agenda-day-guide.js)
 
@@ -119,3 +122,8 @@ Exposed as `window.__sigcPro.agendaMap = { fetchCoords(uf, controles) }`
   `fetch(` is planted outside agenda-map (test the tripwire itself).
 - Live field test: both URL forms, multi-controle day, coordinate-less
   household (missing lat/lon cells), declined consent path.
+
+Status 2026-07-17: the tripwire self-test shipped as
+`scripts/test-privacy-gate.sh` (pre-commit runs it whenever the gate or
+the self-test changes). The bun mirror tests were not written — the pure
+parts were validated manually during the live field test.
