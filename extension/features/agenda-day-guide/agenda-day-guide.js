@@ -186,6 +186,20 @@
     return { projected, scaleBarKm, scaleBarPx };
   }
 
+  // Okabe-Ito colorblind-safe 8-color palette (same design system as
+  // KML export's vermillion/sky-blue pair, extended to the full set here
+  // since more than 2 teams need distinguishing on the combined map).
+  const TEAM_COLORS = [
+    '#E69F00', '#56B4E9', '#009E73', '#F0E442',
+    '#0072B2', '#D55E00', '#CC79A7', '#000000',
+  ];
+
+  // equipeIndex: 0-based position of a team within groupByEquipe's
+  // already-name-sorted output. Cycles past 8 teams.
+  function teamColor(equipeIndex) {
+    return TEAM_COLORS[equipeIndex % TEAM_COLORS.length];
+  }
+
   // --- HTML builders ------------------------------------------------
 
   const escapeHtml = (s) => window.__sigcPro.escapeHtml(s);
