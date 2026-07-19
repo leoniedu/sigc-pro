@@ -1,3 +1,4 @@
 .remember/
 .DS_Store
 dist/sigc-pro-extension/
+node_modules/
