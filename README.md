@@ -58,7 +58,8 @@ PDF-pro e KML-pro só agem na Lista de Endereços (detectada pelo cabeçalho
 `SIGC - PNS2026` + título da página) e validam o layout da tabela antes de
 qualquer leitura — em qualquer outra página do SIGC eles permanecem
 inativos. A extensão só injeta seus scripts nos domínios do SIGC
-(`portalweb*.ibge.gov.br` e `w3sigcpns2025.ibge.gov.br`), nunca em outras
+(`portalweb.ibge.gov.br`, `portalweb2.ibge.gov.br` e
+`w3sigcpns2025.ibge.gov.br`), nunca em outras
 páginas do IBGE. CSV-pro (relatórios) não depende do layout de nenhuma
 pesquisa específica e ativa em qualquer relatório com tabela. O CSV-PRO da
 Agenda ativa em qualquer página cuja URL termine em `/AdministracaoAgenda`,

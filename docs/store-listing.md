@@ -72,8 +72,9 @@ portal's native features.
 ```
 The extension injects a content script only on pages of the SIGC portal
 (Sistema Integrado de Gestão da Coleta, IBGE) — matched by
-`portalweb*.ibge.gov.br` and `w3sigcpns2025.ibge.gov.br`, the specific
-hosts SIGC is served from, not the whole ibge.gov.br domain — to add
+`portalweb.ibge.gov.br`, `portalweb2.ibge.gov.br`, and
+`w3sigcpns2025.ibge.gov.br`, the specific hosts SIGC is served from,
+not the whole ibge.gov.br domain — to add
 export buttons (PDF, KML, CSV) to report toolbars
 and Agenda helpers (CSV export, slot checks, printable day guide, date
 picker), reading data already rendered on the page. No access to any

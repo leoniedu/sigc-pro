@@ -68,11 +68,13 @@ Working checklist; move items up/down freely. Specs live in
 - [x] Repo public, GitHub Pages (privacy policy), Chrome Web Store
       submission (unlisted)
 - [x] Narrowed `content_scripts.matches` from `https://*.ibge.gov.br/*`
-      to `portalweb*.ibge.gov.br` + `w3sigcpns2025.ibge.gov.br` — the
-      specific SIGC hosts (portalweb/portalweb2 confirmed in use,
-      w3sigcpns2025 confirmed as the F5-proxied backend), not the whole
-      ibge.gov.br domain; a `portalweb*` wildcard tolerates a future
-      portalweb3/4/… without a manifest update
+      to the three specific SIGC hosts: `portalweb.ibge.gov.br`,
+      `portalweb2.ibge.gov.br` (both confirmed in daily use), and
+      `w3sigcpns2025.ibge.gov.br` (confirmed as the F5-proxied backend)
+      — not the whole ibge.gov.br domain. A `portalweb*` wildcard was
+      tried first but Chrome rejects `*` glued mid-hostname (only a
+      full-label `*.domain` wildcard is valid) — a future portalweb3/4/…
+      needs a manifest update (and re-review) to be added
 
 ## Next
 
