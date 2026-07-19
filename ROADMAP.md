@@ -67,6 +67,12 @@ Working checklist; move items up/down freely. Specs live in
 - [x] Real icon: location-pin mark replacing the flat blue square
 - [x] Repo public, GitHub Pages (privacy policy), Chrome Web Store
       submission (unlisted)
+- [x] Narrowed `content_scripts.matches` from `https://*.ibge.gov.br/*`
+      to `portalweb*.ibge.gov.br` + `w3sigcpns2025.ibge.gov.br` — the
+      specific SIGC hosts (portalweb/portalweb2 confirmed in use,
+      w3sigcpns2025 confirmed as the F5-proxied backend), not the whole
+      ibge.gov.br domain; a `portalweb*` wildcard tolerates a future
+      portalweb3/4/… without a manifest update
 
 ## Next
 
@@ -96,8 +102,6 @@ Working checklist; move items up/down freely. Specs live in
       (deliberately left raw for now, see design doc)
 - [ ] New pesquisas as they appear (add `PESQUISAS` entries; labels from the
       live table)
-- [ ] Narrow `content_scripts.matches` from `https://*.ibge.gov.br/*` to the
-      actual SIGC host — likely reduces Chrome Web Store review friction
 - [ ] Zip as Release asset via GitHub Action (covers commits made without
       the local hook)
 
