@@ -9,7 +9,8 @@
 // no network); the file itself is inline-CSS-only with CSS radio tabs —
 // no <script>, no external refs — so it opens anywhere from file:// and
 // Ctrl+P on a tab prints that team's guide. Dia view only: the button is
-// inserted/removed by the MutationObserver as the active view toggles.
+// inserted/removed by the shared mountWidget observer (sigc-common.js) as
+// the active view toggles.
 // Spec: docs/superpowers/specs/2026-07-16-agenda-day-guide-design.md
 (function () {
   'use strict';
