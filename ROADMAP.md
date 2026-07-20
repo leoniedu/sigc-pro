@@ -43,7 +43,7 @@ Working checklist; move items up/down freely. Specs live in
 - [x] Agenda "Guia + Mapa": opt-in coordinates fetch from SIGC's own
       /relatorio/filtrar (same-origin, click+confirm, quarantined in
       features/agenda-map/ by the reworked privacy gate) feeding the day
-      guide with geo: links and chunked Google Maps route links
+      guide with per-visit and chunked Google Maps route links
       (`2026-07-16-agenda-map-design.md`; a per-team GPX download shipped
       then was removed — its data: URI link doesn't open from a
       printed/PDF guide)
