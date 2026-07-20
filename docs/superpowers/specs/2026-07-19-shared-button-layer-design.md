@@ -1,7 +1,7 @@
 # Shared button layer — design
 
 **Date:** 2026-07-19
-**Status:** approved
+**Status:** implemented
 
 ## Problem
 

@@ -78,14 +78,12 @@ Working checklist; move items up/down freely. Specs live in
 
 ## Next
 
-- [ ] **Shared button layer** (top finding of the 2026-07-18 whole-project
-      review): `mountButton(...)` plus `makeDtProButton`/`makeFcProButton`
-      factories in sigc-common, with ONE MutationObserver scoped to the
-      calendar/table container (not document.body) dispatching to
-      registered ticks — collapses ~270 duplicated wiring/styling lines
-      across 7 features and removes per-mutation document-wide queries.
-      Own commit + full live re-test of every button; land after 0.2.27
-      clears Store review.
+- [x] **Shared button layer**: `mountWidget(...)` + `makeDtProButton`/
+      `makeFcProButton` factories in sigc-common; ONE shared
+      MutationObserver on document.body dispatches to all registered
+      mounts (was 7+ observers). All 8 features migrated; bun test suite
+      (tests/) pins mount lifecycle, factories, and pure helpers. See
+      docs/superpowers/specs/2026-07-19-shared-button-layer-design.md.
 
 - [ ] **PDF customization** (see `2026-07-14-pdf-customization-design.md`):
   - [ ] per-column styles (`fontSize`, `bold`, …) via pesquisa config
