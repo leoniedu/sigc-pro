@@ -101,10 +101,9 @@
       );
     } else {
       lines.push(`${violations.length} slot(s) aberto(s) antes do prazo mínimo:`);
-      listCapped(lines, violations, (v) => {
-        const zonas = v.zonas ? ` — ${v.zonas}` : '';
-        return `  • ${slotLabel(v)}${zonas}`;
-      });
+      // Team/day/time only — zonas are covered by the separate NOMES
+      // check below and just add noise here.
+      listCapped(lines, violations, (v) => `  • ${slotLabel(v)}`);
     }
 
     lines.push('', '— NOMES (zona × equipe) —');

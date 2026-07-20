@@ -63,8 +63,12 @@
     wrap.style.verticalAlign = 'middle';
     wrap.style.marginLeft = '.5em';
 
+    // 🗓️ (spiral calendar), not 📅: several platforms render 📅 as a
+    // torn-page desk calendar with a fixed "17" printed on it — decorative
+    // art baked into the glyph, not a live date — which reads as a stuck
+    // clock. 🗓️ has no date printed on it.
     const btn = window.__sigcPro.makeFcProButton({
-      text: '📅',
+      text: '🗓️',
       title: 'Ir para a data (SIGC-PRO)',
     });
     // Icon-only button: tighter box than the factory's toolbar default;
