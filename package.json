@@ -2,6 +2,6 @@
   "name": "sigc-pro-dev",
   "private": true,
   "devDependencies": {
-    "@happy-dom/global-registrator": "^20.11.0"
+    "@happy-dom/global-registrator": "20.11.0"
   }
 }
