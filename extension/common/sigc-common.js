@@ -525,6 +525,69 @@
     }
   }
 
+  // --- SIGC-PRO button factories --------------------------------------
+  // The two toolbar button styles used across features, each defined
+  // exactly once (previously copy-pasted 3× each).
+
+  // DataTables toolbar button (Lista de Endereços). Same classes as
+  // SIGC's own icon buttons (dt-btn-icon etc.) — their CSS controls the
+  // exact box metrics (size, padding, vertical position) that keep
+  // native buttons aligned with each other. Matching pixel values by
+  // hand kept drifting; reusing the classes guarantees identical
+  // alignment since it's the same rules. We only override color and
+  // font to make ours read as SIGC-PRO, not layout.
+  function makeDtProButton({ id, lines, title, onClick }) {
+    const btn = document.createElement('button');
+    btn.id = id;
+    btn.type = 'button';
+    btn.className = 'dt-button buttons-html5 dt-btn-icon';
+    const span = document.createElement('span');
+    lines.forEach((line, i) => {
+      if (i > 0) span.appendChild(document.createElement('br'));
+      span.appendChild(document.createTextNode(line));
+    });
+    btn.appendChild(span);
+    btn.title = title;
+    btn.style.background = '#005a9c';
+    btn.style.borderColor = '#005a9c';
+    btn.style.color = '#fff';
+    btn.style.fontWeight = '700';
+    btn.style.fontSize = '7px';
+    btn.style.lineHeight = '1.15';
+    btn.style.textAlign = 'center';
+    btn.style.textTransform = 'uppercase';
+    // The native icon glyph is small/fixed-size; our two-line text label
+    // is wider, so the class's width: auto grows to fit it. Pin box
+    // dimensions only (not display/align-items, which broke vertical
+    // alignment before) to force the same square footprint as the icon
+    // buttons.
+    btn.style.width = '36px';
+    btn.style.minWidth = '36px';
+    btn.style.maxWidth = '36px';
+    btn.style.borderRadius = '4px';
+    btn.addEventListener('click', onClick);
+    return btn;
+  }
+
+  // FullCalendar toolbar button (Agenda). FullCalendar's own button
+  // classes give correct box metrics/spacing next to Dia/Semana; only
+  // color is overridden to read as SIGC-PRO. id/onClick optional: the
+  // date-picker composes this inside a wrapper that owns the widget id
+  // and wires its own listeners.
+  function makeFcProButton({ id, text, title, onClick }) {
+    const btn = document.createElement('button');
+    if (id) btn.id = id;
+    btn.type = 'button';
+    btn.className = 'fc-button fc-button-primary';
+    btn.textContent = text;
+    btn.title = title;
+    btn.style.background = '#005a9c';
+    btn.style.borderColor = '#005a9c';
+    btn.style.marginLeft = '4px';
+    if (onClick) btn.addEventListener('click', onClick);
+    return btn;
+  }
+
   // Note: agenda-day-guide additionally injects `dayGuide` (generate /
   // diaViewActive) onto this object at load time, consumed by agenda-map;
   // manifest load order guarantees day-guide runs first.
@@ -558,6 +621,8 @@
     readAgendaSlots,
     agendaMinScheduleDate,
     mountWidget,
+    makeDtProButton,
+    makeFcProButton,
   };
   console.log(`${TAG} common runtime loaded.`);
 })();
