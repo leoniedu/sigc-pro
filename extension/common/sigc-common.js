@@ -457,6 +457,74 @@
     return `lista-enderecos-${pesquisa.id.toLowerCase()}_${controle}_${tipo}_${data}`;
   }
 
+  // --- shared widget mounting ----------------------------------------
+  // ONE registry + ONE MutationObserver on document.body for every
+  // SIGC-PRO widget, replacing the per-feature observers (7+ of them,
+  // each fanning out on every DOM mutation on busy FullCalendar/
+  // DataTables pages). Every mount is insert-or-remove: each tick, a
+  // widget exists iff its anchor exists and its `when` gate passes, so
+  // toolbar re-renders that wipe a widget are healed on the next batch
+  // and SPA-navigating away removes it.
+  const mounts = [];
+  let mountObserver = null;
+
+  // Per-batch context: memoizes the lookups several mounts share, so a
+  // batch costs one document-wide query per lookup, not one per mount.
+  function makeTickCtx() {
+    const memo = new Map();
+    const once = (key, fn) => {
+      if (!memo.has(key)) memo.set(key, fn());
+      return memo.get(key);
+    };
+    return {
+      dtToolbar: () => once('dtToolbar', () => document.querySelector('.dt-buttons')),
+      agendaChunk: () => once('agendaChunk', findAgendaToolbarChunk),
+      onLista: () => once('onLista', onListaEnderecos),
+      onAgenda: () => once('onAgenda', onAgendaPage),
+    };
+  }
+
+  // try/catch per mount: one broken mount must never break the others —
+  // the isolation the per-feature IIFEs used to provide.
+  function tickMount(m, ctx) {
+    try {
+      const existing = document.getElementById(m.id);
+      const anchorEl = m.anchor(ctx);
+      const ok = anchorEl && (!m.when || m.when(ctx));
+      if (ok && !existing) anchorEl.appendChild(m.build());
+      else if (!ok && existing) existing.remove();
+    } catch (err) {
+      console.warn(`${TAG} mount "${m.id}" tick failed:`, err);
+    }
+  }
+
+  function tickAllMounts() {
+    const ctx = makeTickCtx();
+    mounts.forEach((m) => tickMount(m, ctx));
+  }
+
+  // { id, anchor: (ctx) => Element|null, when?: (ctx) => bool,
+  //   build: () => Element }. Registers the widget, ticks it once
+  // immediately (covers already-loaded pages), and lazily starts the
+  // shared observer. The union config (childList + subtree + class
+  // attributes) serves every mount — class attributes because the
+  // Dia/Semana toggle flips fc-button-active without re-rendering the
+  // toolbar; ticks are cheap (memoized ctx + O(1) getElementById), so
+  // the extra firings don't matter.
+  function mountWidget(spec) {
+    mounts.push(spec);
+    tickMount(spec, makeTickCtx());
+    if (!mountObserver) {
+      mountObserver = new MutationObserver(tickAllMounts);
+      mountObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class'],
+      });
+    }
+  }
+
   // Note: agenda-day-guide additionally injects `dayGuide` (generate /
   // diaViewActive) onto this object at load time, consumed by agenda-map;
   // manifest load order guarantees day-guide runs first.
@@ -489,6 +557,7 @@
     getAgendaUf,
     readAgendaSlots,
     agendaMinScheduleDate,
+    mountWidget,
   };
   console.log(`${TAG} common runtime loaded.`);
 })();
