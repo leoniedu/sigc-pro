@@ -124,65 +124,26 @@
     }
   }
 
-  function insertButton(pesquisa, toolbar) {
-    if (document.getElementById(BUTTON_ID)) return;
-
-    const btn = document.createElement('button');
-    btn.id = BUTTON_ID;
-    btn.type = 'button';
-    // Same classes as SIGC's own icon buttons (dt-btn-icon etc.) — their
-    // CSS controls the exact box metrics (size, padding, vertical
-    // position) that keep native buttons aligned with each other. Matching
-    // pixel values by hand kept drifting; reusing the classes guarantees
-    // identical alignment since it's the same rules. We only override
-    // color and font to make ours read as SIGC-PRO, not layout.
-    btn.className = 'dt-button buttons-html5 dt-btn-icon';
-    btn.innerHTML = '<span>KML<br>PRO</span>';
-    btn.title = 'Exportar KML (SIGC-PRO)';
-    btn.style.background = '#005a9c';
-    btn.style.borderColor = '#005a9c';
-    btn.style.color = '#fff';
-    btn.style.fontWeight = '700';
-    btn.style.fontSize = '7px';
-    btn.style.lineHeight = '1.15';
-    btn.style.textAlign = 'center';
-    btn.style.textTransform = 'uppercase';
-    // The native icon glyph is small/fixed-size; our two-line text label is
-    // wider, so the class's width: auto grows to fit it. Pin box dimensions
-    // only (not display/align-items, which broke vertical alignment before)
-    // to force the same square footprint as the icon buttons.
-    btn.style.width = '36px';
-    btn.style.minWidth = '36px';
-    btn.style.maxWidth = '36px';
-    btn.style.borderRadius = '4px';
-    btn.addEventListener('click', () => exportKml(pesquisa));
-    toolbar.appendChild(btn);
-
-    console.log(`${TAG} KML-pro button added (${pesquisa.id}).`);
-  }
-
+  // Pesquisa gate (whenReady, 10 s give-up) kept: the KML columns are
+  // pesquisa-specific. Mounting itself moves to the shared observer;
+  // `when` re-checks the page each tick, so the button now also REMOVES
+  // itself on SPA-nav away from the Lista de Endereços.
   window.__sigcPro.whenReady(
     () => document.body,
     (pesquisa) => {
-      // SIGC builds and rebuilds the report view via in-app navigation
-      // (e.g. opening another controle), so the toolbar can appear at any
-      // time and is recreated without our button. Watch the DOM and insert
-      // whenever a toolbar exists without it — but only on the Lista de
-      // Endereços page, since in-app navigation can leave for other SIGC
-      // pages without a full reload. insertButton is idempotent and the
-      // getElementById guard keeps the observer cheap.
-      const tryInsert = () => {
-        // O(1) button-exists check first: it neutralizes the steady-state
-        // cost of this tick, which otherwise scans every <h6> per mutation.
-        if (document.getElementById(BUTTON_ID)) return;
-        if (!window.__sigcPro.onListaEnderecos()) return;
-        const toolbar = document.querySelector('.dt-buttons');
-        if (toolbar) insertButton(pesquisa, toolbar);
-      };
-      tryInsert();
-      new MutationObserver(tryInsert).observe(document.body, {
-        childList: true,
-        subtree: true,
+      window.__sigcPro.mountWidget({
+        id: BUTTON_ID,
+        anchor: (ctx) => ctx.dtToolbar(),
+        when: (ctx) => ctx.onLista(),
+        build: () => {
+          console.log(`${TAG} KML-pro button added (${pesquisa.id}).`);
+          return window.__sigcPro.makeDtProButton({
+            id: BUTTON_ID,
+            lines: ['KML', 'PRO'],
+            title: 'Exportar KML (SIGC-PRO)',
+            onClick: () => exportKml(pesquisa),
+          });
+        },
       });
     }
   );
