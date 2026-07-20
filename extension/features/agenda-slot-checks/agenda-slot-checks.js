@@ -146,40 +146,19 @@
     );
   }
 
-  function insertButton(chunk) {
-    if (document.getElementById(BUTTON_ID)) return;
-
-    const btn = document.createElement('button');
-    btn.id = BUTTON_ID;
-    btn.type = 'button';
-    btn.className = 'fc-button fc-button-primary';
-    btn.textContent = 'Verificar Slots';
-    btn.title = 'Verificar prazo mínimo e nomes zona/equipe dos slots (SIGC-PRO)';
-    btn.style.background = '#005a9c';
-    btn.style.borderColor = '#005a9c';
-    btn.style.marginLeft = '4px';
-    btn.addEventListener('click', checkSlots);
-    chunk.appendChild(btn);
-
-    console.log(`${TAG} Verificar Slots button added.`);
-  }
-
-  // Same re-insertion posture as agenda-csv-export.js: FullCalendar's
-  // toolbar is virtual-DOM diffed and can drop a foreign button on
-  // view/date navigation.
-  window.__sigcPro.whenReadyGeneric(
-    () => window.__sigcPro.onAgendaPage() && window.__sigcPro.findAgendaToolbarChunk(),
-    () => {
-      const tryInsert = () => {
-        if (document.getElementById(BUTTON_ID)) return;
-        const chunk = window.__sigcPro.findAgendaToolbarChunk();
-        if (chunk) insertButton(chunk);
-      };
-      tryInsert();
-      new MutationObserver(tryInsert).observe(document.body, {
-        childList: true,
-        subtree: true,
+  // Same mount posture as agenda-csv-export.
+  window.__sigcPro.mountWidget({
+    id: BUTTON_ID,
+    anchor: (ctx) => ctx.agendaChunk(),
+    when: (ctx) => ctx.onAgenda(),
+    build: () => {
+      console.log(`${TAG} Verificar Slots button added.`);
+      return window.__sigcPro.makeFcProButton({
+        id: BUTTON_ID,
+        text: 'Verificar Slots',
+        title: 'Verificar prazo mínimo e nomes zona/equipe dos slots (SIGC-PRO)',
+        onClick: checkSlots,
       });
-    }
-  );
+    },
+  });
 })();

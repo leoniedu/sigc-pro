@@ -56,44 +56,21 @@
     console.log(`${TAG} CSV exported: ${rows.length} slots.`);
   }
 
-  function insertButton(chunk) {
-    if (document.getElementById(BUTTON_ID)) return;
-
-    const btn = document.createElement('button');
-    btn.id = BUTTON_ID;
-    btn.type = 'button';
-    // FullCalendar's own button classes give correct box metrics/spacing
-    // next to Dia/Semana; only color is overridden to read as SIGC-PRO,
-    // same reasoning as csv-export.js reusing dt-btn-icon.
-    btn.className = 'fc-button fc-button-primary';
-    btn.textContent = 'CSV-PRO';
-    btn.title = 'Exportar slots da agenda (SIGC-PRO)';
-    btn.style.background = '#005a9c';
-    btn.style.borderColor = '#005a9c';
-    btn.style.marginLeft = '4px';
-    btn.addEventListener('click', exportAgendaCsv);
-    chunk.appendChild(btn);
-
-    console.log(`${TAG} Agenda CSV-pro button added.`);
-  }
-
-  // FullCalendar re-renders its toolbar (virtual-DOM diffed) on view/date
-  // navigation, which can wipe a foreign button we injected — same failure
-  // mode ROADMAP.md notes for the Lista de Endereços toolbar, same fix:
-  // idempotent insert + MutationObserver re-insert.
-  window.__sigcPro.whenReadyGeneric(
-    () => window.__sigcPro.onAgendaPage() && window.__sigcPro.findAgendaToolbarChunk(),
-    () => {
-      const tryInsert = () => {
-        if (document.getElementById(BUTTON_ID)) return;
-        const chunk = window.__sigcPro.findAgendaToolbarChunk();
-        if (chunk) insertButton(chunk);
-      };
-      tryInsert();
-      new MutationObserver(tryInsert).observe(document.body, {
-        childList: true,
-        subtree: true,
+  // FullCalendar re-renders its toolbar (virtual-DOM diffed) on
+  // view/date navigation, which can wipe a foreign button — the shared
+  // observer re-mounts on the next mutation batch.
+  window.__sigcPro.mountWidget({
+    id: BUTTON_ID,
+    anchor: (ctx) => ctx.agendaChunk(),
+    when: (ctx) => ctx.onAgenda(),
+    build: () => {
+      console.log(`${TAG} Agenda CSV-pro button added.`);
+      return window.__sigcPro.makeFcProButton({
+        id: BUTTON_ID,
+        text: 'CSV-PRO',
+        title: 'Exportar slots da agenda (SIGC-PRO)',
+        onClick: exportAgendaCsv,
       });
-    }
-  );
+    },
+  });
 })();
