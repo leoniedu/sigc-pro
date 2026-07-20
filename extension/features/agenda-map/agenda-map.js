@@ -195,43 +195,25 @@
     window.__sigcPro.dayGuide.generate(enderecos);
   }
 
-  function insertButton(chunk) {
-    if (document.getElementById(BUTTON_ID)) return;
-    const btn = document.createElement('button');
-    btn.id = BUTTON_ID;
-    btn.type = 'button';
-    btn.className = 'fc-button fc-button-primary';
-    btn.textContent = 'Guia + Mapa';
-    btn.title = 'Guia do dia com mapa — faz uma consulta ao servidor do SIGC (SIGC-PRO)';
-    btn.style.background = '#005a9c';
-    btn.style.borderColor = '#005a9c';
-    btn.style.marginLeft = '4px';
-    btn.addEventListener('click', () => { exportGuideMap(btn); });
-    chunk.appendChild(btn);
-    console.log(`${TAG} Guia + Mapa button added.`);
-  }
-
-  // Same Dia-only visibility as Guia do Dia, reusing its detector.
-  window.__sigcPro.whenReadyGeneric(
-    () => window.__sigcPro.onAgendaPage() && window.__sigcPro.findAgendaToolbarChunk() &&
-      window.__sigcPro.dayGuide,
-    () => {
-      const tryUpdate = () => {
-        const existing = document.getElementById(BUTTON_ID);
-        const chunk = window.__sigcPro.findAgendaToolbarChunk();
-        if (window.__sigcPro.onAgendaPage() && chunk && window.__sigcPro.dayGuide.diaViewActive()) {
-          if (!existing) insertButton(chunk);
-        } else if (existing) {
-          existing.remove();
-        }
-      };
-      tryUpdate();
-      new MutationObserver(tryUpdate).observe(document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['class'],
+  // Same Dia-only visibility as Guia do Dia. The old dayGuide-presence
+  // poll is gone: manifest load order guarantees agenda-day-guide ran
+  // first, and `when` re-checks it defensively each tick anyway.
+  // exportGuideMap needs the button itself (to disable it during the
+  // fetch) — taken from the click event.
+  window.__sigcPro.mountWidget({
+    id: BUTTON_ID,
+    anchor: (ctx) => ctx.agendaChunk(),
+    when: (ctx) =>
+      ctx.onAgenda() && !!window.__sigcPro.dayGuide &&
+      window.__sigcPro.dayGuide.diaViewActive(),
+    build: () => {
+      console.log(`${TAG} Guia + Mapa button added.`);
+      return window.__sigcPro.makeFcProButton({
+        id: BUTTON_ID,
+        text: 'Guia + Mapa',
+        title: 'Guia do dia com mapa — faz uma consulta ao servidor do SIGC (SIGC-PRO)',
+        onClick: (e) => exportGuideMap(e.currentTarget),
       });
-    }
-  );
+    },
+  });
 })();

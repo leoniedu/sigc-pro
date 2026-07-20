@@ -701,48 +701,25 @@ ${sections}
     generate(null);
   }
 
-  function insertButton(chunk) {
-    if (document.getElementById(BUTTON_ID)) return;
-    const btn = document.createElement('button');
-    btn.id = BUTTON_ID;
-    btn.type = 'button';
-    btn.className = 'fc-button fc-button-primary';
-    btn.textContent = 'Guia do Dia';
-    btn.title = 'Baixar guia do dia por equipe (SIGC-PRO)';
-    btn.style.background = '#005a9c';
-    btn.style.borderColor = '#005a9c';
-    btn.style.marginLeft = '4px';
-    btn.addEventListener('click', exportGuide);
-    chunk.appendChild(btn);
-    console.log(`${TAG} Guia do Dia button added.`);
-  }
-
   // Consumed by agenda-map ("Guia + Mapa"): same pipeline, plus enderecos.
   window.__sigcPro.dayGuide = { generate, diaViewActive };
 
-  // Unlike the other agenda buttons, this one exists only while the Dia
-  // view is active: each observer tick inserts or REMOVES it. attributes:
-  // ['class'] is observed so the fc-button-active toggle itself fires a
-  // tick even if the toolbar isn't re-rendered.
-  window.__sigcPro.whenReadyGeneric(
-    () => window.__sigcPro.onAgendaPage() && window.__sigcPro.findAgendaToolbarChunk(),
-    () => {
-      const tryUpdate = () => {
-        const existing = document.getElementById(BUTTON_ID);
-        const chunk = window.__sigcPro.findAgendaToolbarChunk();
-        if (window.__sigcPro.onAgendaPage() && chunk && diaViewActive()) {
-          if (!existing) insertButton(chunk);
-        } else if (existing) {
-          existing.remove();
-        }
-      };
-      tryUpdate();
-      new MutationObserver(tryUpdate).observe(document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['class'],
+  // Dia-view-only: `when` flips with the fc-button-active class, which
+  // the shared observer watches (attributes: ['class']), so toggling
+  // Dia/Semana inserts/removes the button even when the toolbar isn't
+  // re-rendered.
+  window.__sigcPro.mountWidget({
+    id: BUTTON_ID,
+    anchor: (ctx) => ctx.agendaChunk(),
+    when: (ctx) => ctx.onAgenda() && diaViewActive(),
+    build: () => {
+      console.log(`${TAG} Guia do Dia button added.`);
+      return window.__sigcPro.makeFcProButton({
+        id: BUTTON_ID,
+        text: 'Guia do Dia',
+        title: 'Baixar guia do dia por equipe (SIGC-PRO)',
+        onClick: exportGuide,
       });
-    }
-  );
+    },
+  });
 })();
