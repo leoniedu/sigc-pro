@@ -398,7 +398,11 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       `<div class="hora">${hora} ${seqBadge}<span class="badge">RESERVADO</span></div>`,
       r.endereco ? `<div class="endereco">${e(r.endereco)}</div>` : '',
       info && info.lat != null
-        ? `<div class="geo"><a href="geo:${fmtCoord(info)}">abrir no mapa</a></div>` : '',
+        // Same Google Maps driving-directions link the Rota row uses
+        // (gmapsRouteUrl degrades to a plain destination pin for one
+        // point) — geo: links don't reliably open on desktop Chrome,
+        // where field users read this guide.
+        ? `<div class="geo"><a href="${e(gmapsRouteUrl([info]))}">abrir no mapa</a></div>` : '',
       morador,
       ids ? `<div class="ids">${ids}</div>` : '',
       r.observacao ? `<div class="obs">Obs: ${e(r.observacao)}</div>` : '',
