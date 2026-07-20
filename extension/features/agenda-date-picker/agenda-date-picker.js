@@ -55,9 +55,7 @@
   // sees/clicks, plus an invisible (opacity:0, but layout-participating —
   // showPicker() throws on display:none) date input right behind it that
   // supplies the native calendar popup and fires gotoDate on change.
-  function insertButton(title) {
-    if (document.getElementById(WRAP_ID)) return;
-
+  function buildPicker() {
     const wrap = document.createElement('span');
     wrap.id = WRAP_ID;
     wrap.style.position = 'relative';
@@ -65,13 +63,13 @@
     wrap.style.verticalAlign = 'middle';
     wrap.style.marginLeft = '.5em';
 
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'fc-button fc-button-primary';
-    btn.title = 'Ir para a data (SIGC-PRO)';
-    btn.textContent = '📅';
-    btn.style.background = '#005a9c';
-    btn.style.borderColor = '#005a9c';
+    const btn = window.__sigcPro.makeFcProButton({
+      text: '📅',
+      title: 'Ir para a data (SIGC-PRO)',
+    });
+    // Icon-only button: tighter box than the factory's toolbar default;
+    // the wrap owns the outer margin.
+    btn.style.marginLeft = '0';
     btn.style.lineHeight = '1';
     btn.style.padding = '.2em .3em';
 
@@ -103,29 +101,14 @@
 
     wrap.appendChild(btn);
     wrap.appendChild(input);
-    title.appendChild(wrap);
     console.log(`${TAG} date picker added.`);
+    return wrap;
   }
 
-  window.__sigcPro.whenReadyGeneric(
-    () => window.__sigcPro.onAgendaPage() && findTitle(),
-    () => {
-      const tryUpdate = () => {
-        const existing = document.getElementById(WRAP_ID);
-        const title = findTitle();
-        if (window.__sigcPro.onAgendaPage() && title) {
-          if (!existing) insertButton(title);
-        } else if (existing) {
-          existing.remove();
-        }
-      };
-      tryUpdate();
-      new MutationObserver(tryUpdate).observe(document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['class'],
-      });
-    }
-  );
+  window.__sigcPro.mountWidget({
+    id: WRAP_ID,
+    anchor: () => findTitle(),
+    when: (ctx) => ctx.onAgenda(),
+    build: buildPicker,
+  });
 })();
