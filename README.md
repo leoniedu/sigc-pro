@@ -10,8 +10,8 @@ para o SIGC — Sistema Integrado de Gestão da Coleta (IBGE), no espírito do
 
 ## Funcionalidades
 
-Três botões azuis, menores que os nativos, adicionados ao lado dos botões de
-exportação existentes:
+Botões azuis, menores que os nativos, adicionados ao lado dos botões
+existentes:
 
 Na **Lista de Endereços** (PNS 2026):
 
@@ -49,6 +49,25 @@ Em **Administrar Agenda** (qualquer UF/pesquisa cuja URL termine em
   sexta-feira) e zonas cujo nome não corresponde à equipe da coluna
   (padrão `UF_Equipe_Local`). Não altera nada, não bloqueia o CSV-PRO —
   é só um alerta sob demanda, na visualização atual.
+- **Seletor de data** (🗓️) — ao lado do título do período no topo do
+  calendário, abre o seletor de data nativo do navegador e pula
+  diretamente para o dia escolhido, sem precisar navegar semana a semana.
+- **Guia do Dia** (só na visualização Dia) — baixa um guia HTML autônomo
+  e sem dependências (abre de `file://`, sem rede): uma aba Resumo com
+  estatísticas do dia e uma grade horário × equipe dos slots, uma aba
+  **Lab** compartilhável com o laboratório (Controle truncado a 11
+  dígitos, sem Domicílio nem outros dados pessoais) e uma aba por equipe
+  com um cartão por visita (endereço, morador, telefone, Controle/
+  Domicílio, observações) e os horários livres. Ctrl+P na aba imprime só
+  aquela página.
+- **Guia + Mapa** (opcional) — o mesmo guia, enriquecido: mediante clique
+  e confirmação, consulta o próprio servidor do SIGC para obter a zona
+  real de cada visita e as coordenadas; cada cartão de visita ganha um
+  link para o Google Maps (rota até o endereço), cada equipe ganha um
+  link de rota Google Maps encadeando todas as suas visitas do dia (a
+  partir de duas visitas), e cada aba (exceto Lab) ganha um mapa-esquema
+  em SVG da rota do dia — sem imagens externas, visitas numeradas na
+  ordem de horário, uma cor por equipe.
 
 Os botões nativos de PDF/CSV/Excel do SIGC continuam intocados e visíveis —
 o PDF nativo funciona normalmente; CSV/Excel nativos funcionam pela VPN e
@@ -75,8 +94,9 @@ também sem depender de pesquisa específica.
 4. Clique em **Carregar sem compactação** e selecione a pasta `extension/`
    deste repositório.
 5. Abra a Lista de Endereços (ou outro relatório, ou a Agenda) no SIGC e
-   clique em **PDF-pro**, **KML-pro**, **CSV-pro**, **CSV-PRO** (Agenda) ou
-   **Verificar Slots** (Agenda).
+   clique no botão **PRO** que precisar: **PDF-pro**, **KML-pro**,
+   **CSV-pro**, ou, na Agenda, **CSV-PRO**, **Verificar Slots**, o
+   seletor de data (🗓️), **Guia do Dia** ou **Guia + Mapa**.
 
 Requer Chrome 111 ou superior.
 
