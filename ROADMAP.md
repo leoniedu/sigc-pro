@@ -43,7 +43,8 @@ Working checklist; move items up/down freely. Specs live in
 - [x] Agenda "Guia + Mapa": opt-in coordinates fetch from SIGC's own
       /relatorio/filtrar (same-origin, click+confirm, quarantined in
       features/agenda-map/ by the reworked privacy gate) feeding the day
-      guide with per-visit and chunked Google Maps route links
+      guide with per-visit Google Maps route links, later replaced by the
+      dynamic checkbox selector below
       (`2026-07-16-agenda-map-design.md`; a per-team GPX download shipped
       then was removed — its data: URI link doesn't open from a
       printed/PDF guide)
@@ -75,6 +76,23 @@ Working checklist; move items up/down freely. Specs live in
       tried first but Chrome rejects `*` glued mid-hostname (only a
       full-label `*.domain` wildcard is valid) — a future portalweb3/4/…
       needs a manifest update (and re-review) to be added
+- [x] Guia + Mapa: dynamic route selection — the old auto-chunked,
+      all-visits "Rota:" link replaced by a checkbox per stop (per team,
+      capped at 9 per route, default state depends on routable count)
+      plus a combined "Rota do dia" section on Resumo (always starts
+      unchecked); the Google Maps link updates live via one inline
+      `<script>` block, the guide's one deliberate exception to its
+      no-JS constraint (`2026-07-22-agenda-day-guide-dynamic-route-design.md`)
+- [x] Guia + Mapa: team-panel checkboxes moved from a standalone list
+      above the cards onto each visit card itself, so a checked stop
+      never needs cross-referencing against a separate list; Resumo's
+      combined list is unaffected
+      (`2026-07-22-agenda-day-guide-route-checkbox-on-card-design.md`)
+- [x] SIGC added a blank-header "lupa" (map/KML) icon column as the new
+      first column of Lista de Endereços — every column index in
+      `PESQUISAS.PNS2026.columns` shifted +1; PDF export needed its own
+      shifted-back-by-1 view since DataTables' PDF button excludes that
+      icon column from its exported layout
 
 ## Next
 

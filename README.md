@@ -63,11 +63,14 @@ Em **Administrar Agenda** (qualquer UF/pesquisa cuja URL termine em
 - **Guia + Mapa** (opcional) — o mesmo guia, enriquecido: mediante clique
   e confirmação, consulta o próprio servidor do SIGC para obter a zona
   real de cada visita e as coordenadas; cada cartão de visita ganha um
-  link para o Google Maps (rota até o endereço), cada equipe ganha um
-  link de rota Google Maps encadeando todas as suas visitas do dia (a
-  partir de duas visitas), e cada aba (exceto Lab) ganha um mapa-esquema
-  em SVG da rota do dia — sem imagens externas, visitas numeradas na
-  ordem de horário, uma cor por equipe.
+  link para o Google Maps (rota até o endereço) e um checkbox próprio
+  para incluí-la na rota da equipe — a equipe ganha um link de rota
+  Google Maps que se atualiza em tempo real conforme os checkboxes são
+  marcados/desmarcados (até 9 paradas por rota); a aba Resumo ganha sua
+  própria seção "Rota do dia", combinando as visitas de todas as
+  equipes, sempre iniciando desmarcada. Cada aba (exceto Lab) também
+  ganha um mapa-esquema em SVG da rota do dia — sem imagens externas,
+  visitas numeradas na ordem de horário, uma cor por equipe.
 
 Os botões nativos de PDF/CSV/Excel do SIGC continuam intocados e visíveis —
 o PDF nativo funciona normalmente; CSV/Excel nativos funcionam pela VPN e

@@ -34,11 +34,13 @@ Em Administrar Agenda:
     os cartões de cada visita (endereço, morador, telefone,
     Controle/Domicílio, observações) e os horários livres. Ctrl+P
     imprime a aba aberta.
-  * Guia + Mapa (opcional) — o mesmo guia, com links de navegação e
-    rota no Google Maps, a zona real de cada visita e um mapa-esquema
-    (SVG, sem imagens externas) da rota do dia em cada aba; para isso,
-    mediante clique e confirmação, consulta o próprio servidor do SIGC
-    (nada vai a terceiros).
+  * Guia + Mapa (opcional) — o mesmo guia, com mapa da rota do dia,
+    link de navegação por visita e seleção de paradas por checkbox em
+    cada equipe (até 9 por rota, com link do Google Maps atualizado em
+    tempo real conforme os checkboxes são marcados), mais a seção
+    "Rota do dia" no Resumo, combinando as visitas de todas as
+    equipes; para isso, mediante clique e confirmação, consulta o
+    próprio servidor do SIGC (nada vai a terceiros).
 
 Os botões nativos do SIGC não são alterados — os novos botões apenas se
 somam a eles. O PDF nativo funciona normalmente; CSV e Excel nativos têm
