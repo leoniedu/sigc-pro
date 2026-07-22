@@ -398,7 +398,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
   // fetch, when available — never the inflated slot-text list. Missing
   // fields (already normalized to '' by readAgendaSlots) are omitted
   // line by line — a sparse card never breaks.
-  function buildSlotCard(r, enderecos, seqMap, color) {
+  function buildSlotCard(r, enderecos, seqMap, color, routeGroupId, checked) {
     const e = escapeHtml;
     const hora = `${e(r.horaInicio)}–${e(r.horaFim)}`;
     if (!r.reservado) {
@@ -434,10 +434,11 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     const seq = seqMap && seqMap.get(enderecoKey(r));
     const seqBadge = seq != null
       ? `<span class="badge badge-seq" style="background:${e(color || '#005a9c')}">${seq}</span> ` : '';
+    const chk = `${routeCheckboxInput(r, info, routeGroupId, checked)} `;
 
     return [
       '<div class="card">',
-      `<div class="hora">${hora} ${seqBadge}<span class="badge">RESERVADO</span></div>`,
+      `<div class="hora">${chk}${hora} ${seqBadge}<span class="badge">RESERVADO</span></div>`,
       r.endereco ? `<div class="endereco">${e(r.endereco)}</div>` : '',
       info && info.lat != null
         // Same Google Maps driving-directions link the Rota row uses
@@ -463,6 +464,17 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       s.ultimo ? `último ${e(s.ultimo.hora)}` : null,
       s.controles.length ? `${s.controles.length} controle(s) distinto(s)` : null,
     ].filter(Boolean).join(' &nbsp;·&nbsp; ');
+    // Routable count decides the default: <=9 -> all checked (matches
+    // the original auto-route), >9 -> none checked (chunking is gone, the
+    // user must pick their own <=9 stops). Non-routable rows never count
+    // toward this and always render a disabled checkbox on their card.
+    const routableCount = group.rows.filter((r) => {
+      if (!r.reservado) return false;
+      const info = slotInfo(r, enderecos);
+      return info && info.lat != null;
+    }).length;
+    const routeGroupId = `team-${colorIndex}`;
+    const defaultChecked = routableCount <= 9;
     // Open slots outside the reserved span (before the first visit,
     // after the last, or the whole day when nothing is reserved) render
     // as slim livre-edge rows; open slots between visits get full card
@@ -474,32 +486,26 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     const color = teamColor(colorIndex);
     const cards = group.rows.map((r, i) => {
       const edge = first === -1 || i < first || i > last;
-      return !r.reservado && edge ? buildLivreEdgeRow(r) : buildSlotCard(r, enderecos, seqMap, color);
+      return !r.reservado && edge
+        ? buildLivreEdgeRow(r)
+        : buildSlotCard(r, enderecos, seqMap, color, routeGroupId, defaultChecked);
     });
-    // Routable count decides the default: <=9 -> all checked (matches
-    // yesterday's auto-route), >9 -> none checked (chunking is gone, the
-    // user must pick their own <=9 stops). Non-routable rows never count
-    // toward this and are always rendered disabled by buildRouteSelector.
-    const routableCount = group.rows.filter((r) => {
-      if (!r.reservado) return false;
-      const info = slotInfo(r, enderecos);
-      return info && info.lat != null;
-    }).length;
-    const routeSelector = buildRouteSelector(
-      group.rows, enderecos, `team-${colorIndex}`, routableCount <= 9
-    );
     const teamMap = enderecos
       ? buildRouteMapSvg(
           [{ rows: group.rows.filter((r) => r.reservado), color: teamColor(colorIndex) }],
           enderecos, 480, 320
         )
       : '';
+    // Bare link placeholder (no checkbox list — checkboxes now live on
+    // each card above). Sits right before the SVG map so the live link
+    // and the visual route it feeds are next to each other.
+    const rotaLink = `<div class="rota-link" id="rota-link-${e(routeGroupId)}"></div>`;
     return [
       `<h2>${e(group.equipe)}</h2>`,
       `<div class="teamstats">${statBits}</div>`,
       zonas.length ? `<div class="zonas">Zonas: ${zonas.map(e).join(', ')}</div>` : '',
-      routeSelector,
       ...cards,
+      rotaLink,
       teamMap,
     ].filter(Boolean).join('\n');
   }
@@ -811,7 +817,7 @@ ${sections}
   }
 
   // Consumed by agenda-map ("Guia + Mapa"): same pipeline, plus enderecos.
-  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel, buildGuideHtml, routeCheckboxInput, routeCheckboxHtml };
+  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel, buildGuideHtml, routeCheckboxInput, routeCheckboxHtml, buildSlotCard };
 
   // Dia-view-only: `when` flips with the fc-button-active class, which
   // the shared observer watches (attributes: ['class']), so toggling

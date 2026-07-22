@@ -182,6 +182,48 @@ describe('routeCheckboxHtml', () => {
   });
 });
 
+describe('buildSlotCard route checkbox', () => {
+  test('routable reserved row: checkbox appears in the .hora line, before the time', () => {
+    const { buildSlotCard } = window.__sigcPro.dayGuide;
+    const r = row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' });
+    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
+    const html = buildSlotCard(r, enderecos, null, '#005a9c', 'team-0', true);
+    expect(html).toContain('class="route-chk"');
+    expect(html).toContain('data-group="team-0"');
+    expect(html).toContain('checked');
+    const horaIdx = html.indexOf('class="hora"');
+    const chkIdx = html.indexOf('route-chk');
+    const timeIdx = html.indexOf('09:00', horaIdx);
+    expect(chkIdx).toBeGreaterThan(horaIdx);
+    expect(chkIdx).toBeLessThan(timeIdx);
+  });
+
+  test('routable reserved row, checked=false: checkbox present but unchecked', () => {
+    const { buildSlotCard } = window.__sigcPro.dayGuide;
+    const r = row({ controle: 'C1', domicilio: 'D1' });
+    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
+    const html = buildSlotCard(r, enderecos, null, '#005a9c', 'team-0', false);
+    expect(html).toContain('class="route-chk"');
+    expect(html).not.toMatch(/route-chk[^>]*checked/);
+  });
+
+  test('non-routable reserved row: disabled unchecked checkbox, no extra note text', () => {
+    const { buildSlotCard } = window.__sigcPro.dayGuide;
+    const r = row({ controle: 'C1', domicilio: 'D1' });
+    const html = buildSlotCard(r, null, null, '#005a9c', 'team-0', true);
+    expect(html).toContain('type="checkbox" disabled');
+    expect(html).not.toContain('sem coordenadas');
+  });
+
+  test('LIVRE row: no checkbox at all, unaffected by routeGroupId/checked', () => {
+    const { buildSlotCard } = window.__sigcPro.dayGuide;
+    const r = row({ reservado: false });
+    const html = buildSlotCard(r, null, null, '#005a9c', 'team-0', true);
+    expect(html).not.toContain('route-chk');
+    expect(html).not.toContain('checkbox');
+  });
+});
+
 describe('buildTeamPanel route selector wiring', () => {
   test('<=9 routable stops: all checked by default, groupId is team-<colorIndex>', () => {
     const { buildTeamPanel } = window.__sigcPro.dayGuide;
@@ -193,10 +235,16 @@ describe('buildTeamPanel route selector wiring', () => {
     const html = buildTeamPanel({ equipe: 'Equipe A', rows }, enderecos, 0);
     expect(html).toContain('data-group="team-0"');
     expect((html.match(/checked/g) || []).length).toBe(2);
-    expect(html).not.toContain('class="rota"'); // old block gone
-    // Selector block sits where the old rota div was: before the cards,
-    // i.e. before the first slot card's endereco div.
-    expect(html.indexOf('route-selector')).toBeLessThan(html.indexOf('class="card"'));
+    expect(html).not.toContain('class="rota"'); // old auto-route block gone
+    expect(html).not.toContain('route-selector'); // standalone list gone too
+    // Checkbox sits inside each card's .hora line, not in a separate block.
+    const chkIdx = html.indexOf('route-chk');
+    const cardIdx = html.indexOf('class="card"');
+    expect(chkIdx).toBeGreaterThan(cardIdx);
+    // Link placeholder still exists, now positioned after all cards.
+    const lastCardIdx = html.lastIndexOf('class="card"');
+    const linkIdx = html.indexOf('rota-link-team-0');
+    expect(linkIdx).toBeGreaterThan(lastCardIdx);
   });
 
   test('>9 routable stops: none checked by default', () => {
