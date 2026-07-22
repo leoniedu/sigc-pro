@@ -27,6 +27,21 @@
     return headerRow.map((cell) => cell && cell.text);
   }
 
+  // pesquisa.columns describes the LIVE table (read via the DataTables JS
+  // API), which includes SIGC's icon-only "lupa" column. DataTables'
+  // Buttons PDF export omits that column entirely (nothing to render for
+  // an icon), so pdfMake's doc.content table is one column narrower, every
+  // other column shifted back by 1. Same labels, same relative order —
+  // only the index differs — so derive it instead of hand-maintaining a
+  // second near-duplicate map.
+  function pdfColumns(liveColumns) {
+    const shifted = {};
+    for (const [k, c] of Object.entries(liveColumns)) {
+      shifted[k] = { index: c.index - 1, label: c.label };
+    }
+    return shifted;
+  }
+
   // Replaces the DataTables-generated doc with a PNAD-listagem-style layout:
   //   LISTA DE ENDEREÇOS - SELECIONADOS|COMPLETA   CONTROLE x • SITUAÇÃO ...
   //   Q/F | Endereço / Morador / Telefone | Lat/Lon | Nº (big)
@@ -34,7 +49,7 @@
   // page header repeated on every page, "Pág. X de Y" / "Gerado em" footer.
   function rebuildAsListagem(doc, pesquisa, body) {
     const { MISSING_VALUES } = window.__sigcPro;
-    const cols = pesquisa.columns;
+    const cols = pdfColumns(pesquisa.columns);
     const rows = body.slice(1);
     const val = (r, c) => (r[c.index] && r[c.index].text != null ? String(r[c.index].text).trim() : '');
     const present = (s) => s && !MISSING_VALUES.includes(s);
@@ -197,7 +212,7 @@
         const tableContent = doc && Array.isArray(doc.content) && findTableContent(doc);
         if (
           tableContent &&
-          window.__sigcPro.tableMatchesLayout(headerTexts(tableContent), pesquisa.columns)
+          window.__sigcPro.tableMatchesLayout(headerTexts(tableContent), pdfColumns(pesquisa.columns))
         ) {
           body = tableContent.table.body;
         } else if (tableContent) {
