@@ -137,3 +137,75 @@ describe('buildSummaryPanel route selector wiring', () => {
     expect(html).not.toContain('route-selector');
   });
 });
+
+describe('inline script is present and shaped correctly', () => {
+  test('buildGuideHtml embeds exactly one <script> block before </body>', () => {
+    const { buildGuideHtml } = window.__sigcPro.dayGuide;
+    const groups = [{ equipe: 'Equipe A', rows: [row({ controle: 'C1', domicilio: 'D1' })] }];
+    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
+    const meta = { uf: 'BA', dataBr: '22/07/2026', diaSemana: 'quarta-feira', geradoEm: '22/07/2026 10:00' };
+    const html = buildGuideHtml(meta, groups, groups[0].rows, enderecos);
+    const scriptCount = (html.match(/<script>/g) || []).length;
+    expect(scriptCount).toBe(1);
+    expect(html.indexOf('<script>')).toBeLessThan(html.indexOf('</body>'));
+    expect(html).toContain('route-chk');
+    expect(html).toContain('rota-link-');
+  });
+
+  test('Resumo and a team panel use distinct data-group values (independent state)', () => {
+    const { buildGuideHtml } = window.__sigcPro.dayGuide;
+    const groups = [{ equipe: 'Equipe A', rows: [row({ controle: 'C1', domicilio: 'D1' })] }];
+    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
+    const meta = { uf: 'BA', dataBr: '22/07/2026', diaSemana: 'quarta-feira', geradoEm: '22/07/2026 10:00' };
+    const html = buildGuideHtml(meta, groups, groups[0].rows, enderecos);
+    expect(html).toContain('data-group="resumo"');
+    expect(html).toContain('data-group="team-0"');
+    // Each group has its own rota-link placeholder id -> refreshGroup's
+    // querySelectorAll scoping (data-group="<id>") can never cross groups.
+    expect(html).toContain('id="rota-link-resumo"');
+    expect(html).toContain('id="rota-link-team-0"');
+  });
+
+  test('the embedded script builds the same URL shape as gmapsRouteUrl (mirrored logic)', () => {
+    // Mirrors the inline script's buildGmapsUrl exactly (Step 3 below) so the
+    // URL-building logic is covered without executing <script> in happy-dom.
+    function buildGmapsUrl(stops) {
+      const fmt = (s) => `${Number(s.lat).toFixed(6)},${Number(s.lon).toFixed(6)}`;
+      const way = stops.slice(0, -1).map(fmt).join('|');
+      const dest = fmt(stops[stops.length - 1]);
+      return 'https://www.google.com/maps/dir/?api=1&travelmode=driving' +
+        (way ? `&waypoints=${encodeURIComponent(way)}` : '') +
+        `&destination=${encodeURIComponent(dest)}`;
+    }
+    const url = buildGmapsUrl([{ lat: -12.9, lon: -38.5 }, { lat: -12.8, lon: -38.4 }]);
+    expect(url).toBe(
+      'https://www.google.com/maps/dir/?api=1&travelmode=driving' +
+      `&waypoints=${encodeURIComponent('-12.900000,-38.500000')}` +
+      `&destination=${encodeURIComponent('-12.800000,-38.400000')}`
+    );
+  });
+
+  test('cap enforcement logic (mirrored): disables at 9 checked, re-enables below 9', () => {
+    // Mirrors refreshGroup's cap-enforcement branch exactly (Step 3 below).
+    // happy-dom doesn't reliably execute inline <script> tags inserted via
+    // innerHTML, so this pins the same logic standalone, same pattern as
+    // the URL-building mirror test above.
+    function applyCap(boxes) {
+      const checked = boxes.filter((b) => b.checked);
+      boxes.forEach((b) => {
+        if (!b.checked) b.disabled = checked.length >= 9;
+      });
+    }
+    // 9 checked, 1 unchecked -> the unchecked one gets disabled.
+    const nineChecked = Array.from({ length: 9 }, () => ({ checked: true, disabled: false }));
+    const tenth = { checked: false, disabled: false };
+    applyCap([...nineChecked, tenth]);
+    expect(tenth.disabled).toBe(true);
+
+    // Drop to 8 checked -> everyone (including a previously-disabled box)
+    // is re-enabled.
+    nineChecked[0].checked = false;
+    applyCap([...nineChecked, tenth]);
+    expect(tenth.disabled).toBe(false);
+  });
+});

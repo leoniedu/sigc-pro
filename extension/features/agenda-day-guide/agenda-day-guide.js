@@ -659,6 +659,57 @@ ${labels}
 </div>
 ${sections}
 </main>
+<script>
+(function () {
+  'use strict';
+  // Standalone copy of gmapsRouteUrl's URL shape — the generated file has
+  // no access to the extension's build-time closures, so this is an
+  // intentional duplicate (spec: gmapsRouteUrl duplication). Keeps the
+  // per-visit static "abrir no mapa" pins untouched at build time.
+  function buildGmapsUrl(stops) {
+    var fmt = function (s) { return s.lat.toFixed(6) + ',' + s.lon.toFixed(6); };
+    var way = stops.slice(0, -1).map(fmt).join('|');
+    var dest = fmt(stops[stops.length - 1]);
+    return 'https://www.google.com/maps/dir/?api=1&travelmode=driving' +
+      (way ? '&waypoints=' + encodeURIComponent(way) : '') +
+      '&destination=' + encodeURIComponent(dest);
+  }
+
+  function refreshGroup(groupId) {
+    var boxes = document.querySelectorAll('.route-chk[data-group="' + groupId + '"]');
+    var checked = [];
+    boxes.forEach(function (b) { if (b.checked) checked.push(b); });
+    // Cap enforcement: at 9 checked, disable the rest; below 9, re-enable.
+    boxes.forEach(function (b) {
+      if (!b.checked) b.disabled = checked.length >= 9;
+    });
+    var link = document.getElementById('rota-link-' + groupId);
+    if (!link) return;
+    if (checked.length < 2) {
+      link.innerHTML = '';
+      return;
+    }
+    var stops = checked.map(function (b) {
+      return { lat: parseFloat(b.dataset.lat), lon: parseFloat(b.dataset.lon) };
+    });
+    var url = buildGmapsUrl(stops);
+    link.innerHTML = '<a href="' + url.replace(/"/g, '&quot;') + '">Google Maps</a>';
+  }
+
+  document.addEventListener('change', function (ev) {
+    if (!ev.target.classList || !ev.target.classList.contains('route-chk')) return;
+    refreshGroup(ev.target.dataset.group);
+  });
+
+  // Initial paint: every group present in the document gets its link
+  // computed once on load, matching whatever defaultAllChecked produced.
+  var groups = new Set();
+  document.querySelectorAll('.route-chk[data-group]').forEach(function (b) {
+    groups.add(b.dataset.group);
+  });
+  groups.forEach(refreshGroup);
+})();
+</script>
 </body>
 </html>
 `;
@@ -728,7 +779,7 @@ ${sections}
   }
 
   // Consumed by agenda-map ("Guia + Mapa"): same pipeline, plus enderecos.
-  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel };
+  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel, buildGuideHtml };
 
   // Dia-view-only: `when` flips with the fc-button-active class, which
   // the shared observer watches (attributes: ['class']), so toggling
