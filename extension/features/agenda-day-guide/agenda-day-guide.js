@@ -659,6 +659,7 @@ h2 { margin: .6rem 0 .2rem; font-size: 1.15rem; }
 h3 { margin: .8rem 0 .2rem; font-size: 1rem; }
 .card { border: 1px solid #d0d7de; border-radius: 6px; padding: .6rem .8rem; margin: .5rem 0; page-break-inside: avoid; }
 .card .hora { font-weight: 600; }
+.card .hora .route-chk { margin-right: .4rem; font-weight: normal; }
 .badge { background: #005a9c; color: #fff; border-radius: 3px; font-size: .7rem; padding: .1rem .4rem; vertical-align: middle; }
 .endereco { font-size: 1.05rem; font-weight: 600; margin: .15rem 0; }
 .morador, .ids, .zonas, .obs { font-size: .92rem; margin-top: .1rem; }
