@@ -497,6 +497,17 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       ['Média de agendamentos por equipe ativa', media1(day.reservados, groups.length) ?? '—'],
       ['Média de agendamentos por controle', media1(day.reservados, day.controles.length) ?? '—'],
     ].map(([k, v]) => `<tr><th>${e(k)}</th><td>${e(v)}</td></tr>`).join('\n');
+    // Combined day route: every team's rows in groups' existing order (name-
+    // sorted teams, each team's own rows already time-sorted) — no new
+    // cross-team sort. Always starts unchecked: the day route is always an
+    // intentional, opt-in selection, unlike a single team's default-all-
+    // checked rule in buildTeamPanel.
+    const routeSelector = !lab
+      ? buildRouteSelector(groups.flatMap((g) => g.rows), enderecos, 'resumo', false)
+      : '';
+    const rotaSection = routeSelector
+      ? ['<h3>Rota do dia</h3>', routeSelector].join('\n')
+      : '';
     // Combined day-route map: every team's reserved, coordinate-having
     // visits overlaid, one color per team. Lab tab (the shareable,
     // privacy-stripped view) never gets a map — see spec Placement.
@@ -515,6 +526,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       `<table class="stats">\n${linhas}\n</table>`,
       '<h3>Slots do dia</h3>',
       buildDayGrid(groups, lab),
+      rotaSection,
       routeMap,
     ].filter(Boolean).join('\n');
   }
@@ -716,7 +728,7 @@ ${sections}
   }
 
   // Consumed by agenda-map ("Guia + Mapa"): same pipeline, plus enderecos.
-  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel };
+  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel };
 
   // Dia-view-only: `when` flips with the fc-button-active class, which
   // the shared observer watches (attributes: ['class']), so toggling

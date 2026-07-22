@@ -96,3 +96,44 @@ describe('buildTeamPanel route selector wiring', () => {
     expect(html).not.toContain('checked');
   });
 });
+
+describe('buildSummaryPanel route selector wiring', () => {
+  test('Resumo combines all teams, always starts unchecked, groupId is resumo', () => {
+    const { buildSummaryPanel } = window.__sigcPro.dayGuide;
+    const groups = [
+      { equipe: 'Equipe A', rows: [row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' })] },
+      { equipe: 'Equipe B', rows: [row({ horaInicio: '08:00', controle: 'C2', domicilio: 'D2' })] },
+    ];
+    const allRows = groups.flatMap((g) => g.rows);
+    const enderecos = enderecosMap([
+      ['C1', 'D1', -12.9, -38.5],
+      ['C2', 'D2', -12.8, -38.4],
+    ]);
+    const html = buildSummaryPanel(groups, allRows, false, enderecos);
+    expect(html).toContain('data-group="resumo"');
+    expect(html).not.toContain('checked'); // unconditionally unchecked
+    expect(html).toContain('Rota do dia');
+    // both teams' stops present, in groups' existing order (A's 09:00 before B's 08:00)
+    const idxA = html.indexOf('data-name="09:00');
+    const idxB = html.indexOf('data-name="08:00');
+    expect(idxA).toBeGreaterThan(-1);
+    expect(idxB).toBeGreaterThan(idxA);
+  });
+
+  test('Rota do dia section placed before Mapa do dia', () => {
+    const { buildSummaryPanel } = window.__sigcPro.dayGuide;
+    const groups = [{ equipe: 'Equipe A', rows: [row({ controle: 'C1', domicilio: 'D1' })] }];
+    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
+    const html = buildSummaryPanel(groups, groups[0].rows, false, enderecos);
+    expect(html.indexOf('Rota do dia')).toBeLessThan(html.indexOf('Mapa do dia'));
+  });
+
+  test('Lab panel gets no route selector', () => {
+    const { buildSummaryPanel } = window.__sigcPro.dayGuide;
+    const groups = [{ equipe: 'Equipe A', rows: [row({ controle: 'C1', domicilio: 'D1' })] }];
+    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
+    const html = buildSummaryPanel(groups, groups[0].rows, true, enderecos);
+    expect(html).not.toContain('Rota do dia');
+    expect(html).not.toContain('route-selector');
+  });
+});
