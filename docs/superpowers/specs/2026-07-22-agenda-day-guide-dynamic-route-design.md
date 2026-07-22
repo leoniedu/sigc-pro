@@ -75,6 +75,12 @@ panels, and as Resumo's new "Rota do dia" section (placed before "Mapa
 do dia"). Cards themselves are untouched; checkboxes are not
 interleaved into them.
 
+**Superseded for team panels** by
+[2026-07-22-agenda-day-guide-route-checkbox-on-card-design.md](2026-07-22-agenda-day-guide-route-checkbox-on-card-design.md):
+the team-panel checkbox list described above was later merged onto each
+visit card. This section's description still governs Resumo, which is
+unaffected by that amendment.
+
 ## gmapsRouteUrl: intentional duplication
 
 The build-time `gmapsRouteUrl` (used for each visit's static "abrir no
