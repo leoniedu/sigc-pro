@@ -107,41 +107,57 @@
       `&destination=${encodeURIComponent(dest)}`;
   }
 
-  // One checkbox per RESERVED row in `rows` (open rows are skipped). Routable
-  // rows (slotInfo has lat/lon) get an enabled checkbox seeded from
-  // defaultAllChecked; non-routable reserved rows get a permanently disabled,
-  // unchecked row with a "sem coordenadas" note — present so the selector's
-  // row count never silently drops a visit the panel's cards still show.
+  // Builds the bare checkbox <input> for a RESERVED row. Routable rows
+  // (info has lat/lon) get an enabled checkbox with data-lat/lon/name,
+  // seeded from `checked`; non-routable rows get a permanently disabled,
+  // unchecked <input> with no data-* attributes. Used directly by
+  // buildSlotCard (team-panel cards) and wrapped by routeCheckboxHtml
+  // (Resumo's standalone list) — the data-* attribute shape and escaping
+  // exist in exactly one place either way.
+  function routeCheckboxInput(r, info, groupId, checked) {
+    const e = escapeHtml;
+    if (info && info.lat != null) {
+      const label = `${r.horaInicio} ${r.nome || r.controle}`;
+      const checkedAttr = checked ? ' checked' : '';
+      return `<input type="checkbox" class="route-chk" data-group="${e(groupId)}" ` +
+        `data-lat="${info.lat.toFixed(6)}" data-lon="${info.lon.toFixed(6)}" ` +
+        `data-name="${e(label)}"${checkedAttr}>`;
+    }
+    return '<input type="checkbox" disabled>';
+  }
+
+  // Wraps routeCheckboxInput in the <label> Resumo's standalone list
+  // needs: the checkbox plus a text description of the stop (time, name,
+  // Controle/Dom/Zona) and, for non-routable rows, a "sem coordenadas"
+  // note — present so the list's row count never silently drops a visit.
+  function routeCheckboxHtml(r, info, groupId, checked) {
+    const e = escapeHtml;
+    const label = `${r.horaInicio} ${r.nome || r.controle}`;
+    // Displayed label adds the same Controle/Dom/Zona detail buildSlotCard
+    // shows on the card itself, so a checked-off stop is identifiable
+    // without cross-referencing the card above/below it.
+    const zona = zonaLabel(info);
+    const detail = [
+      r.controle && `Controle: ${e(r.controle)}`,
+      r.domicilio && `Dom: ${e(r.domicilio)}`,
+      zona && `Zona: ${e(zona)}`,
+    ].filter(Boolean).join(' &nbsp;·&nbsp; ');
+    const display = detail ? `${e(label)} — ${detail}` : e(label);
+    const input = routeCheckboxInput(r, info, groupId, checked);
+    if (info && info.lat != null) {
+      return `<label class="route-item">${input} ${display}</label>`;
+    }
+    return `<label class="route-item route-item-missing">${input} ${display} — sem coordenadas</label>`;
+  }
+
   // groupId namespaces data-group (read by the inline script) and the
   // trailing rota-link placeholder's id, so multiple independent selectors
   // (Resumo + each team) can coexist without id/state collisions.
   function buildRouteSelector(rows, enderecos, groupId, defaultAllChecked) {
     const e = escapeHtml;
-    const items = rows.filter((r) => r.reservado).map((r) => {
-      const info = slotInfo(r, enderecos);
-      const label = `${r.horaInicio} ${r.nome || r.controle}`;
-      // Displayed label adds the same Controle/Dom/Zona detail buildSlotCard
-      // shows on the card itself, so a checked-off stop is identifiable
-      // without cross-referencing the card above/below it.
-      const zona = zonaLabel(info);
-      const detail = [
-        r.controle && `Controle: ${e(r.controle)}`,
-        r.domicilio && `Dom: ${e(r.domicilio)}`,
-        zona && `Zona: ${e(zona)}`,
-      ].filter(Boolean).join(' &nbsp;·&nbsp; ');
-      const display = detail ? `${e(label)} — ${detail}` : e(label);
-      if (info && info.lat != null) {
-        const checkedAttr = defaultAllChecked ? ' checked' : '';
-        return '<label class="route-item">' +
-          `<input type="checkbox" class="route-chk" data-group="${e(groupId)}" ` +
-          `data-lat="${info.lat.toFixed(6)}" data-lon="${info.lon.toFixed(6)}" ` +
-          `data-name="${e(label)}"${checkedAttr}> ${display}` +
-          '</label>';
-      }
-      return '<label class="route-item route-item-missing">' +
-        `<input type="checkbox" disabled> ${display} — sem coordenadas` +
-        '</label>';
-    });
+    const items = rows.filter((r) => r.reservado).map((r) =>
+      routeCheckboxHtml(r, slotInfo(r, enderecos), groupId, defaultAllChecked)
+    );
     if (items.length === 0) return '';
     return '<div class="route-selector">' +
       items.join('\n') +
@@ -795,7 +811,7 @@ ${sections}
   }
 
   // Consumed by agenda-map ("Guia + Mapa"): same pipeline, plus enderecos.
-  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel, buildGuideHtml };
+  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel, buildGuideHtml, routeCheckboxInput, routeCheckboxHtml };
 
   // Dia-view-only: `when` flips with the fc-button-active class, which
   // the shared observer watches (attributes: ['class']), so toggling

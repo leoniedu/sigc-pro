@@ -82,6 +82,106 @@ describe('buildRouteSelector', () => {
   });
 });
 
+describe('routeCheckboxInput', () => {
+  test('routable row: enabled checkbox with data-lat/lon/name, no label wrapper', () => {
+    const { routeCheckboxInput } = window.__sigcPro.dayGuide;
+    const r = row({ horaInicio: '09:00', nome: 'Maria Silva', controle: 'C1', domicilio: 'D1' });
+    const info = { lat: -12.9, lon: -38.5, zona: null, idZona: null };
+    const html = routeCheckboxInput(r, info, 'team-0', true);
+    expect(html).toContain('class="route-chk"');
+    expect(html).toContain('data-group="team-0"');
+    expect(html).toContain('data-lat="-12.900000"');
+    expect(html).toContain('data-lon="-38.500000"');
+    expect(html).toContain('data-name="09:00 Maria Silva"');
+    expect(html).toContain('checked');
+    expect(html).not.toContain('<label');
+    expect(html).not.toContain('sem coordenadas');
+  });
+
+  test('routable row, checked=false: no checked attribute', () => {
+    const { routeCheckboxInput } = window.__sigcPro.dayGuide;
+    const r = row();
+    const info = { lat: -12.9, lon: -38.5, zona: null, idZona: null };
+    const html = routeCheckboxInput(r, info, 'team-0', false);
+    expect(html).not.toContain('checked');
+  });
+
+  test('non-routable row (info null): bare disabled checkbox, no data-* attributes', () => {
+    const { routeCheckboxInput } = window.__sigcPro.dayGuide;
+    const r = row();
+    const html = routeCheckboxInput(r, null, 'team-0', true);
+    expect(html).toBe('<input type="checkbox" disabled>');
+  });
+
+  test('non-routable row (info present but lat null): bare disabled checkbox', () => {
+    const { routeCheckboxInput } = window.__sigcPro.dayGuide;
+    const r = row();
+    const info = { lat: null, lon: null, zona: null, idZona: null };
+    const html = routeCheckboxInput(r, info, 'team-0', true);
+    expect(html).toBe('<input type="checkbox" disabled>');
+  });
+
+  test('escapes stop name in data-name', () => {
+    const { routeCheckboxInput } = window.__sigcPro.dayGuide;
+    const r = row({ nome: '<script>alert(1)</script>' });
+    const info = { lat: -12.9, lon: -38.5, zona: null, idZona: null };
+    const html = routeCheckboxInput(r, info, 'team-0', true);
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+});
+
+describe('routeCheckboxHtml', () => {
+  test('routable row: enabled checkbox with data-lat/lon/name and detail text', () => {
+    const { routeCheckboxHtml } = window.__sigcPro.dayGuide;
+    const r = row({ horaInicio: '09:00', nome: 'Maria Silva', controle: 'C1', domicilio: 'D1' });
+    const info = { lat: -12.9, lon: -38.5, zona: 'Centro', idZona: '12' };
+    const html = routeCheckboxHtml(r, info, 'team-0', true);
+    expect(html).toContain('class="route-chk"');
+    expect(html).toContain('data-group="team-0"');
+    expect(html).toContain('data-lat="-12.900000"');
+    expect(html).toContain('data-lon="-38.500000"');
+    expect(html).toContain('data-name="09:00 Maria Silva"');
+    expect(html).toContain('checked');
+    expect(html).toContain('Controle: C1 &nbsp;·&nbsp; Dom: D1 &nbsp;·&nbsp; Zona: 12 Centro');
+  });
+
+  test('routable row, checked=false: no checked attribute', () => {
+    const { routeCheckboxHtml } = window.__sigcPro.dayGuide;
+    const r = row();
+    const info = { lat: -12.9, lon: -38.5, zona: null, idZona: null };
+    const html = routeCheckboxHtml(r, info, 'team-0', false);
+    expect(html).not.toMatch(/route-chk[^>]*checked/);
+  });
+
+  test('non-routable row (info null): disabled, unchecked, "sem coordenadas" note', () => {
+    const { routeCheckboxHtml } = window.__sigcPro.dayGuide;
+    const r = row();
+    const html = routeCheckboxHtml(r, null, 'team-0', true);
+    expect(html).toContain('disabled');
+    expect(html).not.toMatch(/route-chk[^>]*checked/);
+    expect(html).toContain('sem coordenadas');
+  });
+
+  test('non-routable row (info present but lat null): disabled, unchecked', () => {
+    const { routeCheckboxHtml } = window.__sigcPro.dayGuide;
+    const r = row();
+    const info = { lat: null, lon: null, zona: null, idZona: null };
+    const html = routeCheckboxHtml(r, info, 'team-0', true);
+    expect(html).toContain('disabled');
+    expect(html).toContain('sem coordenadas');
+  });
+
+  test('escapes stop name in both data-name and display text', () => {
+    const { routeCheckboxHtml } = window.__sigcPro.dayGuide;
+    const r = row({ nome: '<script>alert(1)</script>' });
+    const info = { lat: -12.9, lon: -38.5, zona: null, idZona: null };
+    const html = routeCheckboxHtml(r, info, 'team-0', true);
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+});
+
 describe('buildTeamPanel route selector wiring', () => {
   test('<=9 routable stops: all checked by default, groupId is team-<colorIndex>', () => {
     const { buildTeamPanel } = window.__sigcPro.dayGuide;
