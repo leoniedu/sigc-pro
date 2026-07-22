@@ -449,7 +449,18 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       const edge = first === -1 || i < first || i > last;
       return !r.reservado && edge ? buildLivreEdgeRow(r) : buildSlotCard(r, enderecos, seqMap, color);
     });
-    // Task 3 replaces this with buildRouteSelector's stop list + markup.
+    // Routable count decides the default: <=9 -> all checked (matches
+    // yesterday's auto-route), >9 -> none checked (chunking is gone, the
+    // user must pick their own <=9 stops). Non-routable rows never count
+    // toward this and are always rendered disabled by buildRouteSelector.
+    const routableCount = group.rows.filter((r) => {
+      if (!r.reservado) return false;
+      const info = slotInfo(r, enderecos);
+      return info && info.lat != null;
+    }).length;
+    const routeSelector = buildRouteSelector(
+      group.rows, enderecos, `team-${colorIndex}`, routableCount <= 9
+    );
     const teamMap = enderecos
       ? buildRouteMapSvg(
           [{ rows: group.rows.filter((r) => r.reservado), color: teamColor(colorIndex) }],
@@ -460,7 +471,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       `<h2>${e(group.equipe)}</h2>`,
       `<div class="teamstats">${statBits}</div>`,
       zonas.length ? `<div class="zonas">Zonas: ${zonas.map(e).join(', ')}</div>` : '',
-      '',
+      routeSelector,
       ...cards,
       teamMap,
     ].filter(Boolean).join('\n');
@@ -705,7 +716,7 @@ ${sections}
   }
 
   // Consumed by agenda-map ("Guia + Mapa"): same pipeline, plus enderecos.
-  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector };
+  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel };
 
   // Dia-view-only: `when` flips with the fc-button-active class, which
   // the shared observer watches (attributes: ['class']), so toggling

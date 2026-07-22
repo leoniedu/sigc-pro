@@ -64,3 +64,35 @@ describe('buildRouteSelector', () => {
     expect(html).toContain('&lt;script&gt;');
   });
 });
+
+describe('buildTeamPanel route selector wiring', () => {
+  test('<=9 routable stops: all checked by default, groupId is team-<colorIndex>', () => {
+    const { buildTeamPanel } = window.__sigcPro.dayGuide;
+    const rows = [row({ horaInicio: '09:00' }), row({ horaInicio: '10:00', controle: 'C2', domicilio: 'D2' })];
+    const enderecos = enderecosMap([
+      ['C1', 'D1', -12.9, -38.5],
+      ['C2', 'D2', -12.8, -38.4],
+    ]);
+    const html = buildTeamPanel({ equipe: 'Equipe A', rows }, enderecos, 0);
+    expect(html).toContain('data-group="team-0"');
+    expect((html.match(/checked/g) || []).length).toBe(2);
+    expect(html).not.toContain('class="rota"'); // old block gone
+    // Selector block sits where the old rota div was: before the cards,
+    // i.e. before the first slot card's endereco div.
+    expect(html.indexOf('route-selector')).toBeLessThan(html.indexOf('class="card"'));
+  });
+
+  test('>9 routable stops: none checked by default', () => {
+    const { buildTeamPanel } = window.__sigcPro.dayGuide;
+    const entries = [];
+    const rows = [];
+    for (let i = 0; i < 10; i++) {
+      const controle = `C${i}`;
+      rows.push(row({ horaInicio: `0${i}:00`.slice(-5), controle, domicilio: 'D1' }));
+      entries.push([controle, 'D1', -12.9 + i * 0.01, -38.5]);
+    }
+    const enderecos = enderecosMap(entries);
+    const html = buildTeamPanel({ equipe: 'Equipe A', rows }, enderecos, 0);
+    expect(html).not.toContain('checked');
+  });
+});
