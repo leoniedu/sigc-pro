@@ -37,9 +37,11 @@ Em Administrar Agenda:
   horário × equipe dos slots), aba Lab compartilhável com o laboratório
   (Controle truncado, sem dados pessoais) e, por equipe, os cartões de
   cada visita — pronto para imprimir por aba.
-• Guia + Mapa (opcional) — o mesmo guia com links de navegação e
-  rota no Google Maps, obtendo as coordenadas do próprio servidor do
-  SIGC mediante clique e confirmação.
+• Guia + Mapa (opcional) — o mesmo guia com mapa da rota do dia,
+  link de navegação por visita e seleção de paradas por checkbox
+  (até 9 por rota, com link do Google Maps atualizado em tempo real),
+  obtendo as coordenadas do próprio servidor do SIGC mediante clique
+  e confirmação.
 • Seletor de data — botão de calendário para pular direto a uma data.
 
 PRIVACIDADE: nenhum dado sai do circuito usuário–IBGE. A extensão não
