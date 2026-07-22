@@ -9,10 +9,10 @@ function row({ reservado = true, horaInicio = '09:00', nome = 'Fulano', controle
 }
 
 function enderecosMap(entries) {
-  // entries: [[controle, domicilio, lat, lon], ...]
+  // entries: [[controle, domicilio, lat, lon, zona, idZona], ...]
   const m = new Map();
-  entries.forEach(([controle, domicilio, lat, lon]) => {
-    m.set(`${controle}|${domicilio}`, { lat, lon, zona: null, idZona: null });
+  entries.forEach(([controle, domicilio, lat, lon, zona = null, idZona = null]) => {
+    m.set(`${controle}|${domicilio}`, { lat, lon, zona, idZona });
   });
   return m;
 }
@@ -62,6 +62,23 @@ describe('buildRouteSelector', () => {
     const html = buildRouteSelector(rows, enderecos, 'team-0', true);
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');
+  });
+
+  test('label includes Controle, Dom and Zona alongside time and name', () => {
+    const rows = [row({ horaInicio: '09:00', nome: 'Maria Silva', controle: 'C1', domicilio: 'D1' })];
+    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5, 'Centro', '12']]);
+    const html = buildRouteSelector(rows, enderecos, 'team-0', true);
+    expect(html).toContain(
+      '09:00 Maria Silva — Controle: C1 &nbsp;·&nbsp; Dom: D1 &nbsp;·&nbsp; Zona: 12 Centro'
+    );
+  });
+
+  test('label omits Zona segment when zona info is unavailable', () => {
+    const rows = [row({ horaInicio: '09:00', nome: 'Maria Silva', controle: 'C1', domicilio: 'D1' })];
+    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
+    const html = buildRouteSelector(rows, enderecos, 'team-0', true);
+    expect(html).toContain('09:00 Maria Silva — Controle: C1 &nbsp;·&nbsp; Dom: D1');
+    expect(html).not.toContain('Zona:');
   });
 });
 

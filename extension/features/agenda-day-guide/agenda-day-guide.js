@@ -120,16 +120,26 @@
     const items = rows.filter((r) => r.reservado).map((r) => {
       const info = slotInfo(r, enderecos);
       const label = `${r.horaInicio} ${r.nome || r.controle}`;
+      // Displayed label adds the same Controle/Dom/Zona detail buildSlotCard
+      // shows on the card itself, so a checked-off stop is identifiable
+      // without cross-referencing the card above/below it.
+      const zona = zonaLabel(info);
+      const detail = [
+        r.controle && `Controle: ${e(r.controle)}`,
+        r.domicilio && `Dom: ${e(r.domicilio)}`,
+        zona && `Zona: ${e(zona)}`,
+      ].filter(Boolean).join(' &nbsp;·&nbsp; ');
+      const display = detail ? `${e(label)} — ${detail}` : e(label);
       if (info && info.lat != null) {
         const checkedAttr = defaultAllChecked ? ' checked' : '';
         return '<label class="route-item">' +
           `<input type="checkbox" class="route-chk" data-group="${e(groupId)}" ` +
           `data-lat="${info.lat.toFixed(6)}" data-lon="${info.lon.toFixed(6)}" ` +
-          `data-name="${e(label)}"${checkedAttr}> ${e(label)}` +
+          `data-name="${e(label)}"${checkedAttr}> ${display}` +
           '</label>';
       }
       return '<label class="route-item route-item-missing">' +
-        `<input type="checkbox" disabled> ${e(label)} — sem coordenadas` +
+        `<input type="checkbox" disabled> ${display} — sem coordenadas` +
         '</label>';
     });
     if (items.length === 0) return '';
