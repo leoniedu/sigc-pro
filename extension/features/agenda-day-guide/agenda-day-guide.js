@@ -6,9 +6,10 @@
 // in shareable form: Controle truncated to 11 digits, no Domicílio, no
 // personal data — print it to share. Data comes exclusively from
 // window.__sigcPro.readAgendaSlots() (already-rendered FullCalendar DOM,
-// no network); the file itself is inline-CSS-only with CSS radio tabs —
-// no <script>, no external refs — so it opens anywhere from file:// and
-// Ctrl+P on a tab prints that team's guide. Dia view only: the button is
+// no network); the file itself is inline-CSS-only with CSS radio tabs and
+// an inline route-selector script for live Google Maps link updates — no
+// external refs — so it opens anywhere from file:// and Ctrl+P on a tab
+// prints that team's guide. Dia view only: the button is
 // inserted/removed by the shared mountWidget observer (sigc-common.js) as
 // the active view toggles.
 // Spec: docs/superpowers/specs/2026-07-16-agenda-day-guide-design.md
@@ -636,6 +637,11 @@ h3 { margin: .8rem 0 .2rem; font-size: 1rem; }
 .livre-edge { color: #666; border: 1px dashed #bbb; border-radius: 6px; padding: .25rem .8rem; margin: .5rem 0; font-size: .9rem; }
 a { color: #005a9c; }
 .geo, .rota { font-size: .92rem; margin-top: .1rem; }
+.route-selector { border: 1px solid #d0d7de; border-radius: 6px; padding: .5rem .8rem; margin: .5rem 0; font-size: .9rem; }
+.route-item { display: block; padding: .1rem 0; }
+.route-item input { margin-right: .4rem; }
+.route-item-missing { color: #8a8f98; }
+.rota-link { margin-top: .4rem; font-size: .92rem; }
 .teamstats { color: #333; margin: .2rem 0 .4rem; font-size: .92rem; }
 .route-map { margin: .6rem 0; page-break-inside: avoid; }
 .route-map-missing { color: #666; font-size: .85rem; margin-top: .3rem; }
