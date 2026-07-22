@@ -106,6 +106,38 @@
       `&destination=${encodeURIComponent(dest)}`;
   }
 
+  // One checkbox per RESERVED row in `rows` (open rows are skipped). Routable
+  // rows (slotInfo has lat/lon) get an enabled checkbox seeded from
+  // defaultAllChecked; non-routable reserved rows get a permanently disabled,
+  // unchecked row with a "sem coordenadas" note — present so the selector's
+  // row count never silently drops a visit the panel's cards still show.
+  // groupId namespaces data-group (read by the inline script) and the
+  // trailing rota-link placeholder's id, so multiple independent selectors
+  // (Resumo + each team) can coexist without id/state collisions.
+  function buildRouteSelector(rows, enderecos, groupId, defaultAllChecked) {
+    const e = escapeHtml;
+    const items = rows.filter((r) => r.reservado).map((r) => {
+      const info = slotInfo(r, enderecos);
+      const label = `${r.horaInicio} ${r.nome || r.controle}`;
+      if (info && info.lat != null) {
+        const checkedAttr = defaultAllChecked ? ' checked' : '';
+        return '<label class="route-item">' +
+          `<input type="checkbox" class="route-chk" data-group="${e(groupId)}" ` +
+          `data-lat="${info.lat.toFixed(6)}" data-lon="${info.lon.toFixed(6)}" ` +
+          `data-name="${e(label)}"${checkedAttr}> ${e(label)}` +
+          '</label>';
+      }
+      return '<label class="route-item route-item-missing">' +
+        `<input type="checkbox" disabled> ${e(label)} — sem coordenadas` +
+        '</label>';
+    });
+    if (items.length === 0) return '';
+    return '<div class="route-selector">' +
+      items.join('\n') +
+      `<div class="rota-link" id="rota-link-${e(groupId)}"></div>` +
+      '</div>';
+  }
+
   // --- SVG day-route map ----------------------------------------------
   // Spec: docs/superpowers/specs/2026-07-18-agenda-day-route-map-design.md
 
@@ -673,7 +705,7 @@ ${sections}
   }
 
   // Consumed by agenda-map ("Guia + Mapa"): same pipeline, plus enderecos.
-  window.__sigcPro.dayGuide = { generate, diaViewActive };
+  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector };
 
   // Dia-view-only: `when` flips with the fc-button-active class, which
   // the shared observer watches (attributes: ['class']), so toggling
