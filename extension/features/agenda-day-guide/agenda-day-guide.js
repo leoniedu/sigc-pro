@@ -107,6 +107,12 @@
       `&destination=${encodeURIComponent(dest)}`;
   }
 
+  // Short label ("HH:MM Nome-or-Controle") shared by routeCheckboxInput's
+  // data-name attribute and routeCheckboxHtml's displayed text.
+  function routeStopLabel(r) {
+    return `${r.horaInicio} ${r.nome || r.controle}`;
+  }
+
   // Builds the bare checkbox <input> for a RESERVED row. Routable rows
   // (info has lat/lon) get an enabled checkbox with data-lat/lon/name,
   // seeded from `checked`; non-routable rows get a permanently disabled,
@@ -117,11 +123,10 @@
   function routeCheckboxInput(r, info, groupId, checked) {
     const e = escapeHtml;
     if (info && info.lat != null) {
-      const label = `${r.horaInicio} ${r.nome || r.controle}`;
       const checkedAttr = checked ? ' checked' : '';
       return `<input type="checkbox" class="route-chk" data-group="${e(groupId)}" ` +
         `data-lat="${info.lat.toFixed(6)}" data-lon="${info.lon.toFixed(6)}" ` +
-        `data-name="${e(label)}"${checkedAttr}>`;
+        `data-name="${e(routeStopLabel(r))}"${checkedAttr}>`;
     }
     return '<input type="checkbox" disabled>';
   }
@@ -132,7 +137,7 @@
   // note — present so the list's row count never silently drops a visit.
   function routeCheckboxHtml(r, info, groupId, checked) {
     const e = escapeHtml;
-    const label = `${r.horaInicio} ${r.nome || r.controle}`;
+    const label = routeStopLabel(r);
     // Displayed label adds the same Controle/Dom/Zona detail buildSlotCard
     // shows on the card itself, so a checked-off stop is identifiable
     // without cross-referencing the card above/below it.
@@ -701,6 +706,9 @@ ${sections}
 <script>
 (function () {
   'use strict';
+  // Matches the build-time default-checked threshold (buildTeamPanel's
+  // routableCount <= 9) — the cap on how many stops one route link covers.
+  var MAX_STOPS = 9;
   // Standalone copy of gmapsRouteUrl's URL shape — the generated file has
   // no access to the extension's build-time closures, so this is an
   // intentional duplicate (spec: gmapsRouteUrl duplication). Keeps the
@@ -718,9 +726,9 @@ ${sections}
     var boxes = document.querySelectorAll('.route-chk[data-group="' + groupId + '"]');
     var checked = [];
     boxes.forEach(function (b) { if (b.checked) checked.push(b); });
-    // Cap enforcement: at 9 checked, disable the rest; below 9, re-enable.
+    // Cap enforcement: at MAX_STOPS checked, disable the rest; below it, re-enable.
     boxes.forEach(function (b) {
-      if (!b.checked) b.disabled = checked.length >= 9;
+      if (!b.checked) b.disabled = checked.length >= MAX_STOPS;
     });
     var link = document.getElementById('rota-link-' + groupId);
     if (!link) return;

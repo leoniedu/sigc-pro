@@ -47,9 +47,8 @@
   //   Q/F | Endereço / Morador / Telefone | Lat/Lon | Nº (big)
   // Two lines per entry (Lat over Lon), hairline rule between entries,
   // page header repeated on every page, "Pág. X de Y" / "Gerado em" footer.
-  function rebuildAsListagem(doc, pesquisa, body) {
+  function rebuildAsListagem(doc, cols, body) {
     const { MISSING_VALUES } = window.__sigcPro;
-    const cols = pdfColumns(pesquisa.columns);
     const rows = body.slice(1);
     const val = (r, c) => (r[c.index] && r[c.index].text != null ? String(r[c.index].text).trim() : '');
     const present = (s) => s && !MISSING_VALUES.includes(s);
@@ -207,12 +206,13 @@
       }
       rebuildOnNext = false;
 
+      const cols = pdfColumns(pesquisa.columns);
       let body = null;
       try {
         const tableContent = doc && Array.isArray(doc.content) && findTableContent(doc);
         if (
           tableContent &&
-          window.__sigcPro.tableMatchesLayout(headerTexts(tableContent), pdfColumns(pesquisa.columns))
+          window.__sigcPro.tableMatchesLayout(headerTexts(tableContent), cols)
         ) {
           body = tableContent.table.body;
         } else if (tableContent) {
@@ -226,7 +226,7 @@
 
       if (body) {
         try {
-          rebuildAsListagem(doc, pesquisa, body);
+          rebuildAsListagem(doc, cols, body);
         } catch (e) {
           console.error(`${TAG} Error while rebuilding PDF doc, exporting as-is:`, e);
         }
