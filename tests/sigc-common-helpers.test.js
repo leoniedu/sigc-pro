@@ -63,11 +63,12 @@ describe('parseZonaEntries', () => {
 describe('exportFileBase', () => {
   const pesquisa = { id: 'PNS2026', columns: P.PESQUISAS.PNS2026.columns };
   const today = new Date().toISOString().slice(0, 10);
-  // Lista de Endereços row: 19 columns, controle at 0, selecionado at 14.
+  // Lista de Endereços row: 20 columns (index 0 is the "lupa" icon
+  // column), controle at 1, selecionado at 15.
   function listaRow({ controle = 'C1', selecionado = 'Sim' } = {}) {
-    const row = new Array(19).fill('');
-    row[0] = controle;
-    row[14] = selecionado;
+    const row = new Array(20).fill('');
+    row[1] = controle;
+    row[15] = selecionado;
     return row;
   }
 
