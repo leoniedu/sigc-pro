@@ -98,23 +98,6 @@
     return `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
   }
 
-  // Splits a day into Google-Maps-sized legs (max 10 stops = 9 waypoints
-  // + destination; origin omitted = the device's current location).
-  // Consecutive legs share their boundary stop so navigation is seamless.
-  function chunkRoute(points, maxStops) {
-    const max = maxStops || 10;
-    if (points.length <= max) return [points];
-    const chunks = [];
-    let start = 0;
-    while (start < points.length - 1) {
-      const end = Math.min(start + max, points.length);
-      chunks.push(points.slice(start, end));
-      if (end >= points.length) break;
-      start = end - 1;
-    }
-    return chunks;
-  }
-
   function gmapsRouteUrl(points) {
     const way = points.slice(0, -1).map(fmtCoord).join('|');
     const dest = fmtCoord(points[points.length - 1]);
@@ -434,24 +417,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       const edge = first === -1 || i < first || i > last;
       return !r.reservado && edge ? buildLivreEdgeRow(r) : buildSlotCard(r, enderecos, seqMap, color);
     });
-    // Route links only when >= 2 reserved visits have coordinates.
-    // Tapping the Google Maps link sends that leg's coordinates to
-    // Google — a deliberate user action, never automatic.
-    const stops = group.rows
-      .filter((r) => r.reservado)
-      .map((r) => {
-        const p = slotInfo(r, enderecos);
-        return p && p.lat != null
-          ? { lat: p.lat, lon: p.lon, name: `${r.horaInicio} ${r.nome || r.controle}` } : null;
-      })
-      .filter(Boolean);
-    let rota = '';
-    if (stops.length >= 2) {
-      const legs = chunkRoute(stops, 10);
-      const links = legs.map((leg, i) =>
-        `<a href="${e(gmapsRouteUrl(leg))}">Google Maps${legs.length > 1 ? ` ${i + 1}` : ''}</a>`);
-      rota = `<div class="rota">Rota: ${links.join(' &nbsp;·&nbsp; ')}</div>`;
-    }
+    // Task 3 replaces this with buildRouteSelector's stop list + markup.
     const teamMap = enderecos
       ? buildRouteMapSvg(
           [{ rows: group.rows.filter((r) => r.reservado), color: teamColor(colorIndex) }],
@@ -462,7 +428,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       `<h2>${e(group.equipe)}</h2>`,
       `<div class="teamstats">${statBits}</div>`,
       zonas.length ? `<div class="zonas">Zonas: ${zonas.map(e).join(', ')}</div>` : '',
-      rota,
+      '',
       ...cards,
       teamMap,
     ].filter(Boolean).join('\n');
