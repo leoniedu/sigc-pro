@@ -80,6 +80,24 @@ describe('buildRouteSelector', () => {
     expect(html).toContain('09:00 Maria Silva — Controle: C1 &nbsp;·&nbsp; Dom: D1');
     expect(html).not.toContain('Zona:');
   });
+
+  test('assigns data-idx from a shared cross-team counter (flatMap-style call)', () => {
+    const rows = [
+      row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' }),
+      row({ horaInicio: '10:00', controle: 'C2', domicilio: 'D2' }),
+    ];
+    const enderecos = enderecosMap([
+      ['C1', 'D1', -12.9, -38.5],
+      ['C2', 'D2', -12.8, -38.4],
+    ]);
+    const html = buildRouteSelector(rows, enderecos, 'resumo', false);
+    const idxA = html.indexOf('data-idx="0"');
+    const idxB = html.indexOf('data-idx="1"');
+    expect(idxA).toBeGreaterThan(-1);
+    expect(idxB).toBeGreaterThan(-1);
+    // idx 0 belongs to C1 (first in row order), idx 1 to C2.
+    expect(html.indexOf('data-name="09:00')).toBeLessThan(html.indexOf('data-name="10:00'));
+  });
 });
 
 describe('routeCheckboxInput', () => {
@@ -128,6 +146,29 @@ describe('routeCheckboxInput', () => {
     const html = routeCheckboxInput(r, info, 'team-0', true);
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');
+  });
+
+  test('idx provided and row is routable: carries data-idx', () => {
+    const { routeCheckboxInput } = window.__sigcPro.dayGuide;
+    const r = row({ controle: 'C1', domicilio: 'D1' });
+    const info = { lat: -12.9, lon: -38.5, zona: null, idZona: null };
+    const html = routeCheckboxInput(r, info, 'team-0', true, 3);
+    expect(html).toContain('data-idx="3"');
+  });
+
+  test('idx omitted: no data-idx attribute', () => {
+    const { routeCheckboxInput } = window.__sigcPro.dayGuide;
+    const r = row({ controle: 'C1', domicilio: 'D1' });
+    const info = { lat: -12.9, lon: -38.5, zona: null, idZona: null };
+    const html = routeCheckboxInput(r, info, 'team-0', true);
+    expect(html).not.toContain('data-idx');
+  });
+
+  test('non-routable row: idx is ignored, no data-idx even if provided', () => {
+    const { routeCheckboxInput } = window.__sigcPro.dayGuide;
+    const r = row({ controle: 'C1', domicilio: 'D1' });
+    const html = routeCheckboxInput(r, null, 'team-0', true, 3);
+    expect(html).not.toContain('data-idx');
   });
 });
 
@@ -180,6 +221,14 @@ describe('routeCheckboxHtml', () => {
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');
   });
+
+  test('idx passes through to the wrapped input', () => {
+    const { routeCheckboxHtml } = window.__sigcPro.dayGuide;
+    const r = row({ controle: 'C1', domicilio: 'D1' });
+    const info = { lat: -12.9, lon: -38.5, zona: null, idZona: null };
+    const html = routeCheckboxHtml(r, info, 'team-0', true, 5);
+    expect(html).toContain('data-idx="5"');
+  });
 });
 
 describe('buildSlotCard route checkbox', () => {
@@ -224,6 +273,58 @@ describe('buildSlotCard route checkbox', () => {
   });
 });
 
+describe('routeIdxMap', () => {
+  test('single rowSet: 0-based index across routable rows only, in row order', () => {
+    const { routeIdxMap } = window.__sigcPro.dayGuide;
+    const rows = [
+      row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' }),
+      row({ horaInicio: '10:00', controle: 'C2', domicilio: 'D2' }), // no coords below
+      row({ horaInicio: '11:00', controle: 'C3', domicilio: 'D3' }),
+    ];
+    const enderecos = enderecosMap([
+      ['C1', 'D1', -12.9, -38.5],
+      ['C3', 'D3', -12.7, -38.3],
+    ]);
+    const map = routeIdxMap([{ rows }], enderecos);
+    expect(map.get('C1|D1')).toBe(0);
+    expect(map.has('C2|D2')).toBe(false); // no coords -> not routable -> no idx
+    expect(map.get('C3|D3')).toBe(1);
+  });
+
+  test('multiple rowSets: counter is flat across sets, does not reset', () => {
+    const { routeIdxMap } = window.__sigcPro.dayGuide;
+    const rowsA = [row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' })];
+    const rowsB = [
+      row({ horaInicio: '08:00', controle: 'C2', domicilio: 'D2' }),
+      row({ horaInicio: '09:30', controle: 'C3', domicilio: 'D3' }),
+    ];
+    const enderecos = enderecosMap([
+      ['C1', 'D1', -12.9, -38.5],
+      ['C2', 'D2', -12.8, -38.4],
+      ['C3', 'D3', -12.7, -38.3],
+    ]);
+    const map = routeIdxMap([{ rows: rowsA }, { rows: rowsB }], enderecos);
+    expect(map.get('C1|D1')).toBe(0); // last stop of set A
+    expect(map.get('C2|D2')).toBe(1); // first stop of set B, continues the counter
+    expect(map.get('C3|D3')).toBe(2);
+  });
+
+  test('open (non-reserved) rows never get an idx', () => {
+    const { routeIdxMap } = window.__sigcPro.dayGuide;
+    const rows = [row({ reservado: false, controle: 'C1', domicilio: 'D1' })];
+    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
+    const map = routeIdxMap([{ rows }], enderecos);
+    expect(map.size).toBe(0);
+  });
+
+  test('no enderecos: nothing is routable, empty map', () => {
+    const { routeIdxMap } = window.__sigcPro.dayGuide;
+    const rows = [row({ controle: 'C1', domicilio: 'D1' })];
+    const map = routeIdxMap([{ rows }], null);
+    expect(map.size).toBe(0);
+  });
+});
+
 describe('buildTeamPanel route selector wiring', () => {
   test('<=9 routable stops: all checked by default, groupId is team-<colorIndex>', () => {
     const { buildTeamPanel } = window.__sigcPro.dayGuide;
@@ -259,6 +360,20 @@ describe('buildTeamPanel route selector wiring', () => {
     const enderecos = enderecosMap(entries);
     const html = buildTeamPanel({ equipe: 'Equipe A', rows }, enderecos, 0);
     expect(html).not.toContain('checked');
+  });
+
+  test('each card carries data-idx matching its routable position', () => {
+    const { buildTeamPanel } = window.__sigcPro.dayGuide;
+    const rows = [row({ horaInicio: '09:00' }), row({ horaInicio: '10:00', controle: 'C2', domicilio: 'D2' })];
+    const enderecos = enderecosMap([
+      ['C1', 'D1', -12.9, -38.5],
+      ['C2', 'D2', -12.8, -38.4],
+    ]);
+    const html = buildTeamPanel({ equipe: 'Equipe A', rows }, enderecos, 0);
+    expect(html).toContain('data-idx="0"');
+    expect(html).toContain('data-idx="1"');
+    // idx 0 (09:00/C1) appears before idx 1 (10:00/C2) in document order.
+    expect(html.indexOf('data-idx="0"')).toBeLessThan(html.indexOf('data-idx="1"'));
   });
 });
 

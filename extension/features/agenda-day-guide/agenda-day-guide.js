@@ -120,13 +120,14 @@
   // buildSlotCard (team-panel cards) and wrapped by routeCheckboxHtml
   // (Resumo's standalone list) — the data-* attribute shape and escaping
   // exist in exactly one place either way.
-  function routeCheckboxInput(r, info, groupId, checked) {
+  function routeCheckboxInput(r, info, groupId, checked, idx) {
     const e = escapeHtml;
     if (info && info.lat != null) {
       const checkedAttr = checked ? ' checked' : '';
+      const idxAttr = idx != null ? ` data-idx="${idx}"` : '';
       return `<input type="checkbox" class="route-chk" data-group="${e(groupId)}" ` +
         `data-lat="${info.lat.toFixed(6)}" data-lon="${info.lon.toFixed(6)}" ` +
-        `data-name="${e(routeStopLabel(r))}"${checkedAttr}>`;
+        `data-name="${e(routeStopLabel(r))}"${idxAttr}${checkedAttr}>`;
     }
     return '<input type="checkbox" disabled>';
   }
@@ -135,7 +136,7 @@
   // needs: the checkbox plus a text description of the stop (time, name,
   // Controle/Dom/Zona) and, for non-routable rows, a "sem coordenadas"
   // note — present so the list's row count never silently drops a visit.
-  function routeCheckboxHtml(r, info, groupId, checked) {
+  function routeCheckboxHtml(r, info, groupId, checked, idx) {
     const e = escapeHtml;
     const label = routeStopLabel(r);
     // Displayed label adds the same Controle/Dom/Zona detail buildSlotCard
@@ -148,7 +149,7 @@
       zona && `Zona: ${e(zona)}`,
     ].filter(Boolean).join(' &nbsp;·&nbsp; ');
     const display = detail ? `${e(label)} — ${detail}` : e(label);
-    const input = routeCheckboxInput(r, info, groupId, checked);
+    const input = routeCheckboxInput(r, info, groupId, checked, idx);
     if (info && info.lat != null) {
       return `<label class="route-item">${input} ${display}</label>`;
     }
@@ -160,8 +161,9 @@
   // (Resumo + each team) can coexist without id/state collisions.
   function buildRouteSelector(rows, enderecos, groupId, defaultAllChecked) {
     const e = escapeHtml;
+    const idxMap = routeIdxMap([{ rows }], enderecos);
     const items = rows.filter((r) => r.reservado).map((r) =>
-      routeCheckboxHtml(r, slotInfo(r, enderecos), groupId, defaultAllChecked)
+      routeCheckboxHtml(r, slotInfo(r, enderecos), groupId, defaultAllChecked, idxMap.get(enderecoKey(r)))
     );
     if (items.length === 0) return '';
     return '<div class="route-selector">' +
@@ -267,6 +269,32 @@
         seq += 1;
         map.set(enderecoKey(r), seq);
       }
+    });
+    return map;
+  }
+
+  // enderecoKey -> single flat 0-based index across ALL rowSets' PLOTTABLE
+  // (reserved + has coordinates) rows, in rowSets order then each set's own
+  // row order — the counter does NOT reset per set. This is the join key
+  // shared by a checkbox's data-idx and its dot's data-idx in
+  // buildRouteMapSvg: both must walk identically-shaped rowSets in the
+  // same order for the two to agree, so callers always pass the SAME
+  // rowSets array (or an array built the same way) to both this function
+  // and buildRouteMapSvg. Unlike stopSequenceMap (which restarts at 1 per
+  // call, matching each dot's VISIBLE number), this index is never shown
+  // to the user — it exists only for the inline script to match a
+  // checkbox to its dot.
+  function routeIdxMap(rowSets, enderecos) {
+    const map = new Map();
+    let idx = 0;
+    rowSets.forEach((set) => {
+      set.rows.forEach((r) => {
+        const info = slotInfo(r, enderecos);
+        if (info && info.lat != null) {
+          map.set(enderecoKey(r), idx);
+          idx += 1;
+        }
+      });
     });
     return map;
   }
@@ -403,7 +431,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
   // fetch, when available — never the inflated slot-text list. Missing
   // fields (already normalized to '' by readAgendaSlots) are omitted
   // line by line — a sparse card never breaks.
-  function buildSlotCard(r, enderecos, seqMap, color, routeGroupId, checked) {
+  function buildSlotCard(r, enderecos, seqMap, color, routeGroupId, checked, idx) {
     const e = escapeHtml;
     const hora = `${e(r.horaInicio)}–${e(r.horaFim)}`;
     if (!r.reservado) {
@@ -439,7 +467,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     const seq = seqMap && seqMap.get(enderecoKey(r));
     const seqBadge = seq != null
       ? `<span class="badge badge-seq" style="background:${e(color || '#005a9c')}">${seq}</span> ` : '';
-    const chk = `${routeCheckboxInput(r, info, routeGroupId, checked)} `;
+    const chk = `${routeCheckboxInput(r, info, routeGroupId, checked, idx)} `;
 
     return [
       '<div class="card">',
@@ -488,12 +516,13 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     const last = group.rows.length - 1 -
       [...group.rows].reverse().findIndex((r) => r.reservado);
     const seqMap = stopSequenceMap(group.rows, enderecos);
+    const idxMap = routeIdxMap([{ rows: group.rows }], enderecos);
     const color = teamColor(colorIndex);
     const cards = group.rows.map((r, i) => {
       const edge = first === -1 || i < first || i > last;
       return !r.reservado && edge
         ? buildLivreEdgeRow(r)
-        : buildSlotCard(r, enderecos, seqMap, color, routeGroupId, defaultChecked);
+        : buildSlotCard(r, enderecos, seqMap, color, routeGroupId, defaultChecked, idxMap.get(enderecoKey(r)));
     });
     const teamMap = enderecos
       ? buildRouteMapSvg(
@@ -826,7 +855,7 @@ ${sections}
   }
 
   // Consumed by agenda-map ("Guia + Mapa"): same pipeline, plus enderecos.
-  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel, buildGuideHtml, routeCheckboxInput, routeCheckboxHtml, buildSlotCard };
+  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel, buildGuideHtml, routeCheckboxInput, routeCheckboxHtml, buildSlotCard, routeIdxMap };
 
   // Dia-view-only: `when` flips with the fc-button-active class, which
   // the shared observer watches (attributes: ['class']), so toggling
