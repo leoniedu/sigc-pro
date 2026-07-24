@@ -60,6 +60,54 @@
     return { header, rows };
   }
 
+  // --- F5 gateway URL handling ------------------------------------------
+  // portalweb sits behind an F5 BIG-IP proxy that rewrites every path to
+  // "/f5-w-<hex>$$/<original path>" (the hex is the real backend origin,
+  // hex-encoded) when accessed off-VPN — confirmed live: a plain
+  // location.origin + path request fails outright ("Failed to fetch",
+  // not even an HTTP error) because it bypasses the gateway's rewriting.
+  // Same mechanism agenda-map.js already solved for a different endpoint
+  // (see its f5Prefix/filtrarUrl); duplicated here in parametrized form
+  // (arbitrary path, not just one) since this feature calls two different
+  // endpoints. On the direct host (e.g. via VPN), f5Prefix returns null
+  // and the plain path is used, matching agenda-map's fallback.
+  function f5Prefix(pathname) {
+    const m = /^\/f5-w-([0-9a-f]+)\$\$/.exec(String(pathname || ''));
+    return m ? { prefix: m[0], hex: m[1] } : null;
+  }
+
+  // simple=true: plain prefixed path. simple=false: replicate the fuller
+  // shape captured from the live gateway (f5-h-$$ segment + F5_origin/
+  // F5CH params), same fallback agenda-map's postFiltrar tries second.
+  function gatewayUrl(origin, pathname, path, simple) {
+    const f5 = f5Prefix(pathname);
+    if (!f5) return `${origin}${path}`;
+    return simple
+      ? `${origin}${f5.prefix}${path}`
+      : `${origin}${f5.prefix}/f5-h-$$${path};F5_origin=${f5.hex}&F5CH=I`;
+  }
+
+  // Tries the simple prefixed URL first, then the full captured F5 form —
+  // same two-attempt strategy as agenda-map's postFiltrar, since which
+  // form the live gateway actually needs isn't knowable in advance.
+  async function fetchViaGateway(path, options) {
+    const urls = [...new Set([
+      gatewayUrl(location.origin, location.pathname, path, true),
+      gatewayUrl(location.origin, location.pathname, path, false),
+    ])];
+    let lastErr = new Error('sem resposta');
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, options);
+        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
+        return res;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
+  }
+
   // --- UF / agência-list reading ---------------------------------------
 
   // Último Movimento's own filter form has a UF <select id="IdUf">,
@@ -76,21 +124,17 @@
   // returns {items: [{key, description}, ...]}; entries with a blank key
   // are placeholder options, dropped same as the script drops them.
   async function fetchAgenciaList(uf) {
-    const url = `${location.origin}/Filtro/CarregarAgencias?IdUf=${encodeURIComponent(uf)}`;
-    const res = await fetch(url, {
-      method: 'GET',
-      credentials: 'same-origin',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const res = await fetchViaGateway(
+      `/Filtro/CarregarAgencias?IdUf=${encodeURIComponent(uf)}`,
+      { method: 'GET', credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } },
+    );
     const data = await res.json();
     const items = (data && data.items) || [];
     return items.filter((it) => it && it.key && String(it.key).trim());
   }
 
   async function fetchAgenciaReport(uf, agencia) {
-    const url = `${location.origin}/UltimoMovimento/Filtrar`;
-    const res = await fetch(url, {
+    const res = await fetchViaGateway('/UltimoMovimento/Filtrar', {
       method: 'POST',
       credentials: 'same-origin',
       headers: {
@@ -99,7 +143,6 @@
       },
       body: buildAgenciaFilterBody(uf, agencia),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return parseUltimoMovimentoHtml(await res.text());
   }
 
@@ -221,6 +264,8 @@
     buildAgenciaFilterBody,
     parseUltimoMovimentoHtml,
     getCurrentUf,
+    f5Prefix,
+    gatewayUrl,
   };
 
   // Exposed only for tests — collectAllAgencias is the row-tagging logic
