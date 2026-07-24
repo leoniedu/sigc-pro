@@ -306,15 +306,16 @@
   // each set numbered independently starting at 1. Rows whose slotInfo has
   // no usable lat/lon are excluded from plotting and listed in a single
   // combined coordinate-less note below the map (never silently dropped).
-  function buildRouteMapSvg(rowSets, enderecos, width, height) {
+  function buildRouteMapSvg(rowSets, enderecos, width, height, groupId) {
     const PADDING = 28;
+    const idxMap = routeIdxMap(rowSets, enderecos);
     const plottableSets = rowSets.map((set) => {
       const plottable = [];
       const missing = [];
       set.rows.forEach((r) => {
         const info = slotInfo(r, enderecos);
         if (info && info.lat != null) {
-          plottable.push({ lat: info.lat, lon: info.lon, hora: r.horaInicio });
+          plottable.push({ lat: info.lat, lon: info.lon, hora: r.horaInicio, idx: idxMap.get(enderecoKey(r)) });
         } else {
           missing.push(r);
         }
@@ -331,30 +332,46 @@
     // own slice (projectPoints doesn't know about sets, only points).
     let cursor = 0;
     const svgParts = [];
+    // Combined-across-sets ordered point list, used to draw ONE polyline
+    // spanning every plottable stop (in flattened order) regardless of how
+    // many rowSets were passed in. A single-set caller (team panel) still
+    // gets one line in that set's own color; a multi-set caller (Resumo)
+    // gets one neutral-colored line instead of one per team — the route
+    // link built by the inline script is already a single combined link,
+    // so the static line matches it from the start.
+    const allProjectedInOrder = [];
     plottableSets.forEach((set) => {
       const pts = projected.slice(cursor, cursor + set.plottable.length);
       cursor += set.plottable.length;
       if (pts.length === 0) return;
 
-      if (pts.length >= 2) {
-        const line = pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-        svgParts.push(
-          `<polyline points="${line}" fill="none" stroke="${set.color}" stroke-width="1.5" opacity="0.7"/>`
-        );
-      }
-
       pts.forEach((p, i) => {
+        allProjectedInOrder.push(p);
         const hora = set.plottable[i].hora;
+        const idx = set.plottable[i].idx;
         const seq = i + 1;
         svgParts.push(
+          `<g data-idx="${idx}" data-x="${p.x.toFixed(1)}" data-y="${p.y.toFixed(1)}">` +
           `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="${set.color}" stroke="#fff" stroke-width="1.5"/>` +
           `<text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central" ` +
             `font-size="9" font-weight="700" fill="#fff">${seq}</text>` +
           `<text x="${p.x.toFixed(1)}" y="${(p.y + 20).toFixed(1)}" text-anchor="middle" ` +
-            `font-size="9" fill="#333">${escapeHtml(hora)}</text>`
+            `font-size="9" fill="#333">${escapeHtml(hora)}</text>` +
+          '</g>'
         );
       });
     });
+
+    if (allProjectedInOrder.length >= 2) {
+      const line = allProjectedInOrder.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+      const lineColor = plottableSets.length > 1 ? '#333' : plottableSets[0].color;
+      // Prepended so dots/labels draw on top of the line, unchanged from
+      // the original per-set drawing order.
+      svgParts.unshift(
+        `<polyline id="route-line-${escapeHtml(groupId)}" points="${line}" fill="none" ` +
+          `stroke="${lineColor}" stroke-width="1.5" opacity="0.7"/>`
+      );
+    }
 
     // Scale bar: bottom-left corner.
     const barX = PADDING, barY = height - 12;
@@ -527,7 +544,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     const teamMap = enderecos
       ? buildRouteMapSvg(
           [{ rows: group.rows.filter((r) => r.reservado), color: teamColor(colorIndex) }],
-          enderecos, 480, 320
+          enderecos, 480, 320, routeGroupId
         )
       : '';
     // Bare link placeholder (no checkbox list — checkboxes now live on
@@ -584,7 +601,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
           buildLegend(groups),
           buildRouteMapSvg(
             groups.map((g, i) => ({ rows: g.rows.filter((r) => r.reservado), color: teamColor(i) })),
-            enderecos, 640, 420
+            enderecos, 640, 420, 'resumo'
           ),
         ].filter(Boolean).join('\n')
       : '';
@@ -855,7 +872,7 @@ ${sections}
   }
 
   // Consumed by agenda-map ("Guia + Mapa"): same pipeline, plus enderecos.
-  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel, buildGuideHtml, routeCheckboxInput, routeCheckboxHtml, buildSlotCard, routeIdxMap };
+  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel, buildGuideHtml, routeCheckboxInput, routeCheckboxHtml, buildSlotCard, routeIdxMap, buildRouteMapSvg };
 
   // Dia-view-only: `when` flips with the fc-button-active class, which
   // the shared observer watches (attributes: ['class']), so toggling

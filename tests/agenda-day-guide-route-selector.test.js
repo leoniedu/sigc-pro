@@ -325,6 +325,106 @@ describe('routeIdxMap', () => {
   });
 });
 
+describe('buildRouteMapSvg data-idx/data-x/data-y and polyline id', () => {
+  test('single rowSet (team panel shape): each dot wrapped in <g data-idx data-x data-y>, matches routeIdxMap', () => {
+    const { buildRouteMapSvg, routeIdxMap } = window.__sigcPro.dayGuide;
+    const rows = [
+      row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' }),
+      row({ horaInicio: '10:00', controle: 'C2', domicilio: 'D2' }),
+    ];
+    const enderecos = enderecosMap([
+      ['C1', 'D1', -12.9, -38.5],
+      ['C2', 'D2', -12.8, -38.4],
+    ]);
+    const rowSets = [{ rows, color: '#E69F00' }];
+    const idxMap = routeIdxMap(rowSets, enderecos);
+    const svg = buildRouteMapSvg(rowSets, enderecos, 480, 320, 'team-0');
+    expect(svg).toContain(`<g data-idx="${idxMap.get('C1|D1')}"`);
+    expect(svg).toContain(`<g data-idx="${idxMap.get('C2|D2')}"`);
+    expect(svg).toMatch(/<g data-idx="0" data-x="[\d.]+" data-y="[\d.]+">/);
+  });
+
+  test('single rowSet: polyline carries id="route-line-<groupId>" and keeps the set color', () => {
+    const { buildRouteMapSvg } = window.__sigcPro.dayGuide;
+    const rows = [
+      row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' }),
+      row({ horaInicio: '10:00', controle: 'C2', domicilio: 'D2' }),
+    ];
+    const enderecos = enderecosMap([
+      ['C1', 'D1', -12.9, -38.5],
+      ['C2', 'D2', -12.8, -38.4],
+    ]);
+    const svg = buildRouteMapSvg([{ rows, color: '#E69F00' }], enderecos, 480, 320, 'team-0');
+    expect(svg).toContain('id="route-line-team-0"');
+    expect(svg).toContain('stroke="#E69F00"');
+  });
+
+  test('multiple rowSets (Resumo shape): exactly one polyline, neutral color, not per-set', () => {
+    const { buildRouteMapSvg } = window.__sigcPro.dayGuide;
+    const rowsA = [row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' })];
+    const rowsB = [row({ horaInicio: '10:00', controle: 'C2', domicilio: 'D2' })];
+    const enderecos = enderecosMap([
+      ['C1', 'D1', -12.9, -38.5],
+      ['C2', 'D2', -12.8, -38.4],
+    ]);
+    const svg = buildRouteMapSvg(
+      [{ rows: rowsA, color: '#E69F00' }, { rows: rowsB, color: '#56B4E9' }],
+      enderecos, 640, 420, 'resumo'
+    );
+    const polylineCount = (svg.match(/<polyline/g) || []).length;
+    expect(polylineCount).toBe(1);
+    expect(svg).toContain('id="route-line-resumo"');
+    expect(svg).toContain('stroke="#333"');
+    // Dots still keep their own set's color.
+    expect(svg).toContain('fill="#E69F00"');
+    expect(svg).toContain('fill="#56B4E9"');
+  });
+
+  test('multiple rowSets: data-idx is a flat counter, does not reset at the second set', () => {
+    const { buildRouteMapSvg, routeIdxMap } = window.__sigcPro.dayGuide;
+    const rowsA = [row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' })];
+    const rowsB = [row({ horaInicio: '10:00', controle: 'C2', domicilio: 'D2' })];
+    const enderecos = enderecosMap([
+      ['C1', 'D1', -12.9, -38.5],
+      ['C2', 'D2', -12.8, -38.4],
+    ]);
+    const rowSets = [{ rows: rowsA, color: '#E69F00' }, { rows: rowsB, color: '#56B4E9' }];
+    const idxMap = routeIdxMap(rowSets, enderecos);
+    expect(idxMap.get('C1|D1')).toBe(0);
+    expect(idxMap.get('C2|D2')).toBe(1);
+    const svg = buildRouteMapSvg(rowSets, enderecos, 640, 420, 'resumo');
+    expect(svg).toContain('<g data-idx="0"');
+    expect(svg).toContain('<g data-idx="1"');
+  });
+
+  test('visible sequence number is unaffected by data-idx (still restarts at 1 per set)', () => {
+    const { buildRouteMapSvg } = window.__sigcPro.dayGuide;
+    const rowsA = [row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' })];
+    const rowsB = [row({ horaInicio: '10:00', controle: 'C2', domicilio: 'D2' })];
+    const enderecos = enderecosMap([
+      ['C1', 'D1', -12.9, -38.5],
+      ['C2', 'D2', -12.8, -38.4],
+    ]);
+    const svg = buildRouteMapSvg(
+      [{ rows: rowsA, color: '#E69F00' }, { rows: rowsB, color: '#56B4E9' }],
+      enderecos, 640, 420, 'resumo'
+    );
+    // Both sets' first (and only) dot shows visible number "1" — unrelated
+    // to the flat data-idx counter used above (0 and 1 respectively).
+    const oneCount = (svg.match(/>1<\/text>/g) || []).length;
+    expect(oneCount).toBe(2);
+  });
+
+  test('below 2 checked-equivalent plottable points in a set, still draws that single dot with its <g> wrapper (no polyline)', () => {
+    const { buildRouteMapSvg } = window.__sigcPro.dayGuide;
+    const rows = [row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' })];
+    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
+    const svg = buildRouteMapSvg([{ rows, color: '#E69F00' }], enderecos, 480, 320, 'team-0');
+    expect(svg).toContain('<g data-idx="0"');
+    expect(svg).not.toContain('<polyline');
+  });
+});
+
 describe('buildTeamPanel route selector wiring', () => {
   test('<=9 routable stops: all checked by default, groupId is team-<colorIndex>', () => {
     const { buildTeamPanel } = window.__sigcPro.dayGuide;
