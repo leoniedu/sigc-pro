@@ -21,9 +21,9 @@
 <body>
 <header><h1>SIGC-PRO — Política de Privacidade</h1></header>
 <main>
-  <p><em>Última atualização: 20 de julho de 2026.</em></p>
+  <p><em>Última atualização: 24 de julho de 2026.</em></p>
 
-  <div class="destaque"><strong>Resumo: o SIGC-PRO NÃO coleta, NÃO transmite e NÃO armazena nenhum dado para o desenvolvedor ou para terceiros. A única comunicação de rede é uma consulta opcional, acionada por clique e confirmada pelo usuário, ao próprio servidor do SIGC — dentro da sessão já autenticada. Nenhuma informação sai do circuito usuário–IBGE.</strong></div>
+  <div class="destaque"><strong>Resumo: o SIGC-PRO NÃO coleta, NÃO transmite e NÃO armazena nenhum dado para o desenvolvedor ou para terceiros. As únicas comunicações de rede são consultas opcionais, acionadas por clique e confirmadas pelo usuário, ao próprio servidor do SIGC — dentro da sessão já autenticada. O único armazenamento é um flag local (ligado/desligado) para uma dessas funcionalidades opcionais. Nenhuma informação sai do circuito usuário–IBGE.</strong></div>
 
   <h2>1. O que a extensão faz</h2>
   <p>O SIGC-PRO opera exclusivamente dentro das páginas do SIGC já abertas no
@@ -32,27 +32,50 @@
   <p>Na Lista de Endereços: reexporta o PDF em formato listagem e converte a
   tabela de endereços em um arquivo KML (Google Earth/Maps), ambos com
   camadas/colunas reorganizadas. Em qualquer relatório com tabela: exporta os
-  dados como CSV. Na Agenda (Administrar Agenda): exporta os slots do
-  calendário como CSV; verifica prazos de agendamento e consistência de
-  nomes de zona/equipe; oferece um seletor de data; e gera um guia HTML do
-  dia por equipe (opcionalmente enriquecido, mediante clique e confirmação,
-  com a zona real e as coordenadas de cada visita, veja item 2).</p>
+  dados como CSV. No relatório Último Movimento, com um flag avançado
+  ativado nas Opções da extensão (veja item 2): exporta o relatório de
+  todas as agências da UF atual em um único CSV. Na Agenda (Administrar
+  Agenda): exporta os slots do calendário como CSV; verifica prazos de
+  agendamento e consistência de nomes de zona/equipe; oferece um seletor de
+  data; e gera um guia HTML do dia por equipe (opcionalmente enriquecido,
+  mediante clique e confirmação, com a zona real e as coordenadas de cada
+  visita, veja item 2).</p>
 
   <h2>2. Coleta e transmissão de dados</h2>
-  <p>Quase nenhuma. O recurso opcional "Guia + Mapa" faz, somente quando o usuário clica e confirma, uma requisição ao próprio servidor do SIGC (mesma origem da página) para obter as coordenadas e a zona dos endereços do dia; a resposta é processada localmente e usada para incluir, no guia gerado, links de navegação para o Google Maps (por visita e por equipe) e um mapa-esquema em SVG da rota — esses links só são acionados se o próprio usuário clicar neles, e o mapa-esquema não carrega nenhuma imagem ou serviço externo. Fora essa única requisição, o código não contém chamadas de rede nem carrega recursos externos — uma verificação automática do repositório (scripts/check-privacy.sh) confere, a cada alteração, que requisições só existem nesse único módulo e só para a própria origem, complementando as garantias de base: a lista vazia de permissões no manifest.json e a auditoria do código aberto. Não há telemetria, análise de uso ou qualquer integração com serviços de terceiros.</p>
+  <p>Quase nenhuma. Dois recursos opcionais fazem requisições ao próprio
+  servidor do SIGC (mesma origem da página), sempre dentro da sessão já
+  autenticada do usuário: "Guia + Mapa", que consulta as coordenadas e a
+  zona dos endereços do dia mediante clique e confirmação — a resposta é
+  processada localmente e usada para incluir, no guia gerado, links de
+  navegação para o Google Maps (por visita e por equipe) e um mapa-esquema
+  em SVG da rota, que não carrega nenhuma imagem ou serviço externo; e a
+  exportação avançada do relatório Último Movimento (multi-agência), que
+  só aparece quando o usuário ativa esse flag nas Opções da extensão e,
+  quando usada, faz uma requisição por agência da UF atual (com 2 segundos
+  de intervalo entre elas) para montar um único CSV. Fora essas duas
+  funcionalidades opcionais, o código não contém chamadas de rede nem
+  carrega recursos externos — uma verificação automática do repositório
+  (scripts/check-privacy.sh) confere, a cada alteração, que requisições só
+  existem nesses dois módulos e só para a própria origem, complementando a
+  auditoria do código aberto. Não há telemetria, análise de uso ou
+  qualquer integração com serviços de terceiros.</p>
 
   <h2>3. Armazenamento</h2>
-  <p>Nenhum. A extensão não usa <code>chrome.storage</code>,
-  <code>localStorage</code>, cookies ou IndexedDB. O arquivo KML é gerado em
-  memória e gravado apenas onde você escolher salvá-lo.</p>
+  <p>Um único valor local: o estado (ligado/desligado, desligado por
+  padrão) do flag que ativa a exportação avançada do Último Movimento,
+  salvo via <code>chrome.storage.local</code> e alterável na página de
+  Opções da extensão. Fora esse flag, a extensão não usa
+  <code>localStorage</code>, cookies ou IndexedDB. O arquivo KML é gerado
+  em memória e gravado apenas onde você escolher salvá-lo.</p>
 
   <h2>4. Permissões do navegador</h2>
-  <p>A extensão não solicita nenhuma permissão especial — o manifesto declara
-  apenas em quais páginas (<code>portalweb.ibge.gov.br</code>,
+  <p>A extensão solicita apenas a permissão <code>storage</code>, usada
+  exclusivamente para o flag descrito no item 3 — nenhuma outra permissão
+  é declarada. O manifesto também declara em quais páginas
+  (<code>portalweb.ibge.gov.br</code>,
   <code>portalweb2.ibge.gov.br</code> e <code>w3sigcpns2025.ibge.gov.br</code>,
   os domínios do SIGC) seus scripts são executados. Isso pode ser
-  verificado em <code>chrome://extensions</code>
-  (&ldquo;Nenhuma permissão especial&rdquo;) e no arquivo
+  verificado em <code>chrome://extensions</code> e no arquivo
   <code>manifest.json</code>.</p>
 
   <h2>5. Código aberto e auditoria</h2>
@@ -67,9 +90,11 @@
   sob a governança do IBGE e das políticas de acesso do próprio sistema.</p>
 
   <h2>7. Alterações nesta política</h2>
-  <p>Qualquer mudança futura (por exemplo, se alguma funcionalidade passar a
-  usar armazenamento local) será refletida nesta página e no histórico do
-  repositório antes de ser distribuída.</p>
+  <p>Qualquer mudança futura será refletida nesta página e no histórico do
+  repositório antes de ser distribuída. Em 24 de julho de 2026, esta
+  política foi atualizada para refletir a primeira funcionalidade a usar
+  armazenamento local (item 3) e a segunda funcionalidade a fazer
+  requisições de rede (item 2), ambas opcionais e descritas acima.</p>
 
   <h2>8. Contato</h2>
   <p>Dúvidas e reportes: abra uma <em>issue</em> no repositório do projeto no

@@ -27,6 +27,12 @@ Em qualquer relatório com tabela:
   Excel brasileiro), contornando um problema conhecido do portal que
   impede o download pelos botões nativos de CSV/Excel fora da rede VPN.
 
+No relatório Último Movimento, com um flag avançado ativado nas Opções
+da extensão:
+• CSV TODAS — exporta o relatório de todas as agências da UF atual
+  (não só a selecionada na tela) em um único CSV, uma requisição por
+  agência ao próprio servidor do SIGC.
+
 Em Administrar Agenda:
 • CSV-PRO — exporta os slots do calendário (dia/semana em exibição) com
   Controle, Domicílio, nome, endereço, telefone etc. já separados em
@@ -44,12 +50,14 @@ Em Administrar Agenda:
   e confirmação.
 • Seletor de data — botão de calendário para pular direto a uma data.
 
-PRIVACIDADE: nenhum dado sai do circuito usuário–IBGE. A extensão não
-solicita nenhuma permissão do navegador e não armazena nada; todos os
+PRIVACIDADE: nenhum dado sai do circuito usuário–IBGE. A extensão
+solicita apenas a permissão "storage" do navegador, usada só para
+lembrar o estado do flag avançado acima (Opções da extensão); todos os
 arquivos são gerados localmente e salvos pelo mecanismo padrão de
-download do Chrome. A única chamada de rede é a consulta opcional do
-Guia + Mapa ao próprio servidor do SIGC (mesma sessão do usuário),
-acionada por clique e confirmação — nada é enviado a terceiros nem ao
+download do Chrome. As únicas chamadas de rede são as consultas
+opcionais do Guia + Mapa e da exportação avançada do Último Movimento,
+ambas ao próprio servidor do SIGC (mesma sessão do usuário), acionadas
+por clique e confirmação — nada é enviado a terceiros nem ao
 desenvolvedor. Isso é verificado automaticamente a cada alteração no
 código-fonte (veja o repositório).
 
@@ -80,12 +88,16 @@ not the whole ibge.gov.br domain — to add
 export buttons (PDF, KML, CSV) to report toolbars
 and Agenda helpers (CSV export, slot checks, printable day guide, date
 picker), reading data already rendered on the page. No access to any
-other site is requested. No browser permissions (storage, tabs, etc.)
-are declared — the extension stores no data and makes no network calls,
-except one optional, click-and-confirm request made by the "Guia +
-Mapa" feature to the SIGC server itself (same origin, within the user's
-existing session); nothing is ever sent to third parties or the
-developer.
+other site is requested. The only browser permission declared is
+`storage`, used solely to remember the on/off state of one advanced,
+off-by-default flag (set on the extension's own Options page) that
+gates a bulk export feature; no other data is stored. The extension
+makes no network calls except two optional, click-and-confirm requests
+to the SIGC server itself (same origin, within the user's existing
+session): the "Guia + Mapa" feature, and — only when the advanced flag
+above is enabled — a bulk "Último Movimento" report export that loops
+one request per agência in the current UF. Nothing is ever sent to
+third parties or the developer.
 ```
 
 ## Category

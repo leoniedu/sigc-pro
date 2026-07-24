@@ -54,6 +54,14 @@
     incluindo todas as páginas da tabela, não só a visível.</p>
   </div>
   <div class="card">
+    <h3>📊 CSV TODAS — Último Movimento (avançado)</h3>
+    <p>No relatório Último Movimento, com um flag avançado ativado nas
+    Opções da extensão, exporta o relatório de <strong>todas</strong> as
+    agências da UF atual (não só a selecionada na tela) em um único CSV —
+    uma requisição por agência, com intervalo entre elas, ao próprio
+    servidor do SIGC.</p>
+  </div>
+  <div class="card">
     <h3>📅 CSV-PRO — Agenda</h3>
     <p>Exporta os slots do calendário (Administrar Agenda) — data, equipe,
     horário, Controle, Domicílio, nome, endereço, telefone etc. — da semana
@@ -88,10 +96,14 @@
     <li>Clique em <strong>Carregar sem compactação</strong> e selecione a pasta <code>extension/</code>.</li>
     <li>Abra a Lista de Endereços ou a Agenda no SIGC e use os botões <strong>PRO</strong>.</li>
   </ol>
-  <p>Requer Chrome 111+. A extensão só age em páginas do SIGC, valida o
-  layout da tabela antes de alterar qualquer coisa e não pede nenhuma
-  permissão e não armazena nada; a única chamada de rede é a consulta opcional do Guia + Mapa ao próprio servidor do SIGC, mediante clique e confirmação — os arquivos
-  exportados ficam somente no computador do usuário.</p>
+  <p>Requer Chrome 111+. A extensão só age em páginas do SIGC e valida o
+  layout da tabela antes de alterar qualquer coisa. Solicita apenas a
+  permissão <code>storage</code>, usada só para lembrar o estado do flag
+  avançado (Opções da extensão) — as únicas chamadas de rede são as
+  consultas opcionais do Guia + Mapa e da exportação avançada do Último
+  Movimento, ambas ao próprio servidor do SIGC, mediante clique e
+  confirmação; os arquivos exportados ficam somente no computador do
+  usuário.</p>
 </main>
 <footer>SIGC-PRO · projeto não oficial · MIT · <a href="PRIVACY_POLICY.html">Política de Privacidade</a></footer>
 </body>
