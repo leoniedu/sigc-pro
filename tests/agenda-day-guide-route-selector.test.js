@@ -588,4 +588,58 @@ describe('inline script is present and shaped correctly', () => {
     applyCap([...nineChecked, tenth]);
     expect(tenth.disabled).toBe(false);
   });
+
+  test('buildGuideHtml output contains data-idx groups and a route-line id, matching checkboxes', () => {
+    const { buildGuideHtml } = window.__sigcPro.dayGuide;
+    const groups = [{ equipe: 'Equipe A', rows: [row({ controle: 'C1', domicilio: 'D1' })] }];
+    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
+    const meta = { uf: 'BA', dataBr: '22/07/2026', diaSemana: 'quarta-feira', geradoEm: '22/07/2026 10:00' };
+    const html = buildGuideHtml(meta, groups, groups[0].rows, enderecos);
+    expect(html).toMatch(/<g data-idx="\d+" data-x="[\d.]+" data-y="[\d.]+">/);
+    expect(html).toContain('route-chk');
+    expect(html).toMatch(/data-idx="\d+"/);
+  });
+
+  test('map redraw logic (mirrored): dims unchecked stops, rebuilds line from checked ones in idx order', () => {
+    // Mirrors refreshGroup's new map-redraw step exactly (Task 3 Step 3
+    // below). happy-dom doesn't reliably execute inline <script> tags
+    // inserted via innerHTML, so this pins the same logic standalone,
+    // same pattern as the cap-enforcement/URL-building mirror tests
+    // already in this file.
+    function redrawMap(groupId, checkedIdxSet, allStopGs) {
+      var checkedStops = [];
+      allStopGs.forEach(function (g) {
+        var idx = g.dataset.idx;
+        if (checkedIdxSet.has(idx)) {
+          g.dimmed = false;
+          checkedStops.push(g);
+        } else {
+          g.dimmed = true;
+        }
+      });
+      checkedStops.sort(function (a, b) { return Number(a.dataset.idx) - Number(b.dataset.idx); });
+      if (checkedStops.length < 2) return { points: null };
+      var points = checkedStops.map(function (g) {
+        return g.dataset.x + ',' + g.dataset.y;
+      }).join(' ');
+      return { points: points };
+    }
+
+    var gs = [
+      { dataset: { idx: '0', x: '10.0', y: '20.0' } },
+      { dataset: { idx: '1', x: '30.0', y: '40.0' } },
+      { dataset: { idx: '2', x: '50.0', y: '60.0' } },
+    ];
+
+    // Only idx 0 and 2 checked -> idx 1 stays dimmed, line skips it.
+    var result = redrawMap('team-0', new Set(['0', '2']), gs);
+    expect(gs[0].dimmed).toBe(false);
+    expect(gs[1].dimmed).toBe(true);
+    expect(gs[2].dimmed).toBe(false);
+    expect(result.points).toBe('10.0,20.0 50.0,60.0');
+
+    // Below 2 checked -> no line.
+    var result2 = redrawMap('team-0', new Set(['0']), gs);
+    expect(result2.points).toBeNull();
+  });
 });

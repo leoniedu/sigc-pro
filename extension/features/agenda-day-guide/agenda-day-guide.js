@@ -732,6 +732,7 @@ a { color: #005a9c; }
 .route-map-legend { display: flex; flex-wrap: wrap; gap: .6rem; margin: .4rem 0; font-size: .85rem; }
 .route-map-legend-item { display: inline-flex; align-items: center; gap: .3rem; }
 .route-map-swatch { display: inline-block; width: .7rem; height: .7rem; border-radius: 2px; }
+.route-stop-dim { opacity: .35; }
 ${TABLE_CSS}
 ${tabRules}
 @media print { .tabs { display: none; } }
@@ -776,6 +777,39 @@ ${sections}
     boxes.forEach(function (b) {
       if (!b.checked) b.disabled = checked.length >= MAX_STOPS;
     });
+
+    // Map redraw: dim unchecked stops, rebuild the line from checked ones
+    // in data-idx order (already time order). Runs regardless of the
+    // link's own visibility rule below — the map has no "hidden below 2"
+    // state of its own for dots, only for the line. Scoped to this
+    // group's own <svg> (found via its uniquely-id'd polyline) since
+    // data-idx values are only unique within one map, not document-wide.
+    var line = document.getElementById('route-line-' + groupId);
+    var svg = line ? line.closest('svg') : null;
+    if (svg) {
+      var checkedIdx = new Set(checked.map(function (b) { return b.dataset.idx; }));
+      var stopGs = svg.querySelectorAll('g[data-idx]');
+      var checkedGs = [];
+      stopGs.forEach(function (g) {
+        if (checkedIdx.has(g.dataset.idx)) {
+          g.classList.remove('route-stop-dim');
+          checkedGs.push(g);
+        } else {
+          g.classList.add('route-stop-dim');
+        }
+      });
+      if (checkedGs.length >= 2) {
+        checkedGs.sort(function (a, b) { return Number(a.dataset.idx) - Number(b.dataset.idx); });
+        var points = checkedGs.map(function (g) {
+          return g.dataset.x + ',' + g.dataset.y;
+        }).join(' ');
+        line.setAttribute('points', points);
+        line.style.display = '';
+      } else {
+        line.style.display = 'none';
+      }
+    }
+
     var link = document.getElementById('rota-link-' + groupId);
     if (!link) return;
     if (checked.length < 2) {
