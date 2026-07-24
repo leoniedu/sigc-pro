@@ -12,7 +12,7 @@ GlobalRegistrator.register();
 // on whichever file's first mountWidget() call happens to run first — so
 // wrapping the constructor inside an individual test file only counts
 // correctly when that file is guaranteed to run before every other one,
-// which bun does not guarantee under its default (non---isolate) mode.
+// which bun does not guarantee under its default (non-isolate) mode.
 // Installing the wrapper here instead, before any file's import chain
 // starts, makes the count and the live-instance handle correct
 // regardless of file execution order.
