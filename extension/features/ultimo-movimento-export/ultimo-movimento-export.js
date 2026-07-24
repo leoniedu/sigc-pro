@@ -18,14 +18,16 @@
 
   // True on the Último Movimento report page, detected via the page
   // header's h6 title — same approach sigc-common's onListaEnderecos()
-  // uses for its own page. Must be true BEFORE the user clicks Filtrar
-  // (the button needs to appear right away, next to Filtrar itself), so
-  // it can't depend on the results table (#tb_ultimo_movimento), which
-  // only renders after a filter is applied — confirmed against the live
-  // page.
+  // uses for its own page, including its accent-stripping (tolerates
+  // SIGC ever rendering the title without the accent). Must be true
+  // BEFORE the user clicks Filtrar (the button needs to appear right
+  // away, next to Filtrar itself), so it can't depend on the results
+  // table (#tb_ultimo_movimento), which only renders after a filter is
+  // applied — confirmed against the live page.
   function onUltimoMovimento() {
     return [...document.querySelectorAll('h6')].some(
-      (h) => window.__sigcPro.normalizeLabel(h.textContent) === 'último movimento'
+      (h) => window.__sigcPro.normalizeLabel(h.textContent).replace(/[íú]/g, (c) => (c === 'í' ? 'i' : 'u')) ===
+        'ultimo movimento'
     );
   }
 

@@ -60,6 +60,10 @@ describe('onUltimoMovimento', () => {
       '<h6 class="font-weight-bold mb-0">Último Movimento</h6></div>';
     expect(UME.onUltimoMovimento()).toBe(true);
   });
+  test('true even without the accent (tolerant, like onListaEnderecos)', () => {
+    document.body.innerHTML = '<h6>Ultimo Movimento</h6>';
+    expect(UME.onUltimoMovimento()).toBe(true);
+  });
   test('false otherwise', () => {
     document.body.innerHTML = '<div>outra página</div><h6>Outro Relatório</h6>';
     expect(UME.onUltimoMovimento()).toBe(false);
