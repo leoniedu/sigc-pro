@@ -147,6 +147,10 @@ Per selector group:
 - Live-updating the per-team/day SVG route maps as boxes are
   toggled — those stay static, still showing the full team/day as
   today. Only the Google Maps `<a>` link is dynamic.
+  **Superseded** by
+  [2026-07-23-agenda-day-guide-checkbox-reactive-map-design.md](2026-07-23-agenda-day-guide-checkbox-reactive-map-design.md):
+  the SVG maps now dim unchecked stops and rebuild their line to
+  match the checked selection.
 - Lab tab changes.
 - Any change to which stops are *checkable* (still: reserved visits
   with non-null coordinates from the `enderecos` join — coordinate-less

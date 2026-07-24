@@ -154,6 +154,12 @@ stance recorded 2026-07-16 in the map spec) remain the tools of record.
 - Basemap tiles / any imagery (ruled out by the privacy gate and the
   no-third-party-queries stance — see Purpose).
 - Clickable/interactive dots (see Rendering — no interactivity).
+  **Superseded** by
+  [2026-07-23-agenda-day-guide-checkbox-reactive-map-design.md](2026-07-23-agenda-day-guide-checkbox-reactive-map-design.md):
+  dots now dim/undim and the route line redraws in response to the
+  route checkboxes (added later, see
+  [2026-07-22-agenda-day-guide-dynamic-route-design.md](2026-07-22-agenda-day-guide-dynamic-route-design.md)) —
+  still not independently clickable, but no longer purely static either.
 - Label collision avoidance for dense clusters (YAGNI for v1).
 - Open-slot mapping (no household → no coordinate, same as the rest of
   the map integration).
