@@ -505,6 +505,15 @@
     mounts.forEach((m) => tickMount(m, ctx));
   }
 
+  // Forces every mounted widget's `when` to be re-evaluated right now,
+  // without waiting for a DOM mutation to trigger the shared observer.
+  // Needed by features whose gating condition can flip asynchronously
+  // with no DOM change of its own (e.g. settings.js, once an async
+  // flag value arrives from the ISOLATED-world relay).
+  function recheckMounts() {
+    tickAllMounts();
+  }
+
   // { id, anchor: (ctx) => Element|null, when?: (ctx) => bool,
   //   build: () => Element }. Registers the widget, ticks it once
   // immediately (covers already-loaded pages), and lazily starts the
@@ -623,6 +632,7 @@
     readAgendaSlots,
     agendaMinScheduleDate,
     mountWidget,
+    recheckMounts,
     makeDtProButton,
     makeFcProButton,
   };

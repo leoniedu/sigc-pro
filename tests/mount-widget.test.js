@@ -177,6 +177,25 @@ test('widgets sharing an anchor insert in registration order', async () => {
   expect([...anchor.children].map((el) => el.id)).toEqual([a, b]);
 });
 
+test('recheckMounts re-evaluates when() immediately without waiting for a mutation', () => {
+  const id = uid('recheck');
+  const anchorCls = uid('recheck-anchor');
+  const anchor = document.createElement('div');
+  anchor.className = anchorCls;
+  document.body.appendChild(anchor);
+  let gate = false;
+  P.mountWidget({
+    id,
+    anchor: () => document.querySelector(`.${anchorCls}`),
+    when: () => gate,
+    build: () => makeButton(id),
+  });
+  expect(document.getElementById(id)).toBeNull();
+  gate = true;
+  P.recheckMounts();
+  expect(document.getElementById(id)).not.toBeNull();
+});
+
 // Declaration order matters: this must be the LAST test in the file so
 // every registration above has already happened.
 test('exactly one MutationObserver serves all mounts', () => {
