@@ -48,3 +48,24 @@ describe('makeFcProButton', () => {
     btn.click(); // must not throw
   });
 });
+
+describe('makeSigcFormButton', () => {
+  test('produces a btn-sigc-classed form button', () => {
+    let clicked = 0;
+    const btn = P.makeSigcFormButton({
+      id: 'sigc-x',
+      text: 'CSV TODAS',
+      title: 'Exportar todas as agências (SIGC-PRO)',
+      onClick: () => (clicked += 1),
+    });
+    expect(btn.tagName).toBe('BUTTON');
+    expect(btn.id).toBe('sigc-x');
+    expect(btn.type).toBe('button');
+    expect(btn.className).toBe('btn btn-primary btn-sigc');
+    expect(btn.textContent).toBe('CSV TODAS');
+    expect(btn.title).toBe('Exportar todas as agências (SIGC-PRO)');
+    expect(btn.style.background).toBe('#005a9c');
+    btn.click();
+    expect(clicked).toBe(1);
+  });
+});

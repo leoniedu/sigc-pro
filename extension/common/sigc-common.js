@@ -483,18 +483,31 @@
       agendaChunk: () => once('agendaChunk', findAgendaToolbarChunk),
       onLista: () => once('onLista', onListaEnderecos),
       onAgenda: () => once('onAgenda', onAgendaPage),
+      ultimoMovimentoFiltrarBtn: () =>
+        once('ultimoMovimentoFiltrarBtn', () => document.getElementById('btnFiltrar')),
     };
   }
 
   // try/catch per mount: one broken mount must never break the others —
   // the isolation the per-feature IIFEs used to provide.
+  //
+  // insert: 'append' (default) puts the built widget inside the anchor,
+  // as a last child — the original behavior, for anchors that are
+  // containers (e.g. a toolbar). insert: 'after' puts it as the anchor's
+  // NEXT SIBLING instead — for anchors that are themselves a button to
+  // sit beside (e.g. Último Movimento's Filtrar), where appending into
+  // the anchor's parent would land after unrelated trailing siblings.
   function tickMount(m, ctx) {
     try {
       const existing = document.getElementById(m.id);
       const anchorEl = m.anchor(ctx);
       const ok = anchorEl && (!m.when || m.when(ctx));
-      if (ok && !existing) anchorEl.appendChild(m.build());
-      else if (!ok && existing) existing.remove();
+      if (ok && !existing) {
+        if (m.insert === 'after') anchorEl.insertAdjacentElement('afterend', m.build());
+        else anchorEl.appendChild(m.build());
+      } else if (!ok && existing) {
+        existing.remove();
+      }
     } catch (err) {
       console.warn(`${TAG} mount "${m.id}" tick failed:`, err);
     }
@@ -503,6 +516,15 @@
   function tickAllMounts() {
     const ctx = makeTickCtx();
     mounts.forEach((m) => tickMount(m, ctx));
+  }
+
+  // Forces every mounted widget's `when` to be re-evaluated right now,
+  // without waiting for a DOM mutation to trigger the shared observer.
+  // Needed by features whose gating condition can flip asynchronously
+  // with no DOM change of its own (e.g. settings.js, once an async
+  // flag value arrives from the ISOLATED-world relay).
+  function recheckMounts() {
+    tickAllMounts();
   }
 
   // { id, anchor: (ctx) => Element|null, when?: (ctx) => bool,
@@ -590,6 +612,30 @@
     return btn;
   }
 
+  // SIGC form-action button (e.g. Último Movimento's Filtrar/Cancelar,
+  // rendered as `<a class="btn btn-primary btn-sigc">`, not a real
+  // <button> — SIGC's own bootstrap-based button styling). Reusing these
+  // classes gives correct box metrics/padding/font next to the native
+  // buttons; only background/border are overridden to read as SIGC-PRO,
+  // same "reuse native classes, override color only" approach as
+  // makeDtProButton/makeFcProButton. A real <button> element (not an <a>)
+  // is used regardless — no href/javascript: URL needed since onClick is
+  // wired directly, and this avoids SIGC's F5 javascript-URL rewriting
+  // wrapper entirely.
+  function makeSigcFormButton({ id, text, title, onClick }) {
+    const btn = document.createElement('button');
+    btn.id = id;
+    btn.type = 'button';
+    btn.className = 'btn btn-primary btn-sigc';
+    btn.textContent = text;
+    btn.title = title;
+    btn.style.background = '#005a9c';
+    btn.style.borderColor = '#005a9c';
+    btn.style.marginLeft = '8px';
+    btn.addEventListener('click', onClick);
+    return btn;
+  }
+
   // Note: agenda-day-guide additionally injects `dayGuide` (generate /
   // diaViewActive) onto this object at load time, consumed by agenda-map;
   // manifest load order guarantees day-guide runs first.
@@ -623,8 +669,10 @@
     readAgendaSlots,
     agendaMinScheduleDate,
     mountWidget,
+    recheckMounts,
     makeDtProButton,
     makeFcProButton,
+    makeSigcFormButton,
   };
   console.log(`${TAG} common runtime loaded.`);
 })();

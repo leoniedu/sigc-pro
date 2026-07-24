@@ -33,6 +33,17 @@ Em **qualquer relatório do SIGC** com tabela (DataTables):
   da VPN — o CSV-pro lê os dados diretamente via API do DataTables, sem
   depender desses botões.
 
+No relatório **Último Movimento**, com o flag avançado "Exportação
+Último Movimento (multi-agência)" ativado (veja Configurações abaixo):
+
+- **CSV TODAS** — baixa o relatório Último Movimento de TODAS as agências
+  da UF atual (não só a agência filtrada na tela) e combina tudo em um
+  único CSV, com IdUf/IdAgencia/AgenciaDescricao adicionados às colunas
+  originais. Faz uma requisição por agência, com 2 segundos de intervalo
+  entre elas, ao próprio servidor do SIGC — pode levar alguns minutos.
+  Uma agência que falhar é pulada (o CSV final é gerado com o restante, e
+  um alerta lista quais falharam), não interrompe a exportação inteira.
+
 Em **Administrar Agenda** (qualquer UF/pesquisa cuja URL termine em
 `/AdministracaoAgenda`):
 
@@ -105,22 +116,41 @@ Requer Chrome 111 ou superior.
 
 ## Configuração
 
-Não há tela de opções: os ajustes (colunas mantidas no PDF, colunas
-promovidas ao subtítulo, título) ficam em
+Colunas mantidas no PDF, colunas promovidas ao subtítulo e título ficam em
 `extension/common/sigc-common.js`, na entrada da pesquisa em `PESQUISAS`.
 Novas pesquisas são adicionadas como novas entradas no mesmo formato.
 
+A página **Opções** da extensão (clique com o botão direito no ícone do
+SIGC-PRO na barra do Chrome → **Opções**, ou em `chrome://extensions` →
+detalhes do SIGC-PRO → **Opções da extensão**) tem um flag avançado
+desativado por padrão: "Exportação Último Movimento (multi-agência)".
+Esse flag existe porque a funcionalidade que ele libera faz várias
+requisições em sequência ao servidor do SIGC (uma por agência da UF) —
+um padrão de uso mais sensível do que o resto da extensão, que só lê a
+página já carregada na tela. O valor do flag fica salvo localmente via
+`chrome.storage.local` (a única funcionalidade da extensão que usa
+armazenamento; veja Privacidade abaixo). Uma mudança no flag vale a
+partir do próximo carregamento da página do SIGC.
+
 ## Privacidade
 
-**Nenhum dado sai do seu computador.** A extensão não solicita nenhuma
-permissão do navegador, não faz chamadas de rede — exceto o recurso opcional "Guia + Mapa", que consulta o próprio servidor do SIGC mediante clique e confirmação (nada vai a terceiros), não armazena nada
-(nem `localStorage`) e não tem código remoto — o arquivo KML é gerado em
-memória e salvo localmente. Detalhes em
+**Nenhum dado sai do seu computador.** A extensão solicita apenas a
+permissão `storage` do navegador (usada exclusivamente para lembrar o
+estado do flag avançado — veja Configuração acima) e não faz chamadas de
+rede, exceto dois recursos opcionais, ambos mediante clique e
+confirmação, ambos apenas ao próprio servidor do SIGC (nada vai a
+terceiros): "Guia + Mapa" (coordenadas de endereços) e, com o flag
+avançado ativado, a exportação Último Movimento multi-agência. Fora
+esses dois casos a extensão não tem código remoto — o arquivo KML, por
+exemplo, é gerado em memória e salvo localmente. Detalhes em
 [PRIVACY_POLICY](docs/PRIVACY_POLICY.html).
 
 Essa garantia é verificada por um *gate* automático
 (`scripts/check-privacy.sh`): um hook de pre-commit bloqueia qualquer commit
-que introduza APIs de rede ou armazenamento em `extension/` (exceção única e auditada: `fetch` em `features/agenda-map/`, que não pode conter URLs absolutas). Para ativá-lo
+que introduza APIs de rede ou armazenamento em `extension/` fora de
+exceções únicas e auditadas: `fetch` (sem URLs absolutas) em
+`features/agenda-map/` e `features/ultimo-movimento-export/`, e
+`chrome.storage` em `features/settings/`. Para ativá-lo
 após clonar o repositório:
 
 ```sh

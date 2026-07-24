@@ -17,6 +17,15 @@ Em qualquer relatório do SIGC com tabela:
   * CSV-pro — exporta a tabela como CSV, contornando um bug do portalweb
     que quebra os botões nativos de CSV/Excel fora da VPN.
 
+No relatório Último Movimento, com o flag avançado "Exportação Último
+Movimento (multi-agência)" ativado (botão direito no ícone do SIGC-PRO
+→ Opções; veja Configurações no README):
+  * CSV TODAS — baixa o Último Movimento de TODAS as agências da UF
+    atual (não só a filtrada na tela) e combina tudo em um único CSV.
+    Faz uma requisição por agência, com 2s de intervalo, ao próprio
+    servidor do SIGC — pode levar alguns minutos. Agência que falhar é
+    pulada, não interrompe a exportação.
+
 Em Administrar Agenda:
   * CSV-PRO — exporta os slots do calendário (dia/semana atual, todas as
     equipes visíveis) como CSV, já com Controle, Domicílio, Nome, Sexo,
@@ -94,10 +103,12 @@ Problemas?
 Privacidade
 -----------
 Nenhum dado sai do seu computador para o desenvolvedor ou para
-terceiros. A extensão não pede nenhuma permissão do navegador e não
-armazena nada; os arquivos são gerados localmente. A única chamada de
-rede é a consulta opcional do "Guia + Mapa" ao próprio servidor do SIGC
-— somente quando você clica e confirma, dentro da sessão já autenticada.
-Isso é verificado automaticamente a cada alteração do código.
+terceiros. A extensão pede apenas a permissão "storage" (usada só para
+lembrar o estado do flag avançado); os arquivos são gerados localmente.
+As únicas chamadas de rede são duas consultas opcionais ao próprio
+servidor do SIGC — o "Guia + Mapa" e, com o flag avançado ativado, a
+exportação Último Movimento multi-agência — somente quando você clica e
+confirma, dentro da sessão já autenticada. Isso é verificado
+automaticamente a cada alteração do código.
 
 Código-fonte e contato: https://github.com/leoniedu/sigc-pro
