@@ -120,15 +120,17 @@ Colunas mantidas no PDF, colunas promovidas ao subtítulo e título ficam em
 `extension/common/sigc-common.js`, na entrada da pesquisa em `PESQUISAS`.
 Novas pesquisas são adicionadas como novas entradas no mesmo formato.
 
-Um botão **⚙ SIGC-PRO**, fixo no canto inferior direito de qualquer
-página do SIGC, abre um flag avançado desativado por padrão: "Exportação
-Último Movimento (multi-agência)". Esse flag existe porque a
-funcionalidade que ele libera faz várias requisições em sequência ao
-servidor do SIGC (uma por agência da UF) — um padrão de uso mais
-sensível do que o resto da extensão, que só lê a página já carregada na
-tela. O valor do flag fica salvo localmente via `chrome.storage.local`
-(a única funcionalidade da extensão que usa armazenamento; veja
-Privacidade abaixo).
+A página **Opções** da extensão (clique com o botão direito no ícone do
+SIGC-PRO na barra do Chrome → **Opções**, ou em `chrome://extensions` →
+detalhes do SIGC-PRO → **Opções da extensão**) tem um flag avançado
+desativado por padrão: "Exportação Último Movimento (multi-agência)".
+Esse flag existe porque a funcionalidade que ele libera faz várias
+requisições em sequência ao servidor do SIGC (uma por agência da UF) —
+um padrão de uso mais sensível do que o resto da extensão, que só lê a
+página já carregada na tela. O valor do flag fica salvo localmente via
+`chrome.storage.local` (a única funcionalidade da extensão que usa
+armazenamento; veja Privacidade abaixo). Uma mudança no flag vale a
+partir do próximo carregamento da página do SIGC.
 
 ## Privacidade
 

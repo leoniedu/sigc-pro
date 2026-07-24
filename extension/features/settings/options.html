@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>SIGC-PRO — Configurações</title>
+<style>
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    max-width: 640px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    color: #222;
+  }
+  h1 { font-size: 1.2rem; }
+  .flag {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 0.8rem;
+    margin: 1rem 0;
+  }
+  .flag input { margin-top: 0.2rem; }
+  .flag label { font-weight: 600; }
+  .flag p { margin: 0.3rem 0 0; font-size: 0.9rem; color: #555; }
+  #status { font-size: 0.85rem; color: #067d06; min-height: 1.2em; }
+</style>
+</head>
+<body>
+<h1>SIGC-PRO — Configurações avançadas</h1>
+<p>
+  Funcionalidades desativadas por padrão porque fazem um padrão de
+  requisições mais sensível do que o resto da extensão (que só lê a
+  página já carregada na tela).
+</p>
+
+<div class="flag">
+  <input type="checkbox" id="flag-ultimoMovimentoExport">
+  <div>
+    <label for="flag-ultimoMovimentoExport">Exportação Último Movimento (multi-agência)</label>
+    <p>
+      No relatório Último Movimento, adiciona o botão "CSV TODAS": baixa
+      o relatório de TODAS as agências da UF atual (uma requisição por
+      agência, com 2 segundos de intervalo, ao próprio servidor do SIGC)
+      e combina tudo em um único CSV.
+    </p>
+  </div>
+</div>
+
+<p id="status" role="status"></p>
+
+<script src="options.js"></script>
+</body>
+</html>

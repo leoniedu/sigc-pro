@@ -18,7 +18,8 @@ Em qualquer relatório do SIGC com tabela:
     que quebra os botões nativos de CSV/Excel fora da VPN.
 
 No relatório Último Movimento, com o flag avançado "Exportação Último
-Movimento (multi-agência)" ativado (veja Configurações no README):
+Movimento (multi-agência)" ativado (botão direito no ícone do SIGC-PRO
+→ Opções; veja Configurações no README):
   * CSV TODAS — baixa o Último Movimento de TODAS as agências da UF
     atual (não só a filtrada na tela) e combina tudo em um único CSV.
     Faz uma requisição por agência, com 2s de intervalo, ao próprio

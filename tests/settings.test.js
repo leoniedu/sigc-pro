@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { describe, test, expect } from 'bun:test';
 
 await import('../extension/common/sigc-common.js');
 await import('../extension/features/settings/settings.js');
@@ -19,18 +19,18 @@ describe('settings.isEnabled', () => {
   test('unknown flag name defaults to false', () => {
     expect(P.settings.isEnabled('somethingNeverSet')).toBe(false);
   });
-});
 
-describe('settings.setFlag', () => {
-  test('dispatches a sigc-pro-set-advanced-flag event with the given name/value', () => {
-    let received = null;
-    window.addEventListener('sigc-pro-set-advanced-flag', (e) => { received = e.detail; }, { once: true });
-    P.settings.setFlag('ultimoMovimentoExport', true);
-    expect(received).toEqual({ name: 'ultimoMovimentoExport', value: true });
-  });
-
-  test('updates the local cache optimistically before the relay confirms', () => {
-    P.settings.setFlag('ultimoMovimentoExport', false);
-    expect(P.settings.isEnabled('ultimoMovimentoExport')).toBe(false);
+  test('calls recheckMounts when a flags event arrives', () => {
+    let called = false;
+    const original = P.recheckMounts;
+    P.recheckMounts = () => { called = true; };
+    try {
+      window.dispatchEvent(new CustomEvent('sigc-pro-advanced-flags', {
+        detail: { flags: { ultimoMovimentoExport: false } },
+      }));
+      expect(called).toBe(true);
+    } finally {
+      P.recheckMounts = original;
+    }
   });
 });
