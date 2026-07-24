@@ -1,14 +1,24 @@
 {
   "manifest_version": 3,
   "name": "SIGC-PRO",
-  "version": "0.2.64",
+  "version": "0.2.65",
   "description": "Melhorias não oficiais para o SIGC (IBGE): exportação de PDF, KML e CSV da Lista de Endereços, e CSV da Agenda.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  "permissions": ["storage"],
   "content_scripts": [
+    {
+      "matches": [
+        "https://portalweb.ibge.gov.br/*",
+        "https://portalweb2.ibge.gov.br/*",
+        "https://w3sigcpns2025.ibge.gov.br/*"
+      ],
+      "js": ["features/settings/settings-relay.js"],
+      "run_at": "document_idle"
+    },
     {
       "matches": [
         "https://portalweb.ibge.gov.br/*",
@@ -17,6 +27,7 @@
       ],
       "js": [
         "common/sigc-common.js",
+        "features/settings/settings.js",
         "features/pdf-export/pdf-export.js",
         "features/kml-export/kml-export.js",
         "features/csv-export/csv-export.js",
@@ -24,7 +35,8 @@
         "features/agenda-slot-checks/agenda-slot-checks.js",
         "features/agenda-date-picker/agenda-date-picker.js",
         "features/agenda-day-guide/agenda-day-guide.js",
-        "features/agenda-map/agenda-map.js"
+        "features/agenda-map/agenda-map.js",
+        "features/ultimo-movimento-export/ultimo-movimento-export.js"
       ],
       "run_at": "document_idle",
       "world": "MAIN"
