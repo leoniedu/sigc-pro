@@ -16,11 +16,17 @@
 
   // --- pure helpers ----------------------------------------------------
 
-  // True on the Último Movimento report page: the table (once loaded) or
-  // its container/filter form (before the user has filtered anything)
-  // both use this id — SIGC renders the empty table shell up front.
+  // True on the Último Movimento report page, detected via the page
+  // header's h6 title — same approach sigc-common's onListaEnderecos()
+  // uses for its own page. Must be true BEFORE the user clicks Filtrar
+  // (the button needs to appear right away, next to Filtrar itself), so
+  // it can't depend on the results table (#tb_ultimo_movimento), which
+  // only renders after a filter is applied — confirmed against the live
+  // page.
   function onUltimoMovimento() {
-    return !!document.getElementById(TABLE_ID);
+    return [...document.querySelectorAll('h6')].some(
+      (h) => window.__sigcPro.normalizeLabel(h.textContent) === 'último movimento'
+    );
   }
 
   // Mirrors ultimo_movimento.py's fetch_report_html filtro payload
@@ -54,13 +60,13 @@
 
   // --- UF / agência-list reading ---------------------------------------
 
-  // Último Movimento's own filter form has a UF <select> — same pattern
-  // as sigc-common's getAgendaUf(), but this page's select has a
-  // different id (confirmed against the live page during Task 6's manual
-  // QA; if the id differs from what's assumed here, Task 6 corrects this
-  // one line and re-verifies — see Task 6 Step 2).
+  // Último Movimento's own filter form has a UF <select id="IdUf">,
+  // dressed up as a select2 combobox (the visible "29 - BAHIA" text is a
+  // select2-rendered span, not the real element) — confirmed against the
+  // live page. select2 keeps the original <select> in the DOM (just
+  // visually hidden), so reading its .value directly still works.
   function getCurrentUf() {
-    const s = document.getElementById('selectUf');
+    const s = document.getElementById('IdUf');
     return s ? s.value : '';
   }
 
@@ -182,17 +188,22 @@
     }
   }
 
+  // Anchored to the Filtrar button itself (not the DataTables toolbar,
+  // which only exists after a first Filtrar click) so the button is
+  // visible immediately alongside Cancelar/Filtrar, matching their
+  // styling — not the small DataTables icon-button style used by the
+  // rest of the extension's report-table exports.
   window.__sigcPro.mountWidget({
     id: BUTTON_ID,
-    anchor: (ctx) => ctx.dtToolbar(),
+    anchor: (ctx) => ctx.ultimoMovimentoFiltrarBtn(),
+    insert: 'after',
     when: () => onUltimoMovimento() &&
-      window.__sigcPro.settings.isEnabled('ultimoMovimentoExport') &&
-      !!window.__sigcPro.getDataTable(),
+      window.__sigcPro.settings.isEnabled('ultimoMovimentoExport'),
     build: () => {
       console.log(`${TAG} multi-agência export button added.`);
-      const btn = window.__sigcPro.makeDtProButton({
+      const btn = window.__sigcPro.makeSigcFormButton({
         id: BUTTON_ID,
-        lines: ['CSV', 'TODAS'],
+        text: 'CSV TODAS',
         title: 'Exportar Último Movimento de todas as agências (SIGC-PRO, avançado)',
         onClick: () => exportAllAgencias(btn),
       });
@@ -207,6 +218,7 @@
     onUltimoMovimento,
     buildAgenciaFilterBody,
     parseUltimoMovimentoHtml,
+    getCurrentUf,
   };
 
   // Exposed only for tests — collectAllAgencias is the row-tagging logic

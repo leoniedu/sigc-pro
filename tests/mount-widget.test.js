@@ -73,6 +73,31 @@ test('mounts immediately when the anchor already exists', () => {
   expect(document.getElementById(id)?.parentElement).toBe(anchor);
 });
 
+test('insert: "after" places the widget as the anchor\'s next sibling, not inside it', () => {
+  const id = uid('after');
+  const container = document.createElement('div');
+  const anchorBtn = document.createElement('button');
+  anchorBtn.id = `${id}-anchor`;
+  const trailing = document.createElement('span');
+  trailing.id = `${id}-trailing`;
+  container.appendChild(anchorBtn);
+  container.appendChild(trailing);
+  document.body.appendChild(container);
+
+  P.mountWidget({
+    id,
+    anchor: () => document.getElementById(`${id}-anchor`),
+    insert: 'after',
+    build: () => makeButton(id),
+  });
+
+  const built = document.getElementById(id);
+  expect(built).not.toBeNull();
+  expect(built.parentElement).toBe(container);
+  expect(built.previousElementSibling).toBe(anchorBtn);
+  expect(built.nextElementSibling).toBe(trailing);
+});
+
 test('mounts when the anchor appears via DOM mutation', async () => {
   const id = uid('appear');
   P.mountWidget({

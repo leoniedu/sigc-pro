@@ -54,13 +54,26 @@ describe('parseUltimoMovimentoHtml', () => {
 });
 
 describe('onUltimoMovimento', () => {
-  test('true when the page has the tb_ultimo_movimento table or its filter form', () => {
-    document.body.innerHTML = '<div id="tb_ultimo_movimento"></div>';
+  test('true when the page header h6 reads "Último Movimento", even before any Filtrar click', () => {
+    document.body.innerHTML =
+      '<div class="card-header py-2 col-md-12 sigc-header-page">' +
+      '<h6 class="font-weight-bold mb-0">Último Movimento</h6></div>';
     expect(UME.onUltimoMovimento()).toBe(true);
   });
   test('false otherwise', () => {
-    document.body.innerHTML = '<div>outra página</div>';
+    document.body.innerHTML = '<div>outra página</div><h6>Outro Relatório</h6>';
     expect(UME.onUltimoMovimento()).toBe(false);
+  });
+});
+
+describe('getCurrentUf', () => {
+  test('reads the value of the select2-backed #IdUf select', () => {
+    document.body.innerHTML = '<select id="IdUf"><option value="29" selected>29 - BAHIA</option></select>';
+    expect(UME.getCurrentUf()).toBe('29');
+  });
+  test('empty string when #IdUf is absent', () => {
+    document.body.innerHTML = '<div>sem select</div>';
+    expect(UME.getCurrentUf()).toBe('');
   });
 });
 
