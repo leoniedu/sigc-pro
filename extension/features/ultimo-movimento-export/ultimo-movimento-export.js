@@ -52,6 +52,154 @@
     return { header, rows };
   }
 
+  // --- UF / agência-list reading ---------------------------------------
+
+  // Último Movimento's own filter form has a UF <select> — same pattern
+  // as sigc-common's getAgendaUf(), but this page's select has a
+  // different id (confirmed against the live page during Task 6's manual
+  // QA; if the id differs from what's assumed here, Task 6 corrects this
+  // one line and re-verifies — see Task 6 Step 2).
+  function getCurrentUf() {
+    const s = document.getElementById('selectUf');
+    return s ? s.value : '';
+  }
+
+  // Mirrors ultimo_movimento.py's get_agencias(): CarregarAgencias
+  // returns {items: [{key, description}, ...]}; entries with a blank key
+  // are placeholder options, dropped same as the script drops them.
+  async function fetchAgenciaList(uf) {
+    const url = `${location.origin}/Filtro/CarregarAgencias?IdUf=${encodeURIComponent(uf)}`;
+    const res = await fetch(url, {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const items = (data && data.items) || [];
+    return items.filter((it) => it && it.key && String(it.key).trim());
+  }
+
+  async function fetchAgenciaReport(uf, agencia) {
+    const url = `${location.origin}/UltimoMovimento/Filtrar`;
+    const res = await fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: buildAgenciaFilterBody(uf, agencia),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return parseUltimoMovimentoHtml(await res.text());
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  // Sequential, REQUEST_DELAY_MS apart, one agência at a time — matches
+  // ultimo_movimento.py's --delay default and keeps the request pattern
+  // as far as possible from anything that could look like abuse of
+  // SIGC's own infrastructure. A failed agência is logged and skipped,
+  // never fatal to the run (mirrors the script's try/except + continue).
+  // Returns { header, rows, failed } — rows are already tagged with
+  // IdUf/IdAgencia/AgenciaDescricao, in that column order, matching the
+  // script's df.insert(0/1/2, ...) order.
+  async function collectAllAgencias(uf, agenciaList, onProgress) {
+    let header = null;
+    const rows = [];
+    const failed = [];
+    for (let i = 0; i < agenciaList.length; i += 1) {
+      const { key: code, description = '' } = agenciaList[i];
+      onProgress(i + 1, agenciaList.length);
+      try {
+        const result = await fetchAgenciaReport(uf, code);
+        if (result && result.rows.length > 0) {
+          if (!header) header = ['IdUf', 'IdAgencia', 'AgenciaDescricao', ...result.header];
+          result.rows.forEach((r) => rows.push([uf, code, description, ...r]));
+        }
+      } catch (err) {
+        console.warn(`${TAG} agência ${code} (${description}) failed:`, err);
+        failed.push(`${code} (${description})`);
+      }
+      if (i < agenciaList.length - 1) await sleep(REQUEST_DELAY_MS);
+    }
+    return { header, rows, failed };
+  }
+
+  // --- UI ----------------------------------------------------------------
+
+  const CONSENT_MSG =
+    'SIGC-PRO: isto buscará o relatório Último Movimento de TODAS as ' +
+    'agências da UF atual, uma de cada vez (pode levar alguns minutos). ' +
+    'Cada requisição vai apenas ao próprio servidor do SIGC. Continuar?';
+
+  async function exportAllAgencias(btn) {
+    if (!confirm(CONSENT_MSG)) return;
+    const uf = getCurrentUf();
+    if (!uf) {
+      alert('SIGC-PRO: não foi possível identificar a UF atual.');
+      return;
+    }
+
+    btn.disabled = true;
+    const originalLabel = btn.textContent;
+    try {
+      let agenciaList;
+      try {
+        agenciaList = await fetchAgenciaList(uf);
+      } catch (err) {
+        alert(`SIGC-PRO: não foi possível obter a lista de agências (${err && err.message}).`);
+        return;
+      }
+      if (agenciaList.length === 0) {
+        alert('SIGC-PRO: nenhuma agência encontrada para esta UF.');
+        return;
+      }
+
+      const { header, rows, failed } = await collectAllAgencias(uf, agenciaList, (done, total) => {
+        btn.textContent = `${done}/${total}`;
+      });
+
+      if (rows.length === 0) {
+        alert('SIGC-PRO: nenhum dado coletado — nada para exportar.');
+        return;
+      }
+
+      const csv = window.__sigcPro.buildCsv(header, rows);
+      const { data, hora } = window.__sigcPro.timestampSlug();
+      window.__sigcPro.downloadFile(`sigc-pro-ultimo-movimento_uf${uf}_${data}_${hora}.csv`, csv);
+      console.log(`${TAG} exported ${rows.length} rows from ${agenciaList.length - failed.length}/${agenciaList.length} agências.`);
+
+      if (failed.length > 0) {
+        alert(`SIGC-PRO: exportação concluída com ${failed.length} agência(s) que falharam:\n${failed.join('\n')}`);
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
+  }
+
+  window.__sigcPro.mountWidget({
+    id: BUTTON_ID,
+    anchor: (ctx) => ctx.dtToolbar(),
+    when: () => onUltimoMovimento() &&
+      window.__sigcPro.settings.isEnabled('ultimoMovimentoExport') &&
+      !!window.__sigcPro.getDataTable(),
+    build: () => {
+      console.log(`${TAG} multi-agência export button added.`);
+      const btn = window.__sigcPro.makeDtProButton({
+        id: BUTTON_ID,
+        lines: ['CSV', 'TODAS'],
+        title: 'Exportar Último Movimento de todas as agências (SIGC-PRO, avançado)',
+        onClick: () => exportAllAgencias(btn),
+      });
+      return btn;
+    },
+  });
+
   // Exposed only for tests — not part of the extension's runtime public
   // surface (window.__sigcPro), since these are internal to this one
   // feature and no other feature needs them.
@@ -60,6 +208,13 @@
     buildAgenciaFilterBody,
     parseUltimoMovimentoHtml,
   };
+
+  // Exposed only for tests — collectAllAgencias is the row-tagging logic
+  // the design's testing section calls out explicitly; everything else
+  // in this block (fetchAgenciaList/fetchAgenciaReport/exportAllAgencias)
+  // needs a live authenticated session and stays manually verified only
+  // (Task 6), same as agenda-map's postFiltrar/fetchEnderecos today.
+  window.__sigcProUltimoMovimentoExportInternals.collectAllAgencias = collectAllAgencias;
 
   console.log(`${TAG} loaded.`);
 })();

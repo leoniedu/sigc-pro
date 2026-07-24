@@ -63,3 +63,56 @@ describe('onUltimoMovimento', () => {
     expect(UME.onUltimoMovimento()).toBe(false);
   });
 });
+
+describe('collectAllAgencias', () => {
+  test('tags each row with IdUf/IdAgencia/AgenciaDescricao, in that order', async () => {
+    const html = `
+      <table id="tb_ultimo_movimento">
+        <thead><tr><th>Controle</th><th>Situação</th></tr></thead>
+        <tbody><tr><td>111</td><td>Entrevistado</td></tr></tbody>
+      </table>`;
+    const originalFetch = global.fetch;
+    global.fetch = async () => ({ ok: true, text: async () => html });
+    try {
+      const result = await UME.collectAllAgencias(
+        '29',
+        [{ key: 'A1', description: 'Agência 1' }],
+        () => {},
+      );
+      expect(result.header).toEqual(['IdUf', 'IdAgencia', 'AgenciaDescricao', 'Controle', 'Situação']);
+      expect(result.rows).toEqual([['29', 'A1', 'Agência 1', '111', 'Entrevistado']]);
+      expect(result.failed).toEqual([]);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  test('records a failed agência and continues, without aborting the run', async () => {
+    const html = `
+      <table id="tb_ultimo_movimento">
+        <thead><tr><th>Controle</th></tr></thead>
+        <tbody><tr><td>222</td></tr></tbody>
+      </table>`;
+    const originalFetch = global.fetch;
+    let call = 0;
+    global.fetch = async () => {
+      call += 1;
+      if (call === 1) return { ok: false, status: 500, text: async () => '' };
+      return { ok: true, text: async () => html };
+    };
+    try {
+      const result = await UME.collectAllAgencias(
+        '29',
+        [
+          { key: 'BAD', description: 'Falha' },
+          { key: 'OK', description: 'Sucesso' },
+        ],
+        () => {},
+      );
+      expect(result.failed).toEqual(['BAD (Falha)']);
+      expect(result.rows).toEqual([['29', 'OK', 'Sucesso', '222']]);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+});
