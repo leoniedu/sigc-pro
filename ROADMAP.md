@@ -10,7 +10,9 @@ Working checklist; move items up/down freely. Specs live in
       Selecionado Sim/Não layers, riding the native PDF pipeline
 - [x] Native PDF button left untouched
 - [x] DMS coordinate parsing (`dd mm ss.sss S`, `O` = Oeste)
-- [x] Privacy: zero permissions/network/storage; pre-commit gate + CI action
+- [x] Privacy: zero permissions/network/storage at launch; pre-commit gate
+      + CI action (later amended — see `storage` permission and second
+      fetch exception below)
 - [x] Distribution zip auto-built on commit (`dist/sigc-pro-extension.zip`,
       includes LEIA-ME.txt manual)
 - [x] pt-BR README, landing page, privacy policy
@@ -93,6 +95,24 @@ Working checklist; move items up/down freely. Specs live in
       `PESQUISAS.PNS2026.columns` shifted +1; PDF export needed its own
       shifted-back-by-1 view since DataTables' PDF button excludes that
       icon column from its exported layout
+- [x] Guia + Mapa: the per-team and Resumo SVG route maps redraw live as
+      route checkboxes are toggled (previously only the Google Maps link
+      updated live, the map stayed static) — data-idx groups on each
+      dot, per-SVG-scoped queries so team maps and Resumo never collide
+      (`2026-07-23-agenda-day-guide-checkbox-reactive-map-design.md`)
+- [x] **Último Movimento multi-agência CSV export** (advanced,
+      off-by-default flag): "CSV TODAS" button next to Filtrar on the
+      Último Movimento report fetches every agência in the current UF
+      (2s apart, same-origin, skip-and-continue on failure) and downloads
+      one combined CSV — ports the standalone `ultimo_movimento.py`
+      script's request shape into the extension, including the F5
+      BIG-IP gateway URL rewriting agenda-map.js already had to solve.
+      First feature to request a browser permission (`storage`, for the
+      flag only) and the second to make network calls; both gated behind
+      a real Options page (`chrome://extensions` → Opções), not an
+      on-page button. Privacy docs (README, index.html, store-listing.md,
+      PRIVACY_POLICY.html) updated to match
+      (`2026-07-24-ultimo-movimento-multi-agencia-export-design.md`)
 
 ## Next
 
