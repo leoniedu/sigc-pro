@@ -41,8 +41,8 @@ Em Administrar Agenda:
   mínimo de agendamento e sobre zonas cujo nome não corresponde à equipe.
 • Guia do Dia — guia HTML autônomo com abas: resumo do dia (com grade
   horário × equipe dos slots), aba Lab compartilhável com o laboratório
-  (Controle truncado, sem dados pessoais) e, por equipe, os cartões de
-  cada visita — pronto para imprimir por aba.
+  (nome e município por slot, sem Controle nem domicílio) e, por equipe,
+  os cartões de cada visita — pronto para imprimir por aba.
 • Guia + Mapa (opcional) — o mesmo guia com mapa da rota do dia,
   link de navegação por visita e seleção de paradas por checkbox
   (até 9 por rota, com link do Google Maps atualizado em tempo real),

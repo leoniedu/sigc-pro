@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SIGC-PRO",
-  "version": "0.2.71",
+  "version": "0.2.72",
   "description": "Melhorias não oficiais para o SIGC (IBGE): exportação de PDF, KML e CSV da Lista de Endereços, e CSV da Agenda.",
   "icons": {
     "16": "icons/icon16.png",
@@ -31,6 +31,7 @@
       ],
       "js": [
         "common/sigc-common.js",
+        "common/municipios.js",
         "features/settings/settings.js",
         "features/pdf-export/pdf-export.js",
         "features/kml-export/kml-export.js",

@@ -56,6 +56,11 @@ Working checklist; move items up/down freely. Specs live in
 - [x] Guia do Dia "Lab" tab: the Resumo repeated in shareable form for
       the lab — Controle truncated to 11 digits, no Domicílio, no
       personal data; Ctrl+P on the tab prints just that page
+- [x] Lab tab follows the laboratory's own system listing: each slot
+      shows nome + município instead of a truncated Controle (município
+      derived from the Controle's first 7 digits, the IBGE código, via
+      the generated `common/municipios.js` table); no Controle, no
+      Domicílio, no birth date
 - [x] Guia + Mapa: reserved slots get their real zona from the fetched
       Lista de Endereços (Nome ZONA column) — the slot text lists every
       zona from slot creation, even though a filled slot belongs to

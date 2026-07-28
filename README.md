@@ -66,8 +66,9 @@ Em **Administrar Agenda** (qualquer UF/pesquisa cuja URL termine em
 - **Guia do Dia** (só na visualização Dia) — baixa um guia HTML autônomo
   e sem dependências (abre de `file://`, sem rede): uma aba Resumo com
   estatísticas do dia e uma grade horário × equipe dos slots, uma aba
-  **Lab** compartilhável com o laboratório (Controle truncado a 11
-  dígitos, sem Domicílio nem outros dados pessoais) e uma aba por equipe
+  **Lab** compartilhável com o laboratório, na forma como o próprio
+  sistema do laboratório lista as coletas (nome e município por slot, sem
+  Controle, sem Domicílio e sem data de nascimento) e uma aba por equipe
   com um cartão por visita (endereço, morador, telefone, Controle/
   Domicílio, observações) e os horários livres. Ctrl+P na aba imprime só
   aquela página.
@@ -119,6 +120,16 @@ Requer Chrome 111 ou superior.
 Colunas mantidas no PDF, colunas promovidas ao subtítulo e título ficam em
 `extension/common/sigc-common.js`, na entrada da pesquisa em `PESQUISAS`.
 Novas pesquisas são adicionadas como novas entradas no mesmo formato.
+
+A tabela de municípios usada pela aba **Lab** do Guia do Dia
+(`extension/common/municipios.js`) é **gerada** — não edite à mão. Ela
+mapeia o código IBGE de 7 dígitos (os 7 primeiros dígitos do Controle)
+para `MUNICÍPIO - UF`, e é embutida na extensão (nenhuma consulta de
+rede). Para regerá-la a partir de `orcedata::municipios`:
+
+```sh
+Rscript scripts/gen-municipios.R
+```
 
 A página **Opções** da extensão (clique com o botão direito no ícone do
 SIGC-PRO na barra do Chrome → **Opções**, ou em `chrome://extensions` →

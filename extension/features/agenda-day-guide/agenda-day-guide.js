@@ -3,8 +3,9 @@
 // equipe slot grid with per-team totals) plus one tab
 // per equipe with a card per slot (reserved: endereço/morador/telefone/
 // Controle/observação; open: LIVRE row). A "Lab" tab repeats the Resumo
-// in shareable form: Controle truncated to 11 digits, no Domicílio, no
-// personal data — print it to share. Data comes exclusively from
+// in the form the laboratory's own system lists collections: nome +
+// município per slot, no Controle, no Domicílio, no birth date — print
+// it to share. Data comes exclusively from
 // window.__sigcPro.readAgendaSlots() (already-rendered FullCalendar DOM,
 // no network); the file itself is inline-CSS-only with CSS radio tabs and
 // an inline route-selector script for live Google Maps link updates — no
@@ -421,6 +422,8 @@ table.grid td { text-align: center; }
 table.grid .grid-hora { font-weight: 600; }
 table.grid .grid-livre { color: #8a8f98; font-size: .85em; }
 table.grid .grid-dom { color: #555; font-size: .8em; }
+table.grid .grid-nome { font-size: .85em; }
+table.grid .grid-municipio { color: #555; font-size: .78em; text-transform: uppercase; }
 table.grid td.sem-slot { background: #fafafa; }
 table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`;
 
@@ -566,7 +569,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     const day = computeStats(allRows);
     const comReserva = groups.filter((g) => g.rows.some((r) => r.reservado)).length;
     const titulo = lab
-      ? 'Resumo do dia — Lab (Controle truncado, sem dados pessoais)'
+      ? 'Resumo do dia — Lab (nome e município, sem Controle nem domicílio)'
       : 'Resumo do dia';
     const linhas = [
       ['Equipes ativas', String(groups.length)],
@@ -621,7 +624,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
   // columns = equipes; cells show LIVRE or Controle/Domicílio. The
   // per-equipe stats live in the grid's footer rows, so this table
   // replaces the old separate "Por equipe" one. lab = the shareable
-  // variant: Controle truncated to its first 11 digits, no Domicílio.
+  // variant: nome + município per slot, no Controle, no Domicílio.
   function buildDayGrid(groups, lab) {
     const e = escapeHtml;
     const toMin = (hhmm) => {
@@ -647,9 +650,20 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
         const conteudo = slots.map((r) => {
           const hora = `<span class="grid-hora">${e(r.horaInicio)}</span>`;
           if (!r.reservado) return `${hora} <span class="grid-livre">LIVRE</span>`;
-          const ctrl = lab ? String(r.controle).slice(0, 11) : r.controle;
-          const dom = !lab && r.domicilio ? ` <span class="grid-dom">Dom ${e(r.domicilio)}</span>` : '';
-          return `${hora}<br><span class="grid-ctrl">${e(ctrl) || '—'}</span>${dom}`;
+          // Lab cells name the visit the way the laboratory's own system
+          // lists it — nome + município, no Controle, no Domicílio, no
+          // birth date. Município comes from the Controle's first 7
+          // digits (the IBGE código), never from personal data.
+          if (lab) {
+            const municipio = window.__sigcPro.municipioFromControle(r.controle);
+            return [
+              hora,
+              `<span class="grid-nome">${e(r.nome) || '—'}</span>`,
+              municipio ? `<span class="grid-municipio">${e(municipio)}</span>` : '',
+            ].filter(Boolean).join('<br>');
+          }
+          const dom = r.domicilio ? ` <span class="grid-dom">Dom ${e(r.domicilio)}</span>` : '';
+          return `${hora}<br><span class="grid-ctrl">${e(r.controle) || '—'}</span>${dom}`;
         }).join('<br>');
         return `<td>${conteudo}</td>`;
       }).join('');
@@ -671,9 +685,9 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
   // @media print hides the tab bar and prints only the checked panel.
   function buildGuideHtml(meta, groups, allRows, enderecos) {
     const e = escapeHtml;
-    // The Lab tab repeats the Resumo in shareable form (Controle
-    // truncated to 11 digits, no Domicílio, no personal data) — Ctrl+P
-    // on it prints just that page for the laboratory.
+    // The Lab tab repeats the Resumo in the shape the laboratory's own
+    // system uses (nome + município, no Controle, no Domicílio, no birth
+    // date) — Ctrl+P on it prints just that page for the laboratory.
     const panels = [
       { label: 'Resumo', html: buildSummaryPanel(groups, allRows, false, enderecos) },
       { label: 'Lab', html: buildSummaryPanel(groups, allRows, true, enderecos) },
@@ -906,7 +920,7 @@ ${sections}
   }
 
   // Consumed by agenda-map ("Guia + Mapa"): same pipeline, plus enderecos.
-  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel, buildGuideHtml, routeCheckboxInput, routeCheckboxHtml, buildSlotCard, routeIdxMap, buildRouteMapSvg };
+  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel, buildGuideHtml, routeCheckboxInput, routeCheckboxHtml, buildSlotCard, routeIdxMap, buildRouteMapSvg, buildDayGrid };
 
   // Dia-view-only: `when` flips with the fc-button-active class, which
   // the shared observer watches (attributes: ['class']), so toggling
