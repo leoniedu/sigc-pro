@@ -116,3 +116,59 @@ describe('buildDayGrid — non-Lab variant is unchanged', () => {
     expect(html).not.toContain('grid-municipio');
   });
 });
+
+// The zona comes from the opt-in endereços fetch, so every grid cell must
+// still render correctly when that Map is absent (the default path).
+describe('buildDayGrid — zona', () => {
+  const enderecos = (entry = { lat: -12.9, lon: -38.5, zona: 'Centro', idZona: '12' }) =>
+    new Map([['2927408000123|D1', entry]]);
+
+  test('appends the zona in the non-Lab variant', () => {
+    const html = buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, enderecos());
+    expect(html).toContain('<span class="grid-zona">Zona 12 Centro</span>');
+    expect(html).toContain('2927408000123');
+  });
+
+  test('appends the zona in the Lab variant', () => {
+    const html = buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], true, enderecos());
+    expect(html).toContain('<span class="grid-zona">Zona 12 Centro</span>');
+    expect(html).toContain('SALVADOR - BA');
+    expect(html).not.toContain('2927408000123');
+  });
+
+  test('omits the zona when no endereços were fetched', () => {
+    expect(buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false)).not.toContain('grid-zona');
+    expect(buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], true)).not.toContain('grid-zona');
+  });
+
+  test('omits the zona when the entry carries none', () => {
+    const e = enderecos({ lat: -12.9, lon: -38.5, zona: null, idZona: null });
+    expect(buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, e)).not.toContain('grid-zona');
+  });
+
+  test('renders idZona or zona alone when the other is missing', () => {
+    const soId = enderecos({ lat: null, lon: null, zona: null, idZona: '12' });
+    expect(buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, soId))
+      .toContain('<span class="grid-zona">Zona 12</span>');
+    const soNome = enderecos({ lat: null, lon: null, zona: 'Centro', idZona: null });
+    expect(buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, soNome))
+      .toContain('<span class="grid-zona">Zona Centro</span>');
+  });
+
+  test('a row with no matching endereço gets no zona', () => {
+    const g = [{ equipe: 'Equipe A', rows: [row({ domicilio: 'D9' })] }];
+    expect(buildDayGrid(g, false, enderecos())).not.toContain('grid-zona');
+  });
+
+  test('open slots never show a zona', () => {
+    const g = [{ equipe: 'Equipe A', rows: [row({ reservado: false })] }];
+    expect(buildDayGrid(g, false, enderecos())).not.toContain('grid-zona');
+  });
+
+  test('escapes the zona', () => {
+    const e = enderecos({ lat: null, lon: null, zona: '<script>alert(1)</script>', idZona: null });
+    const html = buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, e);
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+});

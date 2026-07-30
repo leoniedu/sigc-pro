@@ -424,6 +424,7 @@ table.grid .grid-livre { color: #8a8f98; font-size: .85em; }
 table.grid .grid-dom { color: #555; font-size: .8em; }
 table.grid .grid-nome { font-size: .85em; }
 table.grid .grid-municipio { color: #555; font-size: .78em; text-transform: uppercase; }
+table.grid .grid-zona { color: #555; font-size: .78em; }
 table.grid td.sem-slot { background: #fafafa; }
 table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`;
 
@@ -612,7 +613,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       `<h2>${e(titulo)}</h2>`,
       `<table class="stats">\n${linhas}\n</table>`,
       '<h3>Slots do dia</h3>',
-      buildDayGrid(groups, lab),
+      buildDayGrid(groups, lab, enderecos),
       rotaSection,
       routeMap,
     ].filter(Boolean).join('\n');
@@ -625,7 +626,9 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
   // per-equipe stats live in the grid's footer rows, so this table
   // replaces the old separate "Por equipe" one. lab = the shareable
   // variant: nome + município per slot, no Controle, no Domicílio.
-  function buildDayGrid(groups, lab) {
+  // Both variants append the real zona when the endereços fetch supplied
+  // one — it identifies the slot's area without naming the household.
+  function buildDayGrid(groups, lab, enderecos) {
     const e = escapeHtml;
     const toMin = (hhmm) => {
       const m = /^(\d{1,2}):(\d{2})/.exec(hhmm || '');
@@ -654,16 +657,22 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
           // lists it — nome + município, no Controle, no Domicílio, no
           // birth date. Município comes from the Controle's first 7
           // digits (the IBGE código), never from personal data.
+          const zona = zonaLabel(slotInfo(r, enderecos));
+          const zonaLine = zona ? `<span class="grid-zona">Zona ${e(zona)}</span>` : '';
           if (lab) {
             const municipio = window.__sigcPro.municipioFromControle(r.controle);
             return [
               hora,
               `<span class="grid-nome">${e(r.nome) || '—'}</span>`,
               municipio ? `<span class="grid-municipio">${e(municipio)}</span>` : '',
+              zonaLine,
             ].filter(Boolean).join('<br>');
           }
           const dom = r.domicilio ? ` <span class="grid-dom">Dom ${e(r.domicilio)}</span>` : '';
-          return `${hora}<br><span class="grid-ctrl">${e(r.controle) || '—'}</span>${dom}`;
+          return [
+            `${hora}<br><span class="grid-ctrl">${e(r.controle) || '—'}</span>${dom}`,
+            zonaLine,
+          ].filter(Boolean).join('<br>');
         }).join('<br>');
         return `<td>${conteudo}</td>`;
       }).join('');
