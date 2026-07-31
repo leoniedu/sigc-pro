@@ -183,6 +183,17 @@ Working checklist; move items up/down freely. Specs live in
       silently created `scripts/extension/common/` and left the real table
       stale, surfacing only later as a lookup that did not reflect the
       regeneration
+- [x] **Lista de Endereços × Agenda + Último Movimento**: the selecionados
+      view gains Agendado / Situação / Transmissão columns per household
+      and a per-zona free-slots header, from two same-origin fetches
+      behind one click+confirm (ObterSlots for the UF's year, /relatorio/
+      filtrar for this Controle). Reverses 2026-07-16-agenda-csv-export's
+      decision not to call ObterSlots — that spec's DOM alternative does
+      not exist on this page, so the choice was fetch or drop the feature.
+      Agenda responses are narrowed to Controle/Domicílio/Zonas/start at
+      the parse boundary; the rest (name, address, telephone) is never
+      held. Columns are appended so indexes 0-19 stay intact
+      (`2026-07-31-lista-agenda-design.md`)
 
 ## Next
 

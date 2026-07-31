@@ -21,6 +21,10 @@ Na Lista de Endereços:
 • KML-pro — exporta os endereços como KML para uso em Google Earth,
   Google Maps ou QGIS, com camadas separadas para domicílios
   selecionados e não selecionados (cores seguras para daltonismo).
+• Agenda-pro — anota cada domicílio com a data da entrevista agendada e
+  a situação do último movimento, e mostra quantos slots ainda livres
+  existem em cada zona da tabela, obtendo os dados do próprio servidor do
+  SIGC mediante clique e confirmação.
 
 Em qualquer relatório com tabela:
 • CSV-pro — exporta a tabela como CSV (todas as páginas, pronto para o
@@ -58,8 +62,9 @@ solicita apenas a permissão "storage" do navegador, usada só para
 lembrar o estado do flag avançado acima (Opções da extensão); todos os
 arquivos são gerados localmente e salvos pelo mecanismo padrão de
 download do Chrome. As únicas chamadas de rede são as consultas
-opcionais do Guia do Dia e da exportação avançada do Último Movimento,
-ambas ao próprio servidor do SIGC (mesma sessão do usuário), acionadas
+opcionais do Guia do Dia, da anotação da Lista de Endereços e da
+exportação avançada do Último Movimento, todas ao próprio servidor do
+SIGC (mesma sessão do usuário), acionadas
 por clique e confirmação — nada é enviado a terceiros nem ao
 desenvolvedor. Isso é verificado automaticamente a cada alteração no
 código-fonte (veja o repositório).
@@ -96,12 +101,14 @@ other site is requested. The only browser permission declared is
 `storage`, used solely to remember the on/off state of one advanced,
 off-by-default flag (set on the extension's own Options page) that
 gates a bulk export feature; no other data is stored. The extension
-makes no network calls except two optional, click-and-confirm requests
+makes no network calls except three optional, click-and-confirm requests
 to the SIGC server itself (same origin, within the user's existing
-session): the "Guia do Dia" feature, and — only when the advanced flag
-above is enabled — a bulk "Último Movimento" report export that loops
-one request per agência in the current UF. Nothing is ever sent to
-third parties or the developer.
+session): the "Guia do Dia" feature; the Lista de Endereços annotation,
+which fetches the UF's agenda slots and the último movimento report for
+the displayed Controle; and — only when the advanced flag above is
+enabled — a bulk "Último Movimento" report export that loops one
+request per agência in the current UF. Nothing is ever sent to third
+parties or the developer.
 ```
 
 ## Category
