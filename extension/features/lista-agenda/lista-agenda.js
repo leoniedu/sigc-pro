@@ -175,7 +175,22 @@
     ].join('\n');
   }
 
+  // Returns an OBJECT, not a bare string, so a further source adds a key
+  // rather than changing every caller's signature. Empty strings (never
+  // undefined) so the render step can write cells without guarding.
+  function annotateRow(controle, domicilio, ctx) {
+    const k = chaveDomicilio(String(controle ?? '').trim(), String(domicilio ?? '').trim());
+    const ag = pickAgendado((ctx.agendaIdx && ctx.agendaIdx.get(k)) || [], ctx.todayIso);
+    const mv = (ctx.movimentoIdx && ctx.movimentoIdx.get(k)) || null;
+    return {
+      agendado: ag ? ag.data : '',
+      futura: ag ? ag.futura : false,
+      situacao: mv ? mv.situacao : '',
+      transmissao: mv ? mv.transmissao : '',
+    };
+  }
+
   window.__sigcPro.listaAgenda = {
-    parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml,
+    parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml, annotateRow,
   };
 })();

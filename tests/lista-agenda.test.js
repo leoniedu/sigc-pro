@@ -277,3 +277,40 @@ describe('buildResumoHtml', () => {
     expect(html).toContain('&lt;script&gt;');
   });
 });
+
+const { annotateRow } = window.__sigcPro.listaAgenda;
+
+describe('annotateRow', () => {
+  const agendaIdx = indexByControle(parseSlots([slotJson({ start: '2026-09-01T09:00:00' })]));
+  const movimentoIdx = new Map([
+    ['292740805060337|1', { situacao: 'TRANSMITIDO', transmissao: '28/07/2026' }],
+  ]);
+  const ctx = { agendaIdx, movimentoIdx, todayIso: '2026-07-31' };
+
+  test('combines both sources onto one row', () => {
+    expect(annotateRow('292740805060337', '1', ctx)).toEqual({
+      agendado: '01/09/2026', futura: true,
+      situacao: 'TRANSMITIDO', transmissao: '28/07/2026',
+    });
+  });
+
+  // A failed source must not cost the other's columns.
+  test('annotates from the agenda alone when movimento is empty', () => {
+    const r = annotateRow('292740805060337', '1',
+      { ...ctx, movimentoIdx: new Map() });
+    expect(r.agendado).toBe('01/09/2026');
+    expect(r.situacao).toBe('');
+  });
+
+  test('annotates from movimento alone when the agenda is empty', () => {
+    const r = annotateRow('292740805060337', '1', { ...ctx, agendaIdx: new Map() });
+    expect(r.agendado).toBe('');
+    expect(r.situacao).toBe('TRANSMITIDO');
+  });
+
+  test('an unmatched household yields empty strings, never undefined', () => {
+    expect(annotateRow('999', '9', ctx)).toEqual({
+      agendado: '', futura: false, situacao: '', transmissao: '',
+    });
+  });
+});
