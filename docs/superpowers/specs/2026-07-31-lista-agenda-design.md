@@ -349,29 +349,54 @@ confirming against use before building.
 
 ## What is proven vs inferred
 
-`ObterSlots` is not speculative. `pns.zonas/R/sigc_agendamentos.R` is
-working code written against real responses: the URL, the hand-built
-query string, the XHR/Referer headers, and the response's field names
-(`id`, `start`, `end`, `resourceId`, `status`, `backgroundColor`,
-`title`) are all observed facts, not guesses. The array-of-objects shape
-is likewise established.
+`ObterSlots` is well established, from two independent directions:
 
-Two things are **inferred** and want a single live response to confirm:
+- **`2026-07-16-agenda-csv-export-design.md`, in this repo.** Names the
+  endpoint and its query parameters, confirmed live (test env,
+  `SIGC - PNS2026`, UF Bahia, week of 2026-07-05). Its addendum settles
+  the key question here: an open slot's title is **only** `"Zonas: …"` —
+  no Controle, Domicílio or Nome, since nothing is assigned yet. That is
+  exactly the open-vs-reserved test this design uses, verified by
+  testing rather than inferred.
+- **`pns.zonas/R/sigc_agendamentos.R`.** Working code against real
+  responses: the hand-built query string, the XHR/Referer headers, and
+  the field names (`id`, `start`, `end`, `resourceId`, `status`,
+  `backgroundColor`, `title`).
 
-1. **An open slot's `title` in JSON.** The open-vs-reserved test here
-   rests on an open slot's title carrying no `Controle:` line, and the
-   zona index rests on it carrying a `Zonas:` line. Both hold for the DOM
-   titles this extension already parses, and the R client parses the JSON
-   `title` as the same `"Label: value"` shape — but the JSON title of an
-   *open* slot specifically was never inspected. A sparser title, or a
-   different label, would break the zona index.
-2. **The F5 path from this context.** The R client hardcodes the
-   `f5-h-$$` segment; the extension derives it. `fetchViaGateway`'s
-   two-attempt strategy already exists for exactly this uncertainty, so
-   this is a check rather than a risk.
+The title blob's grammar is likewise documented from a real sample:
+`Label: value` per line, split on the **first** colon only (`Endereço`
+contains more), empty fields rendered as a literal `" - "` that
+`MISSING_VALUES` collapses, `Idade` present only when `Dt. Nascimento`
+is. `parseAgendaSlotTitle` already implements all of it.
 
-**Step one of implementation:** log one `ObterSlots` response and read
-the title of an open slot. Minutes, not an investigation. If it
-surprises us, the Agenda half shifts; the Último Movimento half does
-not, since that endpoint and parser are already proven inside this
-extension.
+**One residual inference:** those title samples are from the rendered
+DOM. The R client parses the JSON `title` with the same grammar, so the
+two are near-certainly identical strings — the DOM title is populated
+from this response — but a JSON open-slot title has not been eyeballed
+directly. Worth one look while wiring up the fetch; not a design risk.
+
+The F5 path from this context is unconfirmed, but `fetchViaGateway`'s
+two-attempt strategy exists for exactly that uncertainty.
+
+## Reversing a prior decision
+
+`2026-07-16-agenda-csv-export-design.md` considered calling `ObterSlots`
+and **deliberately declined**, on the grounds that re-issuing the call
+would violate the privacy gate and the "no data leaves your computer
+beyond what SIGC itself already sent" guarantee. `agenda-csv-export`
+reads rendered DOM specifically to avoid it.
+
+That reasoning is not binding today — the guarantee has since moved, and
+two shipped features make same-origin fetches under a click-and-confirm
+posture the July 16 design did not have. But this spec reverses a
+documented decision rather than filling a gap, and the reversal should be
+argued explicitly in the implementing commit:
+
+- The original objection was to fetching **at all**; the extension now
+  fetches, behind consent, and says so in its privacy policy.
+- The July 16 alternative (read rendered DOM) is unavailable here: there
+  is no calendar on the Lista de Endereços page. The choice is fetch or
+  drop the feature, not fetch or scrape.
+- What genuinely changes is **breadth** — a UF-wide year, where every
+  prior fetch was Controle-scoped. That is the part to justify, and why
+  the response is narrowed at the parse boundary.
