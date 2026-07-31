@@ -60,9 +60,27 @@
     return min < TARDE_FROM_MIN ? 'manha' : 'tarde';
   }
 
+  // Sort key only: the part after the FIRST " - " ("29GAIR - 29.3.02.02
+  // 29" -> "29.3.02.02 29"), so the table reads in zona-name order
+  // instead of by the leading ID, which is opaque and groups nothing a
+  // scheduler cares about.
+  //
+  // This does not contradict the whole-entry rule above: the entry is
+  // still displayed and counted whole, and an entry with no " - " (the
+  // slot-text shape, "29.3.03.03 29_Linus_Pituba") keys on itself rather
+  // than being dropped. Splitting only ever decides order here, so a
+  // surprising name shape misplaces a row at worst — it cannot mangle or
+  // lose one. Ties fall back to the whole entry, keeping the order total
+  // and stable for two zonas sharing a name.
+  function zonaSortKey(zona) {
+    const i = String(zona ?? '').indexOf(' - ');
+    return i === -1 ? String(zona ?? '') : zona.slice(i + 3);
+  }
+
   // rows -> { zonas: [{ zona, manha: {abertos, total}, tarde: {…},
   //           abertos, total }], totals: {…}, semZona, semHora }
-  // sorted by zona entry (pt-BR collation, so acentos sort naturally).
+  // sorted by zona NAME — the part after the first " - " — with pt-BR
+  // collation, so acentos sort naturally (see zonaSortKey).
   // A row with no zonas at all can't be placed in any zona row; it's
   // counted in semZona so the panel can say so instead of dropping it.
   // minDateIso: the earliest date a slot can still be filled — the SIGC
@@ -139,7 +157,10 @@
       abertosPeso: z.manha.abertosPeso + z.tarde.abertosPeso,
       totalPeso: z.manha.totalPeso + z.tarde.totalPeso,
     }));
-    zonas.sort((a, b) => a.zona.localeCompare(b.zona, 'pt-BR'));
+    zonas.sort((a, b) => {
+      const porNome = zonaSortKey(a.zona).localeCompare(zonaSortKey(b.zona), 'pt-BR');
+      return porNome || a.zona.localeCompare(b.zona, 'pt-BR');
+    });
 
     return {
       zonas,
@@ -338,7 +359,7 @@
     );
   }
 
-  window.__sigcPro.slotsAbertos = { aggregateByZonaTurno, buildTableHtml, turnoOf };
+  window.__sigcPro.slotsAbertos = { aggregateByZonaTurno, buildTableHtml, turnoOf, zonaSortKey };
 
   // Semana-view-only, same class-flip gating the Dia-only Guia do Dia
   // button uses (the shared observer watches attributes: ['class']).

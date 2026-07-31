@@ -4,7 +4,8 @@ import { describe, test, expect } from 'bun:test';
 await import('../extension/common/sigc-common.js');
 await import('../extension/features/agenda-slots-abertos/agenda-slots-abertos.js');
 
-const { aggregateByZonaTurno, buildTableHtml, turnoOf } = window.__sigcPro.slotsAbertos;
+const { aggregateByZonaTurno, buildTableHtml, turnoOf, zonaSortKey } =
+  window.__sigcPro.slotsAbertos;
 
 const Z1 = '29001001 - Lab 1 Oeste';
 const Z2 = '29001002 - 29001002';
@@ -37,6 +38,36 @@ describe('turnoOf', () => {
   test('returns null for an unparseable time', () => {
     expect(turnoOf({ horaInicio: '' })).toBeNull();
     expect(turnoOf({})).toBeNull();
+  });
+});
+
+describe('zonaSortKey', () => {
+  test('takes the part after the first " - "', () => {
+    expect(zonaSortKey('29GAIR - 29.3.02.02 29')).toBe('29.3.02.02 29');
+    expect(zonaSortKey('29001001 - Lab 1 Oeste')).toBe('Lab 1 Oeste');
+  });
+
+  // Only the FIRST separator splits, so a name containing " - " keeps
+  // its own hyphenated tail rather than losing everything after it.
+  test('splits once, keeping later separators in the name', () => {
+    expect(zonaSortKey('29X - Lab 1 - Oeste')).toBe('Lab 1 - Oeste');
+  });
+
+  test('falls back to the whole entry when there is no separator', () => {
+    expect(zonaSortKey('29.3.03.03 29_Linus_Pituba')).toBe('29.3.03.03 29_Linus_Pituba');
+    expect(zonaSortKey('29001002')).toBe('29001002');
+  });
+
+  // A hyphen without surrounding spaces is not the separator — zona
+  // names contain those, and treating them as a split would truncate.
+  test('requires spaces around the hyphen', () => {
+    expect(zonaSortKey('29X-Y')).toBe('29X-Y');
+  });
+
+  test('tolerates empty and missing input', () => {
+    expect(zonaSortKey('')).toBe('');
+    expect(zonaSortKey(null)).toBe('');
+    expect(zonaSortKey(undefined)).toBe('');
   });
 });
 
@@ -112,8 +143,11 @@ describe('aggregateByZonaTurno', () => {
       row({ zonas: Z2 }),
       row({ zonas: '29.3.03.03 29_Linus_Pituba' }),
     ]);
+    // Order is by name (Z2's name is its own código, so it precedes
+    // Z1's "Lab 1 Oeste"); what this test pins is that each entry
+    // survives WHOLE, separator or not.
     expect(agg.zonas.map((z) => z.zona)).toEqual([
-      '29.3.03.03 29_Linus_Pituba', Z1, Z2,
+      '29.3.03.03 29_Linus_Pituba', Z2, Z1,
     ]);
   });
 
@@ -130,11 +164,46 @@ describe('aggregateByZonaTurno', () => {
     expect(agg.totals.total).toBe(1);
   });
 
-  test('zonas sort by entry, pt-BR', () => {
+  // Deliberately built so ID order and name order DISAGREE: sorting by
+  // the whole entry would give A/B/C, which is what the panel used to do.
+  test('zonas sort by name, not by the leading ID', () => {
     const agg = aggAt([
-      row({ zonas: 'C - zona' }), row({ zonas: 'A - zona' }), row({ zonas: 'B - zona' }),
+      row({ zonas: 'A - Pituba' }),
+      row({ zonas: 'B - Barra' }),
+      row({ zonas: 'C - Amaralina' }),
     ]);
-    expect(agg.zonas.map((z) => z.zona)).toEqual(['A - zona', 'B - zona', 'C - zona']);
+    expect(agg.zonas.map((z) => z.zona)).toEqual([
+      'C - Amaralina', 'B - Barra', 'A - Pituba',
+    ]);
+  });
+
+  test('sorts names with acentos naturally (pt-BR collation)', () => {
+    const agg = aggAt([
+      row({ zonas: '1 - Zumbi' }), row({ zonas: '2 - Água' }), row({ zonas: '3 - Boca' }),
+    ]);
+    expect(agg.zonas.map((z) => z.zona)).toEqual([
+      '2 - Água', '3 - Boca', '1 - Zumbi',
+    ]);
+  });
+
+  // An entry with no " - " keys on itself, so it still sorts among the
+  // others instead of being dropped or clumped at one end.
+  test('an entry with no separator sorts on the whole entry', () => {
+    const agg = aggAt([
+      row({ zonas: 'A - Zebra' }),
+      row({ zonas: '29.3.03.03 29_Linus_Pituba' }),
+      row({ zonas: 'B - Abelha' }),
+    ]);
+    expect(agg.zonas.map((z) => z.zona)).toEqual([
+      '29.3.03.03 29_Linus_Pituba', 'B - Abelha', 'A - Zebra',
+    ]);
+  });
+
+  // Two zonas sharing a name must still order deterministically, or the
+  // table's row order would depend on input order.
+  test('ties on the name fall back to the whole entry', () => {
+    const agg = aggAt([row({ zonas: 'B - Centro' }), row({ zonas: 'A - Centro' })]);
+    expect(agg.zonas.map((z) => z.zona)).toEqual(['A - Centro', 'B - Centro']);
   });
 
   test('empty input yields empty aggregation', () => {
