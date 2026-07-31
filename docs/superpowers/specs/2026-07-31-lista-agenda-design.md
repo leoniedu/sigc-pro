@@ -1,17 +1,22 @@
-# Lista de Endereços × Agenda — design
+# Lista de Endereços × Agenda + Último Movimento — design
 
-Annotate the Lista de Endereços (selecionados view) with scheduling data
-pulled from the Agenda: whether each household has a scheduled interview,
-and how many bookable slots remain in its zonas.
+Annotate the Lista de Endereços (selecionados view) with data the page
+does not carry: whether each household has a scheduled interview, where
+it stands in collection, and how many bookable slots remain in its zonas.
 
-Two questions, one data source:
+Three questions, two sources:
 
 1. **Per household** — is there a scheduled interview (past or future),
-   and when? Rendered as a new "Agendado" column.
-2. **Per Controle** — how many future open slots are assigned to the
+   and when? Rendered as a new "Agendado" column. *(Agenda)*
+2. **Per household** — where does collection stand? Rendered as
+   "Situação" and "Transmissão" columns. *(Último Movimento)*
+3. **Per Controle** — how many future open slots are assigned to the
    zonas these households belong to? Rendered as a header line above the
    table, not a column: the Lista de Endereços is scoped to one Controle,
-   so every row would repeat the same number.
+   so every row would repeat the same number. *(Agenda)*
+
+Both sources key on **(Controle, Domicílio)**, the same key the table's
+rows use, so the two annotations join cleanly onto one row.
 
 ## The endpoint
 
@@ -57,10 +62,56 @@ already makes. Discard everything except Controle, Domicílio, Zonas and
 start **at the parse boundary**, so no richer object is ever held in
 memory or reachable from a later change.
 
-This is the third module to contain `fetch(`. The privacy gate's
-allowlist currently names two and a tripwire test asserts it; both need
-updating, and that edit is a privacy decision to be argued in its own
-commit — not a formality.
+This is the third module to contain `fetch(`, and it makes **two**
+requests. The privacy gate's allowlist currently names two modules and a
+tripwire test asserts it; both need updating, and that edit is a privacy
+decision to be argued in its own commit — not a formality.
+
+Weigh it on what actually changes. Neither request reaches a new host or
+a new endpoint family: both go to the SIGC's own origin, inside the
+user's existing session, and `/relatorio/filtrar` is already called by
+two shipped features. What is new is **breadth** — `ObterSlots` returns a
+UF-wide year of slots, where every prior fetch was scoped to one Controle
+— and that breadth is why the response must be narrowed at the parse
+boundary rather than held whole.
+
+## The second source: Último Movimento
+
+`POST /relatorio/filtrar` with the Último Movimento payload — the same
+endpoint family the extension already calls, reached through the same
+`fetchViaGateway` helper.
+
+**One request per Controle, not per agência.** The multi-agência export
+loops one request per agência with a 2-second gap, which is why it hides
+behind an off-by-default flag. This is a single request: the existing
+`buildAgenciaFilterBody` already builds a `filtro` object whose
+`Controle` field is hardcoded to `'*'`; setting it to the real Controle
+returns every domicílio of that Controle in one response. Nothing else
+about the payload changes.
+
+`parseUltimoMovimentoHtml` parses the response unchanged (DOMParser,
+inert — nothing in the fetched markup can load resources or run
+handlers).
+
+**Fields used:** `ultima_posicao` (the status) and `data_transmissao`,
+keyed by `(controle, domicilio)`. The column vocabulary comes from
+`pns.zonas/R/sigc_movimento_db.R`, which persists exactly:
+`controle, domicilio, tipo_entrevista, ultima_posicao, data_transmissao,
+id_uf, id_agencia`.
+
+### Reusing the gateway helper
+
+`ultimo-movimento-export.js` already generalised the F5 handling:
+`gatewayUrl(origin, pathname, path, simple)` takes an **arbitrary path**,
+precisely because that feature calls two endpoints. Both fetches here use
+it — `ObterSlots` included — rather than duplicating F5 logic a third
+time. The two-attempt strategy (simple prefixed path, then the fuller
+`f5-h-$$` form) carries over unchanged, since which form the live gateway
+needs is not knowable in advance.
+
+Extracting the helper into `sigc-common.js` is the obvious tidy-up, but
+it moves code across the privacy gate's module boundaries and belongs in
+its own commit, not this one.
 
 ## Open vs reserved
 
@@ -123,6 +174,22 @@ completed interview does not read as an upcoming appointment. No
 `—` means "nothing booked", which is also what an unmatched Controle
 produces. The two are indistinguishable and that is correct.
 
+### "Situação" and "Transmissão" columns
+
+Two further appended columns, from Último Movimento, matched on the same
+`(Controle, Domicílio)` key:
+
+- **Situação** — `ultima_posicao` verbatim. Not abbreviated or
+  re-worded: it is the portal's own vocabulary, and paraphrasing a status
+  someone acts on invites a wrong reading.
+- **Transmissão** — `data_transmissao`, or `—`. Split from Situação
+  rather than combined into one cell, since the date is meaningful only
+  for some positions and a combined cell would imply otherwise.
+
+Same `—`-means-absent rule as the Agendado column. A household present in
+the table but missing from the movement report has not moved yet, which
+`—` states correctly.
+
 **Appended at the end**, never inserted. Column indexes 0–19 stay intact,
 which matters:
 
@@ -165,36 +232,60 @@ fetch, and the wording should not imply otherwise.
 
 ## Caching
 
-In-memory `Map` keyed by UF, holding the parsed slots plus a fetch
-timestamp. **5-minute TTL**; a request after expiry refetches
-transparently. Never persisted — the zero-storage guarantee holds.
+Two caches, because the two sources go stale for different reasons and
+at different rates. Both in-memory, never persisted — the zero-storage
+guarantee holds.
+
+- **Agenda** — keyed by UF, **5-minute TTL**. Someone else booking a slot
+  makes the free-slot counts wrong, and that can happen at any moment.
+- **Último Movimento** — keyed by Controle, **5-minute TTL** as well, but
+  tracked separately with its own timestamp. Movement status changes when
+  a field team transmits, not continuously.
 
 A TTL is needed here where `agenda-map`'s per-Controle cache has none:
-coordinates do not change within a page's life, but someone else booking
-a slot makes these counts wrong.
+coordinates do not change within a page's life, but both of these do.
+
+Each cache carries its own fetch time, and the header line shows both
+when they differ — one timestamp covering two independently-aged sources
+would be a lie about whichever is older.
 
 ## Failure modes
 
 The feature is additive, so failures degrade to "no annotation" rather
 than a broken page:
 
-- **Fetch fails** — alert naming the reason; table untouched, no column
-  added.
 - **User declines the confirm** — nothing happens, no annotation.
 - **Controle not found in the agenda** — `—`, same as not scheduled.
 - **Row with a blank `ID Zona`** — contributes nothing to the zona index
   rather than being counted under an empty key.
 
+**One source fails, the other succeeds** — annotate with what did arrive
+rather than discarding both. The two fetches are independent, so a failed
+Último Movimento request must not cost the user their Agendado column.
+The failed source's columns show `—` and the header names which source
+failed, so an all-`—` column is never mistaken for "nothing scheduled".
+
+**Both fail** — alert naming the reasons; table untouched, no columns
+added.
+
+This is the main reason the two fetches run independently rather than
+inside one `Promise.all` that rejects as a unit.
+
 ## Testing
 
 Unit tests against fixture JSON, following the existing pattern:
 
-- The two index builders (by Controle, by zona ID).
+- The index builders (agenda by Controle, agenda by zona ID, movimento by
+  Controle+Domicílio).
 - The open test (title with and without a `Controle:` line).
 - The prazo filter, including the Friday +4 case.
 - Weighted counts, including the suppression rule when nothing is shared.
 - ID-Zona extraction against production-shaped entries.
 - The live/past date choice for a household with both.
+- The `Controle: '*'` → real-Controle payload change, asserted against
+  the existing `buildAgenciaFilterBody` shape.
+- Partial failure: one source's index empty, the other populated, still
+  annotates the rows it can.
 
 The fetch itself stays untested, as `agenda-map`'s does. This is a known
 gap, recorded rather than papered over.
@@ -206,28 +297,31 @@ gap, recorded rather than papered over.
 manifest load-order test covers the ordering contract.
 
 Reused unchanged: `parseAgendaSlotTitle`, `parseZonaEntries`,
-`agendaMinScheduleDate`, `f5Prefix`/URL shaping, `mountWidget`,
-`makeDtProButton`, `escapeHtml`.
+`agendaMinScheduleDate`, `gatewayUrl`/`fetchViaGateway` (the
+arbitrary-path F5 helpers from `ultimo-movimento-export.js`),
+`parseUltimoMovimentoHtml`, `buildAgenciaFilterBody` (with `Controle`
+set to the real value), `mountWidget`, `makeDtProButton`, `escapeHtml`.
 
 ### Internal seams
 
 Build this as three stages with explicit boundaries, not one straight
-line from fetch to DOM. Two deferred follow-ups (below) each add a data
-source or a rendering, and the seams are what let them land without a
-rewrite:
+line from fetch to DOM. Two sources land at once and a third rendering is
+already anticipated, so the seams carry real weight:
 
 1. **Acquire** — one function per source, returning parsed plain objects.
    Knows about URLs, headers and the F5 rewrite; knows nothing about the
-   table.
-2. **Index** — pure functions from parsed slots to lookup maps
-   (`by controle`, `by zona ID`). No DOM, no network. This is where the
-   unit tests live.
-3. **Render** — reads indexes, writes the column and the header line.
-   Takes indexes as arguments rather than fetching for itself.
+   table. The two run independently so either can fail alone.
+2. **Index** — pure functions from parsed responses to lookup maps
+   (agenda by Controle, agenda by zona ID, movimento by
+   Controle+Domicílio). No DOM, no network. This is where the unit tests
+   live.
+3. **Render** — reads indexes, writes the columns and the header line.
+   Takes indexes as arguments rather than fetching for itself, and
+   tolerates an empty index (that is the partial-failure path).
 
-The annotation applied to a row should be an object (`{ agendado }`
-today), not a bare string, so a second source can add a key without
-changing the column-writing signature.
+The annotation applied to a row is an object
+(`{ agendado, situacao, transmissao }`), not a bare string, so a further
+source adds a key rather than changing the column-writing signature.
 
 ## Deliberately excluded
 
@@ -236,46 +330,31 @@ changing the column-writing signature.
 - **Auto-fetch on page load.** Consent first, always.
 - **Persisting the cache.** Would break the zero-storage guarantee.
 
-## Possible follow-ups (deferred, not scoped)
-
-Both are deferred deliberately: this spec has one genuine unknown — no
-live `ObterSlots` response has been seen from the extension's context —
-and adding a second unverified source now would compound it. Build this,
-use it, then decide. Recorded here so the seams above stay honest.
+## Possible follow-up (deferred, not scoped)
 
 ### Calendar of open slots
 
 A date-grid view of when the free slots actually are, rather than only
 how many. Free-slot counts naturally provoke "yes, but when?", so this
-is the likelier of the two to earn its place.
+is the likeliest next addition.
+
+Needs **no new fetch**: the same `ObterSlots` response already carries
+every open slot's `start`. Purely a third rendering off an index this
+spec already builds — which is what the render seam above is for.
 
 Note it partly duplicates the portal's own Agenda page; the reason it
 would belong here is that the user is on the Lista de Endereços and does
-not want to leave it. That is a real justification but a narrow one —
-worth confirming against use before building.
+not want to leave it. A real justification, but a narrow one — worth
+confirming against use before building.
 
-Needs no new fetch: the same `ObterSlots` response already carries every
-open slot's `start`. Purely a third rendering off the existing index.
+## Known unknown
 
-### Último Movimento status per household
+No live `ObterSlots` response has been observed from the extension's
+context. Everything about that endpoint comes from
+`pns.zonas/R/sigc_agendamentos.R`, which is working code but runs from R
+with its own session handling.
 
-Adds collection status to each row, alongside the scheduled date.
-
-Cheap, unlike the multi-agência export: that loops one request per
-agência with a 2-second gap, but this is a **single request per
-Controle** — `/relatorio/filtrar` with the Último Movimento payload and
-`Controle` set to the actual value instead of `*`. The existing
-`buildAgenciaFilterBody` already has the field; only its value changes.
-`parseUltimoMovimentoHtml` parses the response unchanged.
-
-Consequences to weigh when it is picked up:
-
-- **A fourth `fetch(` site**, so the privacy gate moves again. Landing it
-  separately from this spec's change keeps each privacy decision
-  arguable on its own terms — two new fetch sites in one commit is
-  exactly what makes such a decision hard to review.
-- **A second annotation key**, which the `{ agendado }` object shape
-  above already accommodates.
-- **Its own staleness.** Movement status ages differently from slot
-  availability, so it wants its own timestamp rather than sharing the
-  5-minute agenda TTL.
+**Step one of implementation is confirming the response shape**, before
+building anything on top of it. If it surprises us, the Agenda half of
+this design shifts; the Último Movimento half does not, since that
+endpoint and parser are already proven inside this extension.
