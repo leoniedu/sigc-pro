@@ -46,12 +46,11 @@ Em Administrar Agenda:
   horário × equipe dos slots), aba Lab compartilhável com o laboratório
   (hora, nome, município e zona por slot, sem Controle nem domicílio)
   e, por equipe, os cartões de cada visita — pronto para imprimir por
-  aba.
-• Guia + Mapa (opcional) — o mesmo guia com mapa da rota do dia,
-  link de navegação por visita e seleção de paradas por checkbox
-  (até 9 por rota, com link do Google Maps atualizado em tempo real),
-  obtendo as coordenadas do próprio servidor do SIGC mediante clique
-  e confirmação.
+  aba. Ao clicar, oferece obter as coordenadas do próprio servidor do
+  SIGC (mediante confirmação) para incluir também o mapa da rota do dia,
+  link de navegação por visita e seleção de paradas por checkbox (até 9
+  por rota, com link do Google Maps atualizado em tempo real); recusando
+  a consulta, o guia é gerado do mesmo jeito, sem o mapa.
 • Seletor de data — botão de calendário para pular direto a uma data.
 
 PRIVACIDADE: nenhum dado sai do circuito usuário–IBGE. A extensão
@@ -59,7 +58,7 @@ solicita apenas a permissão "storage" do navegador, usada só para
 lembrar o estado do flag avançado acima (Opções da extensão); todos os
 arquivos são gerados localmente e salvos pelo mecanismo padrão de
 download do Chrome. As únicas chamadas de rede são as consultas
-opcionais do Guia + Mapa e da exportação avançada do Último Movimento,
+opcionais do Guia do Dia e da exportação avançada do Último Movimento,
 ambas ao próprio servidor do SIGC (mesma sessão do usuário), acionadas
 por clique e confirmação — nada é enviado a terceiros nem ao
 desenvolvedor. Isso é verificado automaticamente a cada alteração no
@@ -99,7 +98,7 @@ off-by-default flag (set on the extension's own Options page) that
 gates a bulk export feature; no other data is stored. The extension
 makes no network calls except two optional, click-and-confirm requests
 to the SIGC server itself (same origin, within the user's existing
-session): the "Guia + Mapa" feature, and — only when the advanced flag
+session): the "Guia do Dia" feature, and — only when the advanced flag
 above is enabled — a bulk "Último Movimento" report export that loops
 one request per agência in the current UF. Nothing is ever sent to
 third parties or the developer.

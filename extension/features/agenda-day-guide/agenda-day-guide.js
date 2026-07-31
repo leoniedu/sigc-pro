@@ -18,7 +18,6 @@
   'use strict';
 
   const TAG = '[sigc-agenda-day-guide]';
-  const BUTTON_ID = 'sigc-pro-agenda-guia-button';
 
   // --- pure data helpers -------------------------------------------
 
@@ -944,29 +943,17 @@ ${sections}
     console.log(`${TAG} guide exported: ${groups.length} equipe(s), ${rows.length} slot(s).`);
   }
 
-  function exportGuide() {
-    generate(null);
-  }
-
-  // Consumed by agenda-map ("Guia + Mapa"): same pipeline, plus enderecos.
+  // Consumed by agenda-map, which owns the only guide button: it calls
+  // generate(enderecos) after its fetch, or generate(null) when there is
+  // nothing to fetch, the fetch fails, or the user declines the consulta.
+  // generate(null) is therefore still a live path — the map-free guide —
+  // even though no button reaches it directly anymore.
   window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel, buildGuideHtml, routeCheckboxInput, routeCheckboxHtml, buildSlotCard, routeIdxMap, buildRouteMapSvg, buildDayGrid };
 
-  // Dia-view-only: `when` flips with the fc-button-active class, which
-  // the shared observer watches (attributes: ['class']), so toggling
-  // Dia/Semana inserts/removes the button even when the toolbar isn't
-  // re-rendered.
-  window.__sigcPro.mountWidget({
-    id: BUTTON_ID,
-    anchor: (ctx) => ctx.agendaChunk(),
-    when: (ctx) => ctx.onAgenda() && diaViewActive(),
-    build: () => {
-      console.log(`${TAG} Guia do Dia button added.`);
-      return window.__sigcPro.makeFcProButton({
-        id: BUTTON_ID,
-        text: 'Guia do Dia',
-        title: 'Baixar guia do dia por equipe (SIGC-PRO)',
-        onClick: exportGuide,
-      });
-    },
-  });
+  // No button of its own: this module renders the guide, agenda-map mounts
+  // the single "Guia do Dia" button that drives it. Two buttons differing
+  // only by whether they made the consulta was clutter — declining the
+  // prompt now yields the same map-free guide the second button did.
+  // diaViewActive is exported above so agenda-map can reuse the Dia-only
+  // gating this module defines.
 })();

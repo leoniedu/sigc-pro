@@ -163,10 +163,14 @@
     'SIGC-PRO: isto fará uma consulta ao próprio servidor do SIGC para ' +
     'obter as coordenadas dos endereços. Nenhum dado sai do IBGE. Continuar?';
 
+  // Declining is not a cancel: this is the only guide button, so a "não"
+  // still produces the guide, just without the fetched coordinates and
+  // zona — the same map-free artifact the standalone button used to make.
   async function exportGuideMap(btn) {
-    if (!consentGiven) {
-      if (!confirm(CONSENT_MSG)) return;
-      consentGiven = true;
+    let consentiu = consentGiven;
+    if (!consentiu) {
+      consentiu = confirm(CONSENT_MSG);
+      if (consentiu) consentGiven = true;
     }
     const rows = window.__sigcPro.readAgendaSlots();
     if (rows.length === 0) {
@@ -178,7 +182,11 @@
       rows.filter((r) => r.reservado).map((r) => r.controle).filter(Boolean))];
 
     let enderecos = null;
-    if (uf && controles.length > 0) {
+    if (!consentiu) {
+      // Silent: the user just answered the prompt, so an alert would only
+      // restate their own choice back at them.
+      console.log(`${TAG} consulta recusada — guia gerado sem mapa.`);
+    } else if (uf && controles.length > 0) {
       btn.disabled = true;
       try {
         enderecos = await fetchEnderecos(uf, controles);
@@ -207,11 +215,12 @@
       ctx.onAgenda() && !!window.__sigcPro.dayGuide &&
       window.__sigcPro.dayGuide.diaViewActive(),
     build: () => {
-      console.log(`${TAG} Guia + Mapa button added.`);
+      console.log(`${TAG} Guia do Dia button added.`);
       return window.__sigcPro.makeFcProButton({
         id: BUTTON_ID,
-        text: 'Guia + Mapa',
-        title: 'Guia do dia com mapa — faz uma consulta ao servidor do SIGC (SIGC-PRO)',
+        text: 'Guia do Dia',
+        title: 'Guia do dia por equipe, com mapa mediante consulta ao ' +
+          'servidor do SIGC (SIGC-PRO)',
         onClick: (e) => exportGuideMap(e.currentTarget),
       });
     },

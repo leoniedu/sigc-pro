@@ -117,6 +117,14 @@ Working checklist; move items up/down freely. Specs live in
       updated live, the map stayed static) — data-idx groups on each
       dot, per-SVG-scoped queries so team maps and Resumo never collide
       (`2026-07-23-agenda-day-guide-checkbox-reactive-map-design.md`)
+- [x] Guia do Dia consolidated to ONE button: the standalone map-free
+      button is gone, and agenda-map's is renamed from "Guia + Mapa" to
+      "Guia do Dia". Two buttons differing only by whether they made the
+      consulta was clutter, and the map-free guide is not lost — declining
+      the consent prompt (or a failed fetch, or a day with no reserved
+      controles) still calls `generate(null)` and produces exactly the
+      artifact the second button used to. Declining is deliberately not a
+      cancel, since this is now the only way to reach the guide
 - [x] **Último Movimento multi-agência CSV export** (advanced,
       off-by-default flag): "CSV TODAS" button next to Filtrar on the
       Último Movimento report fetches every agência in the current UF
