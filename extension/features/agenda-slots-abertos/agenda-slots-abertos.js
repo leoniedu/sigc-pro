@@ -60,32 +60,32 @@
     return min < TARDE_FROM_MIN ? 'manha' : 'tarde';
   }
 
-  // Sort key only: the zona NAME, which is the LAST space-separated token
-  // of an entry. Full shape is "<ID> - <setor código> <nome>", e.g.
-  // "292WD9 - 29.3.01.04 29_Linus_Pituba" -> "29_Linus_Pituba". Both the
-  // ID and the setor código are opaque and group nothing a scheduler
-  // cares about; the name (<UF>_<Equipe>_<Local>, the same token
-  // agenda-slot-checks matches against equipes) is what reads as a place.
-  //
-  // Taking the last token rather than everything after " - " matters: the
-  // latter keys on the setor código, which merely LOOKS sorted because
-  // códigos and names tend to correlate.
+  // Sort key only: everything after the first " - ", which for the full
+  // entry shape "<ID> - <setor código> <nome>" is the SETOR CÓDIGO first
+  // ("292WD9 - 29.3.01.04 29_Linus_Pituba" -> "29.3.01.04 29_Linus_
+  // Pituba"). The código is hierarchical (UF, then progressively finer
+  // subdivisions), so ordering by it groups geographically adjacent
+  // setores together — which is what a scheduler scanning the table
+  // wants. The leading ID is opaque and orders nothing; the trailing
+  // name leads with the equipe, so keying on it would group by team
+  // instead of by area.
   //
   // This does not contradict the whole-entry rule above: the entry is
-  // still displayed and counted whole, and an entry that is a single
-  // token keys on itself rather than being dropped. Splitting only ever
-  // decides order here, so a surprising shape misplaces a row at worst —
-  // it cannot mangle or lose one. Ties fall back to the whole entry,
-  // keeping the order total and stable for two zonas sharing a name.
+  // still displayed and counted whole, and an entry with no " - " (the
+  // slot-text shape, "29.3.03.03 29_Linus_Pituba", which already starts
+  // with its código) keys on itself rather than being dropped. Splitting
+  // only ever decides order here, so a surprising shape misplaces a row
+  // at worst — it cannot mangle or lose one. Ties fall back to the whole
+  // entry, keeping the order total and independent of input order.
   function zonaSortKey(zona) {
     const s = String(zona ?? '').trim();
-    const i = s.lastIndexOf(' ');
-    return i === -1 ? s : s.slice(i + 1);
+    const i = s.indexOf(' - ');
+    return i === -1 ? s : s.slice(i + 3);
   }
 
   // rows -> { zonas: [{ zona, manha: {abertos, total}, tarde: {…},
   //           abertos, total }], totals: {…}, semZona, semHora }
-  // sorted by zona NAME — the part after the first " - " — with pt-BR
+  // sorted by SETOR CÓDIGO — the part after the first " - " — with pt-BR
   // collation, so acentos sort naturally (see zonaSortKey).
   // A row with no zonas at all can't be placed in any zona row; it's
   // counted in semZona so the panel can say so instead of dropping it.

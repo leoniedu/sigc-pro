@@ -42,19 +42,27 @@ describe('turnoOf', () => {
 });
 
 describe('zonaSortKey', () => {
-  // Real shape: "<ID> - <setor código> <nome>". The name is the last
-  // token; everything before it is opaque.
-  test('takes the trailing name, not the setor código', () => {
-    expect(zonaSortKey('292WD9 - 29.3.01.04 29_Linus_Pituba')).toBe('29_Linus_Pituba');
-    expect(zonaSortKey('29GAIR - 29.3.02.02 29_Linus_Barra')).toBe('29_Linus_Barra');
+  // Real shape: "<ID> - <setor código> <nome>". Drop the opaque ID and
+  // key on the código, which leads the remainder.
+  test('drops the ID, keying on the setor código', () => {
+    expect(zonaSortKey('292WD9 - 29.3.01.04 29_Linus_Pituba'))
+      .toBe('29.3.01.04 29_Linus_Pituba');
+    expect(zonaSortKey('29GAIR - 29.3.02.02 29_Linus_Barra'))
+      .toBe('29.3.02.02 29_Linus_Barra');
   });
 
-  // The slot-text shape carries no ID, but the name is still last.
-  test('works without the ID prefix', () => {
-    expect(zonaSortKey('29.3.03.03 29_Linus_Pituba')).toBe('29_Linus_Pituba');
+  // The slot-text shape has no ID and already starts with its código,
+  // so it needs no trimming to sort alongside the full entries.
+  test('leaves an entry that already starts with its código', () => {
+    expect(zonaSortKey('29.3.03.03 29_Linus_Pituba')).toBe('29.3.03.03 29_Linus_Pituba');
   });
 
-  test('falls back to the whole entry for a single token', () => {
+  // Only the FIRST " - " splits: a name containing one keeps its tail.
+  test('splits once, keeping later separators', () => {
+    expect(zonaSortKey('29X - 29.1.01.01 Lab 1 - Oeste')).toBe('29.1.01.01 Lab 1 - Oeste');
+  });
+
+  test('falls back to the whole entry when there is no separator', () => {
     expect(zonaSortKey('29001002')).toBe('29001002');
   });
 
@@ -62,7 +70,7 @@ describe('zonaSortKey', () => {
     expect(zonaSortKey('')).toBe('');
     expect(zonaSortKey(null)).toBe('');
     expect(zonaSortKey(undefined)).toBe('');
-    expect(zonaSortKey('  29X - 29.1.01.01 29_Linus_Rio  ')).toBe('29_Linus_Rio');
+    expect(zonaSortKey('  29X - 29.1.01.01 29_Linus_Rio  ')).toBe('29.1.01.01 29_Linus_Rio');
   });
 });
 
@@ -159,45 +167,47 @@ describe('aggregateByZonaTurno', () => {
     expect(agg.totals.total).toBe(1);
   });
 
-  // Real entries: "<ID> - <setor código> <nome>". Built so ID order,
-  // setor order and NAME order all disagree — sorting by ID gives
-  // A/B/C and sorting by the setor código gives Pituba/Barra/Amaralina,
-  // so only a genuine name sort produces the expected order.
-  test('zonas sort by name, not by ID or setor código', () => {
+  // Real entries: "<ID> - <setor código> <nome>". Built so ID order and
+  // SETOR order disagree — sorting by the whole entry (the leading ID)
+  // would give ZZ/MM/AA, so only a real código sort passes. Taken from
+  // production values: the código is hierarchical, so ascending order
+  // also groups geographically adjacent setores.
+  test('zonas sort by setor código, not by the leading ID', () => {
     const agg = aggAt([
-      row({ zonas: '29AAAA - 29.1.01.01 29_Linus_Pituba' }),
-      row({ zonas: '29BBBB - 29.2.02.02 29_Linus_Barra' }),
-      row({ zonas: '29CCCC - 29.3.03.03 29_Linus_Amaralina' }),
+      row({ zonas: '29AA - 29.3.02.02 29_Linus_Pituba' }),
+      row({ zonas: '29MM - 29.2.03.05 29_Linus_Lauro' }),
+      row({ zonas: '29ZZ - 29.1.03.01 29_Linus_Candeias' }),
     ]);
     expect(agg.zonas.map((z) => z.zona)).toEqual([
-      '29CCCC - 29.3.03.03 29_Linus_Amaralina',
-      '29BBBB - 29.2.02.02 29_Linus_Barra',
-      '29AAAA - 29.1.01.01 29_Linus_Pituba',
+      '29ZZ - 29.1.03.01 29_Linus_Candeias',
+      '29MM - 29.2.03.05 29_Linus_Lauro',
+      '29AA - 29.3.02.02 29_Linus_Pituba',
     ]);
   });
 
-  test('sorts names with acentos naturally (pt-BR collation)', () => {
+  test('sorts with pt-BR collation, so acentos land naturally', () => {
     const agg = aggAt([
-      row({ zonas: '29A - 29.1.01.01 Zumbi' }),
-      row({ zonas: '29B - 29.2.02.02 Água' }),
-      row({ zonas: '29C - 29.3.03.03 Boca' }),
-    ]);
-    expect(agg.zonas.map((z) => z.zona).map((z) => z.split(' ').pop()))
-      .toEqual(['Água', 'Boca', 'Zumbi']);
-  });
-
-  // The slot-text shape has no ID prefix; its name is still the last
-  // token, so it sorts among the others rather than clumping at one end.
-  test('an entry without the ID prefix sorts on its name too', () => {
-    const agg = aggAt([
-      row({ zonas: '29A - 29.1.01.01 29_Linus_Zebra' }),
-      row({ zonas: '29.3.03.03 29_Linus_Muro' }),
-      row({ zonas: '29B - 29.2.02.02 29_Linus_Abelha' }),
+      row({ zonas: '29A - Zumbi' }),
+      row({ zonas: '29B - Água' }),
+      row({ zonas: '29C - Boca' }),
     ]);
     expect(agg.zonas.map((z) => z.zona)).toEqual([
-      '29B - 29.2.02.02 29_Linus_Abelha',
-      '29.3.03.03 29_Linus_Muro',
-      '29A - 29.1.01.01 29_Linus_Zebra',
+      '29B - Água', '29C - Boca', '29A - Zumbi',
+    ]);
+  });
+
+  // The slot-text shape has no ID prefix but already starts with its
+  // código, so it interleaves with the full entries instead of clumping.
+  test('an entry without the ID prefix sorts on its código too', () => {
+    const agg = aggAt([
+      row({ zonas: '29A - 29.3.03.03 29_Linus_Zebra' }),
+      row({ zonas: '29.2.02.02 29_Linus_Muro' }),
+      row({ zonas: '29B - 29.1.01.01 29_Linus_Abelha' }),
+    ]);
+    expect(agg.zonas.map((z) => z.zona)).toEqual([
+      '29B - 29.1.01.01 29_Linus_Abelha',
+      '29.2.02.02 29_Linus_Muro',
+      '29A - 29.3.03.03 29_Linus_Zebra',
     ]);
   });
 
