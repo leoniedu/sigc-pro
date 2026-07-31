@@ -314,3 +314,33 @@ describe('annotateRow', () => {
     });
   });
 });
+
+const { chaveDeLinha } = window.__sigcPro.listaAgenda;
+
+// The bug this guards against: escreverColunas resolves each rendered <tr>
+// to its household via dt.row(tr).data(), a DIFFERENT row-data shape than
+// tabela.rows (readDataTable's cellText-cleaned array). Both call sites
+// must key identically or annotations land on the wrong household as soon
+// as the table sorts, filters or paginates.
+describe('chaveDeLinha', () => {
+  const cols = { controle: { index: 1 }, nDomicilio: { index: 3 } };
+
+  test('builds the same key as chaveDomicilio from plain-text cells', () => {
+    const row = ['x', '292740805060337', 'y', '1'];
+    expect(chaveDeLinha(row, cols.controle.index, cols.nDomicilio.index))
+      .toBe('292740805060337|1');
+  });
+
+  // dt.row(tr).data() returns raw cell data, which — unlike tabela.rows —
+  // has NOT been through cellText. Any markup must strip to the same text.
+  test('strips HTML the same way cellText does, so keys match tabela.rows', () => {
+    const row = ['x', '<span>292740805060337</span>', 'y', ' 1 '];
+    expect(chaveDeLinha(row, cols.controle.index, cols.nDomicilio.index))
+      .toBe('292740805060337|1');
+  });
+
+  test('missing cells key on empty strings rather than throwing', () => {
+    const row = ['x', undefined, 'y', null];
+    expect(chaveDeLinha(row, cols.controle.index, cols.nDomicilio.index)).toBe('|');
+  });
+});

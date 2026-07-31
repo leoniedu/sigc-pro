@@ -53,6 +53,28 @@
 
   const chaveDomicilio = (controle, domicilio) => `${controle}|${domicilio}`;
 
+  // Cell text the same way sigc-common's cellText reduces it (DOMParser,
+  // then trim) so a key built here matches a key built from tabela.rows —
+  // DataTables' row().data() returns raw cell data, which readDataTable()
+  // (source of tabela.rows) always passes through cellText first. DOMParser
+  // is inert on plain text too, so this is safe even though Controle and
+  // N.º Domicilio are plain numeric/ID strings with no markup in practice.
+  function textoCelula(v) {
+    const doc = new DOMParser().parseFromString(String(v ?? ''), 'text/html');
+    return (doc.body.textContent || '').trim();
+  }
+
+  // Pure: row data (raw, possibly-HTML cells) + the two column indexes ->
+  // the same chaveDomicilio key used to index annotations. Shared by the
+  // build side (tabela.rows, already cellText'd) and the render side
+  // (dt.row(tr).data(), raw) so both sides key identically regardless of
+  // which shape of row data they start from.
+  function chaveDeLinha(rowData, colControleIdx, colDomicilioIdx) {
+    return chaveDomicilio(
+      textoCelula(rowData[colControleIdx]),
+      textoCelula(rowData[colDomicilioIdx]));
+  }
+
   function indexByControle(slots) {
     const map = new Map();
     slots.forEach((s) => {
@@ -279,6 +301,7 @@
 
   window.__sigcPro.listaAgenda = {
     parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml, annotateRow,
+    chaveDeLinha,
   };
 
   // --- caches ---------------------------------------------------------
@@ -357,11 +380,19 @@
     const livresIdx = indexZonaLivres(slots, minDateIso);
     const todayIso = window.__sigcPro.dateToIso(new Date());
 
-    const anotacoes = tabela.rows.map((r) => annotateRow(
-      r[cols.controle.index], r[cols.nDomicilio.index],
-      { agendaIdx, movimentoIdx, todayIso }));
+    // Keyed by household, NOT positional: tabela.rows is the full dataset
+    // in original data order (readDataTable's "stable across pagination/
+    // sort" guarantee), but the <tr> elements escreverColunas writes into
+    // are only the current page in current sort/filter order. A positional
+    // array silently mismatches the two as soon as the user sorts, filters
+    // or paginates.
+    const anotacoesPorChave = new Map(tabela.rows.map((r) => [
+      chaveDeLinha(r, cols.controle.index, cols.nDomicilio.index),
+      annotateRow(r[cols.controle.index], r[cols.nDomicilio.index],
+        { agendaIdx, movimentoIdx, todayIso }),
+    ]));
 
-    escreverColunas(anotacoes);
+    escreverColunas(anotacoesPorChave, cols);
     escreverResumo(
       tabela.rows.map((r) => String(r[cols.idZona.index] || '').trim()),
       livresIdx,
@@ -371,32 +402,44 @@
         movimentoEm: mv ? horaDe(mv.em) : '—',
         falhas,
       });
-    console.log(`${TAG} ${anotacoes.length} linha(s) anotadas; ` +
+    console.log(`${TAG} ${anotacoesPorChave.size} linha(s) anotadas; ` +
       `${livresIdx.size} zona(s) com slots livres.`);
   }
 
   // Appended, never inserted: indexes 0-19 must stay put, since
   // tableMatchesLayout validates by index and PDF/KML read fixed ones.
-  function escreverColunas(anotacoes) {
-    const dt = window.__sigcPro.getDataTable();
-    if (!dt) return;
+  // Idempotent — safe to call on every draw, header check guards re-adding.
+  function garantirCabecalho(dt) {
     const thead = dt.table().header();
     const jaTem = [...thead.querySelectorAll('th')]
       .some((th) => th.textContent.trim() === COLUNAS[0]);
-    if (!jaTem) {
-      const tr = thead.querySelector('tr');
-      COLUNAS.forEach((nome) => {
-        const th = document.createElement('th');
-        th.textContent = nome;
-        tr.appendChild(th);
-      });
-    }
+    if (jaTem) return;
+    const tr = thead.querySelector('tr');
+    COLUNAS.forEach((nome) => {
+      const th = document.createElement('th');
+      th.textContent = nome;
+      tr.appendChild(th);
+    });
+  }
+
+  // Resolves each rendered <tr> to its household via the DataTables API
+  // (dt.row(tr).data()) rather than by position: the body only ever holds
+  // the CURRENT page in the CURRENT sort/filter order, which does not
+  // match tabela.rows' full-dataset original order. Skips rows with no
+  // matching annotation (e.g. mid-fetch layout hiccup) rather than
+  // guessing.
+  function escreverCorpo(dt, anotacoesPorChave, cols) {
     const corpo = dt.table().body();
-    [...corpo.querySelectorAll('tr')].forEach((tr, i) => {
-      const a = anotacoes[i];
-      if (!a) return;
-      // Re-annotating replaces rather than appends again.
+    [...corpo.querySelectorAll('tr')].forEach((tr) => {
+      const dados = dt.row(tr).data();
+      if (!dados) return;
+      const chave = chaveDeLinha(dados, cols.controle.index, cols.nDomicilio.index);
+      const a = anotacoesPorChave.get(chave);
+      // Re-annotating (including on redraw) replaces rather than appends
+      // again — DataTables re-renders <tr>s from its data model on every
+      // draw, discarding any <td>s appended outside its control.
       [...tr.querySelectorAll('td.sigc-pro-anotacao')].forEach((td) => td.remove());
+      if (!a) return;
       [
         { texto: a.agendado, classe: a.futura ? 'sp-futura' : 'sp-passada' },
         { texto: a.situacao, classe: '' },
@@ -408,6 +451,33 @@
         tr.appendChild(td);
       });
     });
+  }
+
+  // Survives redraw (sort/search/page change): DataTables re-renders body
+  // rows from its data model on every draw, which would otherwise strand
+  // the header at 3 extra columns with no matching body cells. Registered
+  // once — repeat clicks must not stack handlers — and always replays the
+  // MOST RECENT annotations/cols via the closure variables below, so a
+  // draw firing after a second, different anotar() run stays correct.
+  let drawHandlerRegistrado = false;
+  let ultimasAnotacoes = null;
+  let ultimasCols = null;
+
+  function escreverColunas(anotacoesPorChave, cols) {
+    const dt = window.__sigcPro.getDataTable();
+    if (!dt) return;
+    ultimasAnotacoes = anotacoesPorChave;
+    ultimasCols = cols;
+    garantirCabecalho(dt);
+    escreverCorpo(dt, anotacoesPorChave, cols);
+    if (!drawHandlerRegistrado) {
+      dt.on('draw', () => {
+        if (!ultimasAnotacoes || !ultimasCols) return;
+        garantirCabecalho(dt);
+        escreverCorpo(dt, ultimasAnotacoes, ultimasCols);
+      });
+      drawHandlerRegistrado = true;
+    }
   }
 
   function escreverResumo(zonaIds, livresIdx, meta) {
