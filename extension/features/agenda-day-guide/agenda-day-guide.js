@@ -90,10 +90,15 @@
     return (r.reservado && enderecos && enderecos.get(enderecoKey(r))) || null;
   }
 
-  // "ID Zona Nome ZONA" (either alone when the other is missing) — the
-  // same "código nome" shape the slot-text zonas use.
+  // The zona's ID alone ("29.3.03.03"), never the nome appended to it:
+  // the ID is what identifies the zona across SIGC and the coordination's
+  // own reporting, and the nome is often just the código repeated
+  // ("29001002 - 29001002"), so it only lengthens every label.
+  // Every zona in SIGC has an ID, so there is no nome-only fallback: a
+  // row reaching here without one has no zona columns filled at all
+  // (see agenda-map.js — coordinates alone are enough for an entry).
   function zonaLabel(info) {
-    return info ? [info.idZona, info.zona].filter(Boolean).join(' ') : '';
+    return info ? (info.idZona || '') : '';
   }
 
   function fmtCoord(p) {
@@ -654,11 +659,21 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
           const hora = `<span class="grid-hora">${e(r.horaInicio)}</span>`;
           if (!r.reservado) return `${hora} <span class="grid-livre">LIVRE</span>`;
           // Lab cells name the visit the way the laboratory's own system
-          // lists it — nome + município, no Controle, no Domicílio, no
-          // birth date. Município comes from the Controle's first 7
-          // digits (the IBGE código), never from personal data.
+          // lists it. SANCTIONED FIELDS — hora, nome, município, zona —
+          // and nothing else; no Controle, no Domicílio, no birth date,
+          // no telefone/endereço/observação. Município comes from the
+          // Controle's first 7 digits (the IBGE código), never from
+          // personal data; zona is here by an explicit decision (the lab
+          // needs the area to plan routes), accepting that it narrows
+          // location below município level.
+          //
+          // This is the artifact designed to LEAVE the institution.
+          // Adding a field here is a privacy decision, not a formatting
+          // one: argue it in the commit message, and update the
+          // whitelist in tests/agenda-day-guide-lab-grid.test.js, which
+          // fails until that list is edited. See ROADMAP.md.
           const zona = zonaLabel(slotInfo(r, enderecos));
-          const zonaLine = zona ? `<span class="grid-zona">Zona ${e(zona)}</span>` : '';
+          const zonaLine = zona ? `<span class="grid-zona">Zona: ${e(zona)}</span>` : '';
           if (lab) {
             const municipio = window.__sigcPro.municipioFromControle(r.controle);
             return [

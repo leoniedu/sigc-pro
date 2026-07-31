@@ -69,7 +69,7 @@ describe('buildRouteSelector', () => {
     const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5, 'Centro', '12']]);
     const html = buildRouteSelector(rows, enderecos, 'team-0', true);
     expect(html).toContain(
-      '09:00 Maria Silva — Controle: C1 &nbsp;·&nbsp; Dom: D1 &nbsp;·&nbsp; Zona: 12 Centro'
+      '09:00 Maria Silva — Controle: C1 &nbsp;·&nbsp; Dom: D1 &nbsp;·&nbsp; Zona: 12'
     );
   });
 
@@ -184,7 +184,7 @@ describe('routeCheckboxHtml', () => {
     expect(html).toContain('data-lon="-38.500000"');
     expect(html).toContain('data-name="09:00 Maria Silva"');
     expect(html).toContain('checked');
-    expect(html).toContain('Controle: C1 &nbsp;·&nbsp; Dom: D1 &nbsp;·&nbsp; Zona: 12 Centro');
+    expect(html).toContain('Controle: C1 &nbsp;·&nbsp; Dom: D1 &nbsp;·&nbsp; Zona: 12');
   });
 
   test('routable row, checked=false: no checked attribute', () => {
