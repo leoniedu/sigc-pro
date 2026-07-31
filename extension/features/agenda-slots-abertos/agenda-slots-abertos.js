@@ -6,8 +6,14 @@
 // The panel is a zona × turno table: one row per distinct zona entry, one
 // column pair per turno (Manhã = start before 13:00, Tarde = 13:00 on),
 // each cell "abertos/total" — open slots still fillable over the total
-// slots existing there, so a zona reading 0/8 is saturated while 5/6 is
-// nearly untouched.
+// slots existing there, so a zona reading 0/8 has nothing left to open
+// while 5/6 is nearly untouched.
+//
+// "Still fillable" is the operative word: abertos counts only free slots
+// at or after the SIGC prazo mínimo (+3 days, +4 on Fridays), since a
+// free slot before that cutoff can no longer be filled and would
+// otherwise advertise capacity that does not exist. The denominator is
+// deliberately NOT filtered — those slots still occupy the zona.
 //
 // A slot listing several zonas is shown TWO ways in the same cell,
 // because the two answer different questions and neither alone is
@@ -59,11 +65,18 @@
   // sorted by zona entry (pt-BR collation, so acentos sort naturally).
   // A row with no zonas at all can't be placed in any zona row; it's
   // counted in semZona so the panel can say so instead of dropping it.
-  function aggregateByZonaTurno(rows) {
+  // minDateIso: the earliest date a slot can still be filled — the SIGC
+  // prazo mínimo, +3 days from today and +4 on Fridays (so a Friday's
+  // horizon clears the weekend), via the shared agendaMinScheduleDate.
+  // Defaults to that rule applied to today; passed explicitly by tests.
+  function aggregateByZonaTurno(rows, minDateIso) {
+    const limite = minDateIso != null ? minDateIso : window.__sigcPro.dateToIso(
+      window.__sigcPro.agendaMinScheduleDate(new Date()));
     const map = new Map();
     const totals = { manha: { abertos: 0, total: 0 }, tarde: { abertos: 0, total: 0 } };
     let semZona = 0;
     let semHora = 0;
+    let foraDoPrazo = 0;
 
     rows.forEach((r) => {
       const turno = turnoOf(r);
@@ -76,9 +89,19 @@
         semZona += 1;
         return;
       }
-      // Open = not reserved, matching readAgendaSlots' own `reservado`
-      // flag (an open slot's title is just "Zonas: …", no Controle).
-      const aberto = !r.reservado;
+      // Open = not reserved (matching readAgendaSlots' own `reservado`
+      // flag: an open slot's title is just "Zonas: …", no Controle) AND
+      // still within the prazo — a slot before the cutoff cannot be filled
+      // anymore, so counting it as open would point schedulers at capacity
+      // that does not exist.
+      //
+      // Only `abertos` is filtered, never `total`: an unfillable slot
+      // still occupies the zona's capacity, so dropping it from the
+      // denominator would overstate how free the zona is and stop the
+      // TOTAL row reconciling with the week actually on screen.
+      const noPrazo = !r.isoDate || r.isoDate >= limite;
+      const aberto = !r.reservado && noPrazo;
+      if (!r.reservado && !noPrazo) foraDoPrazo += 1;
       totals[turno].total += 1;
       if (aberto) totals[turno].abertos += 1;
 
@@ -127,6 +150,8 @@
       },
       semZona,
       semHora,
+      foraDoPrazo,
+      limite,
     };
   }
 
@@ -179,6 +204,14 @@
       `<td>${t.abertos}/${t.total}</td></tr>`;
     const notas = [
       'Cada célula: <strong>abertos/total</strong> em contagem inteira.',
+      `<strong>Abertos</strong> conta só o que ainda dá para preencher: ` +
+        `slots livres a partir de ${e(window.__sigcPro.isoToBr(agg.limite))} ` +
+        '(prazo mínimo de agendamento). O total segue contando todos os ' +
+        'slots da zona, inclusive os que já passaram do prazo.',
+      agg.foraDoPrazo
+        ? `${agg.foraDoPrazo} slot(s) livre(s) já fora do prazo não entram ` +
+          'em "abertos".'
+        : '',
       'Um slot que lista várias zonas conta inteiro em cada uma delas ' +
         '(de quantos slots a zona pode ser preenchida), portanto a soma ' +
         'das linhas passa do TOTAL, que conta slots.',
