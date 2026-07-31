@@ -663,6 +663,7 @@
     onAgendaPage,
     findAgendaToolbarChunk,
     parseZonaEntries,
+    parseAgendaSlotTitle,
     isoToBr,
     dateToIso,
     getAgendaUf,

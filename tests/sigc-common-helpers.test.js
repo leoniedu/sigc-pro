@@ -84,3 +84,25 @@ describe('exportFileBase', () => {
     );
   });
 });
+
+describe('parseAgendaSlotTitle', () => {
+  test('is exported for other modules to reuse', () => {
+    expect(typeof window.__sigcPro.parseAgendaSlotTitle).toBe('function');
+  });
+
+  // Splits on the FIRST colon only: Endereço values contain more.
+  test('splits each line on the first colon', () => {
+    const f = window.__sigcPro.parseAgendaSlotTitle(
+      'Controle: 292740805060337\nEndereço: RUA X, Nº: 237: - Compl: APTO');
+    expect(f['Controle']).toBe('292740805060337');
+    expect(f['Endereço']).toBe('RUA X, Nº: 237: - Compl: APTO');
+  });
+
+  // SIGC renders an empty field as a literal " - ", which MISSING_VALUES
+  // collapses, so the key is absent rather than present-and-blank.
+  test('omits empty fields rather than storing blanks', () => {
+    const f = window.__sigcPro.parseAgendaSlotTitle('Nome:  - \nTelefone: ');
+    expect(f['Nome']).toBeUndefined();
+    expect(f['Telefone']).toBeUndefined();
+  });
+});
