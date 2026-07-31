@@ -12,6 +12,11 @@
 // independent (either may fail without costing the other's columns) and
 // every decision worth testing lives in a pure function.
 //
+// The on-page panel keeps only the free-slots-per-zona summary; the
+// per-household detail is a sortable table in a downloaded, self-contained
+// HTML file (buildDomiciliosDocHtml), same shape as agenda-day-guide's
+// buildGuideHtml — a wall of 15-40 households does not belong on the page.
+//
 // Spec: docs/superpowers/specs/2026-07-31-lista-agenda-design.md
 (function () {
   'use strict';
@@ -156,7 +161,13 @@
   // no data to count from, not zero free slots. A fabricated "0" there
   // reads as real capacity information and is exactly the false signal
   // that causes a double-booking, so that case renders "?" instead.
-  function buildResumoHtml(zonaIdsDaTabela, livresIdx, meta, domicilios) {
+  //
+  // The per-household list used to render here too; it now lives in a
+  // downloaded standalone file (buildDomiciliosDocHtml) instead, since a
+  // wall of 15-40 households made this on-page panel unwieldy. `arquivo`,
+  // when given, names that download so the panel points at where the
+  // detail went rather than just dropping it silently.
+  function buildResumoHtml(zonaIdsDaTabela, livresIdx, meta, arquivo) {
     const e = window.__sigcPro.escapeHtml;
     const ids = [...new Set((zonaIdsDaTabela || []).filter(Boolean))].sort();
     const celulas = ids.map((id) => {
@@ -179,67 +190,165 @@
         '.</div>'
       : '';
 
+    const download = arquivo
+      ? `<div class="sp-download">Tabela detalhada por domicílio baixada em <strong>${e(arquivo)}</strong>.</div>`
+      : '';
+
     return [
       '<div id="sigc-pro-lista-agenda-resumo">',
       `<div class="sp-titulo">Slots livres (a partir de ${e(meta.minDateBr)}) · ${quando}</div>`,
       `<div class="sp-zonas">${celulas || '<em>Nenhuma zona nesta tabela.</em>'}</div>`,
       falhas,
-      buildDomiciliosHtml(domicilios || []),
+      download,
       '</div>',
     ].join('\n');
   }
 
-  // Per-household detail, rendered inside the summary panel INSTEAD of
-  // extra table columns. DataTables owns the table's column model
-  // (aoColumns): appending <th>/<td> elements from outside leaves that
-  // model out of sync with the DOM, and a later adjust()/redraw walks off
-  // the end of it and throws (live: "Cannot read properties of undefined
-  // (reading 'colEl')"). The table must stay untouched; this panel is the
-  // only place per-household data can safely live.
-  // One line per household with data — bare Controle is
-  // unreadable, so logradouro + número identifies it, with the domicílio
-  // number to tell apart multiple households at the same address.
+  // Per-household detail used to live in the on-page panel as an <ul>, but
+  // 15-40 households made that panel an unwieldy wall of text. It is now a
+  // sortable table inside a DOWNLOADED, SELF-CONTAINED HTML file instead
+  // (buildDomiciliosTableHtml below) — this function builds just the
+  // <table> markup, reused by both the standalone document and (were it
+  // ever needed) any other host, same seam agenda-day-guide's builders use.
   //
-  // Households with NO data from either source are omitted rather than
-  // padding the list with rows of "—", but the omitted count is shown so
-  // "nothing scheduled" (a household IS listed, fields are "—") reads
-  // differently from "not shown" (never fetched/matched at all).
-  function buildDomiciliosHtml(domicilios) {
+  // Every household in the Controle appears, INCLUDING those with no data
+  // from either source — missing fields render "—" rather than being
+  // omitted, since the point of a downloaded file is a complete list to
+  // scan/search/sort, not a curated one.
+  function buildDomiciliosTable(domicilios) {
     const e = window.__sigcPro.escapeHtml;
-    const comDados = (domicilios || []).filter((d) =>
-      d.agendado || d.situacao || d.transmissao);
-    const omitidos = (domicilios || []).length - comDados.length;
-
-    if (comDados.length === 0) {
-      const nada = omitidos > 0
-        ? `<em>Nenhum domicílio com dados de agenda/movimento (${omitidos} sem dados omitido(s)).</em>`
-        : '<em>Nenhum domicílio anotado.</em>';
-      return `<div class="sp-domicilios">${nada}</div>`;
-    }
-
-    const linhas = comDados.map((d) => {
-      const classe = d.futura ? 'sp-futura' : 'sp-passada';
-      const agendado = d.agendado
-        ? `<span class="${classe}">${e(d.agendado)}</span>`
-        : '—';
-      return '<li>' +
-        `<strong>${e(d.identificador)}</strong>: ` +
-        `agendado ${agendado} · ` +
-        `situação ${e(d.situacao || '—')} · ` +
-        `transmissão ${e(d.transmissao || '—')}` +
-        '</li>';
+    const linhas = (domicilios || []).map((d) => {
+      const classe = d.agendado ? (d.futura ? 'sp-futura' : 'sp-passada') : '';
+      const agendadoTxt = d.agendado ? e(d.agendado) : '—';
+      const agendadoCell = classe
+        ? `<span class="${classe}">${agendadoTxt}</span>`
+        : agendadoTxt;
+      const endereco = d.endereco || `Domicílio ${d.nDomicilio ?? ''}`.trim();
+      return '<tr>' +
+        `<td>${e(endereco || '—')}</td>` +
+        `<td>${e(String(d.nDomicilio ?? '').trim() || '—')}</td>` +
+        `<td data-sort="${e(d.agendado || '')}">${agendadoCell}</td>` +
+        `<td>${e(d.situacao || '—')}</td>` +
+        `<td data-sort="${e(d.transmissao || '')}">${e(d.transmissao || '—')}</td>` +
+        '</tr>';
     }).join('\n');
 
-    const rodape = omitidos > 0
-      ? `<div class="sp-omitidos">${e(String(omitidos))} domicílio(s) sem dados de agenda/movimento omitido(s).</div>`
-      : '';
-
     return [
-      '<div class="sp-domicilios">',
-      `<ul>${linhas}</ul>`,
-      rodape,
-      '</div>',
+      '<table class="sp-tabela" id="sp-tabela-domicilios">',
+      '<thead><tr>',
+      '<th data-tipo="texto">Endereço</th>',
+      '<th data-tipo="texto">Domicílio</th>',
+      '<th data-tipo="data">Agendado</th>',
+      '<th data-tipo="texto">Situação</th>',
+      '<th data-tipo="data">Data</th>',
+      '</tr></thead>',
+      `<tbody>${linhas}</tbody>`,
+      '</table>',
     ].join('\n');
+  }
+
+  // Complete standalone document: header (Controle + fetch times, the same
+  // information the on-page panel's sp-titulo carries), the free-slots-per-
+  // zona summary (buildResumoHtml's own markup, reused verbatim so the
+  // rendering logic exists in exactly one place), and the sortable
+  // households table. One inline <script> for sorting, no external
+  // resources of any kind — must open and work from a Downloads folder
+  // with no network, same contract as agenda-day-guide's buildGuideHtml.
+  function buildDomiciliosDocHtml(meta, resumoHtml, domicilios) {
+    const e = window.__sigcPro.escapeHtml;
+    return `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SIGC-PRO — Domicílios — ${e(meta.controle)}</title>
+<style>
+body { margin: 0; font: 14px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif; color: #1a1a1a; }
+header { padding: 1rem 1.2rem .6rem; border-bottom: 2px solid #005a9c; }
+header h1 { margin: 0; font-size: 1.3rem; color: #005a9c; }
+header .meta { color: #555; font-size: .9rem; }
+main { padding: 0 1.2rem 2rem; }
+#sigc-pro-lista-agenda-resumo { margin: .8rem 0; padding: .4rem .6rem;
+  border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa;
+  font-size: 12px; line-height: 1.45; color: #1a1a1a; }
+#sigc-pro-lista-agenda-resumo .sp-titulo { color: #555; margin-bottom: .2rem; }
+#sigc-pro-lista-agenda-resumo .sp-zona-livre { display: inline-block; margin-right: .9rem; }
+#sigc-pro-lista-agenda-resumo .sp-falha { color: #a11; margin-top: .2rem; }
+table.sp-tabela { border-collapse: collapse; width: 100%; margin-top: .4rem; }
+table.sp-tabela th, table.sp-tabela td { border: 1px solid #d0d7de; padding: .3rem .6rem; text-align: left; font-size: .92rem; }
+table.sp-tabela th { background: #f6f8fa; cursor: pointer; user-select: none; white-space: nowrap; }
+table.sp-tabela th.sp-asc::after { content: " \\25B2"; }
+table.sp-tabela th.sp-desc::after { content: " \\25BC"; }
+table.sp-tabela .sp-futura { font-weight: 700; color: #161; }
+table.sp-tabela .sp-passada { color: #777; }
+</style>
+</head>
+<body>
+<header>
+<h1>SIGC-PRO — Domicílios do Controle ${e(meta.controle)}</h1>
+<div class="meta">${e(meta.quando)} · gerado em ${e(meta.geradoEm)}</div>
+</header>
+<main>
+${resumoHtml}
+<h2>Domicílios</h2>
+${buildDomiciliosTable(domicilios)}
+</main>
+<script>
+(function () {
+  'use strict';
+  // dd/mm/yyyy -> a comparable number (yyyymmdd), or null when unparsable
+  // (including the empty string a missing value leaves in data-sort).
+  function parseDateBr(s) {
+    var m = /^(\\d{2})\\/(\\d{2})\\/(\\d{4})$/.exec(s || '');
+    return m ? Number(m[3] + m[2] + m[1]) : null;
+  }
+
+  function cellValue(td) {
+    return td.dataset.sort != null ? td.dataset.sort : td.textContent.trim();
+  }
+
+  function compareRows(a, b, colIdx, tipo, dir) {
+    var va = cellValue(a.children[colIdx]);
+    var vb = cellValue(b.children[colIdx]);
+    // Missing values sort to the END regardless of direction — they are
+    // noise when scanning for scheduled visits, so they never lead.
+    var aEmpty = va === '';
+    var bEmpty = vb === '';
+    if (aEmpty && bEmpty) return 0;
+    if (aEmpty) return 1;
+    if (bEmpty) return -1;
+
+    var result;
+    if (tipo === 'data') {
+      result = parseDateBr(va) - parseDateBr(vb);
+    } else {
+      result = va.localeCompare(vb, 'pt-BR');
+    }
+    return dir === 'desc' ? -result : result;
+  }
+
+  document.querySelectorAll('#sp-tabela-domicilios th').forEach(function (th, colIdx) {
+    th.addEventListener('click', function () {
+      var table = th.closest('table');
+      var tbody = table.querySelector('tbody');
+      var tipo = th.dataset.tipo;
+      var dir = th.classList.contains('sp-asc') ? 'desc' : 'asc';
+
+      table.querySelectorAll('th').forEach(function (h) {
+        h.classList.remove('sp-asc', 'sp-desc');
+      });
+      th.classList.add(dir === 'asc' ? 'sp-asc' : 'sp-desc');
+
+      var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+      rows.sort(function (a, b) { return compareRows(a, b, colIdx, tipo, dir); });
+      rows.forEach(function (tr) { tbody.appendChild(tr); });
+    });
+  });
+})();
+</script>
+</body>
+</html>
+`;
   }
 
   // Human-readable household identifier: logradouro + número, with the
@@ -249,6 +358,13 @@
     const end = [logradouro, numero].map((s) => String(s ?? '').trim()).filter(Boolean).join(', Nº ');
     const base = end || `Domicílio ${String(nDomicilio ?? '').trim()}`;
     return `${base} (dom. ${String(nDomicilio ?? '').trim()})`;
+  }
+
+  // Bare "logradouro, Nº número" for the table's Endereço column, WITHOUT
+  // the trailing "(dom. N)" identificadorDomicilio appends — that number
+  // gets its own Domicílio column in the table instead of being folded in.
+  function enderecoDomicilio(logradouro, numero) {
+    return [logradouro, numero].map((s) => String(s ?? '').trim()).filter(Boolean).join(', Nº ');
   }
 
   // Returns an OBJECT, not a bare string, so a further source adds a key
@@ -357,7 +473,7 @@
 
   window.__sigcPro.listaAgenda = {
     parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml, annotateRow,
-    buildDomiciliosHtml, identificadorDomicilio,
+    buildDomiciliosTable, buildDomiciliosDocHtml, identificadorDomicilio, enderecoDomicilio,
   };
 
   // --- caches ---------------------------------------------------------
@@ -447,41 +563,72 @@
 
     // Keyed by household, NOT positional: tabela.rows is the full dataset
     // in original data order (readDataTable's "stable across pagination/
-    // sort" guarantee); the panel lists every household regardless of
-    // current page/sort/filter, so this order is exactly what we want.
+    // sort" guarantee); the downloaded table lists every household
+    // regardless of current page/sort/filter, so this order is exactly
+    // what we want (the file's own sort takes over from there).
     const domicilios = tabela.rows.map((r) => {
       const a = annotateRow(r[cols.controle.index], r[cols.nDomicilio.index],
         { agendaIdx, movimentoIdx, todayIso });
       return {
         ...a,
-        identificador: identificadorDomicilio(
-          r[cols.logradouro.index], r[cols.numero.index], r[cols.nDomicilio.index]),
+        endereco: enderecoDomicilio(r[cols.logradouro.index], r[cols.numero.index]),
+        nDomicilio: String(r[cols.nDomicilio.index] ?? '').trim(),
       };
     });
+
+    const meta = {
+      minDateBr: window.__sigcPro.isoToBr(minDateIso),
+      agendaEm: ag ? horaDe(ag.em) : '—',
+      movimentoEm: mv ? horaDe(mv.em) : '—',
+      falhas,
+    };
+    const arquivo = baixarTabelaDomicilios(controle, meta, pesquisa, tabela.rows, domicilios, livresIdx);
 
     escreverResumo(
       tabela.rows.map((r) => String(r[cols.idZona.index] || '').trim()),
       livresIdx,
-      {
-        minDateBr: window.__sigcPro.isoToBr(minDateIso),
-        agendaEm: ag ? horaDe(ag.em) : '—',
-        movimentoEm: mv ? horaDe(mv.em) : '—',
-        falhas,
-      },
-      domicilios);
-    console.log(`${TAG} ${domicilios.length} domicílio(s) anotados; ` +
+      meta,
+      arquivo);
+    console.log(`${TAG} ${domicilios.length} domicílio(s) anotados e exportados para ${arquivo}; ` +
       `${livresIdx ? livresIdx.size : '?'} zona(s) com slots livres.`);
   }
 
-  function escreverResumo(zonaIds, livresIdx, meta, domicilios) {
+  // Downloads the standalone households table and returns its filename, so
+  // the caller can point the on-page panel at it. Follows exportFileBase's
+  // established naming (lista-enderecos-<pesquisa>_<controle>_<tipo>_<data>)
+  // — the same base every other Lista de Endereços export uses — with an
+  // "_agenda" tag added so this file (agenda/movimento annotations) is
+  // never confused with the plain CSV/KML/PDF exports of the same table.
+  function baixarTabelaDomicilios(controle, meta, pesquisa, rows, domicilios, livresIdx) {
+    const base = window.__sigcPro.exportFileBase(pesquisa, rows);
+    const arquivo = `${base}_agenda.html`;
+    const { data, hora } = window.__sigcPro.timestampSlug();
+    const quando = meta.agendaEm === meta.movimentoEm
+      ? `dados de ${meta.agendaEm}`
+      : `agenda de ${meta.agendaEm}, movimento de ${meta.movimentoEm}`;
+    // Reuse buildResumoHtml verbatim (same zona counts the panel shows,
+    // same rendering logic in exactly one place) but with no download
+    // note of its own — that line only makes sense on the PAGE, pointing
+    // at this very file, not inside the file itself.
+    const resumoHtml = buildResumoHtml(
+      rows.map((r) => String(r[pesquisa.columns.idZona.index] || '').trim()),
+      livresIdx, meta, null);
+    const docHtml = buildDomiciliosDocHtml(
+      { controle, quando, geradoEm: `${data} ${hora.slice(0, 2)}:${hora.slice(2, 4)}:${hora.slice(4, 6)}` },
+      resumoHtml, domicilios);
+    window.__sigcPro.downloadFile(arquivo, docHtml, 'text/html;charset=utf-8');
+    return arquivo;
+  }
+
+  function escreverResumo(zonaIds, livresIdx, meta, arquivo) {
     const antigo = document.getElementById('sigc-pro-lista-agenda-resumo');
     if (antigo) antigo.remove();
     const alvo = document.querySelector('.dataTables_wrapper') ||
       window.__sigcPro.getDataTable().table().container();
     const div = document.createElement('div');
     // Built from escaped strings only (escapeHtml on every interpolated
-    // value, including per-household fields — see buildDomiciliosHtml).
-    div.innerHTML = buildResumoHtml(zonaIds, livresIdx, meta, domicilios);
+    // value, including the filename — see buildResumoHtml).
+    div.innerHTML = buildResumoHtml(zonaIds, livresIdx, meta, arquivo);
     alvo.parentNode.insertBefore(div.firstElementChild, alvo);
   }
 
@@ -493,12 +640,7 @@
 #sigc-pro-lista-agenda-resumo .sp-titulo { color: #555; margin-bottom: .2rem; }
 #sigc-pro-lista-agenda-resumo .sp-zona-livre { display: inline-block; margin-right: .9rem; }
 #sigc-pro-lista-agenda-resumo .sp-falha { color: #a11; margin-top: .2rem; }
-#sigc-pro-lista-agenda-resumo .sp-domicilios { margin-top: .3rem; border-top: 1px solid #d0d7de; padding-top: .3rem; }
-#sigc-pro-lista-agenda-resumo .sp-domicilios ul { margin: 0; padding-left: 1.1rem; }
-#sigc-pro-lista-agenda-resumo .sp-domicilios li { margin: .1rem 0; }
-#sigc-pro-lista-agenda-resumo .sp-domicilios .sp-futura { font-weight: 700; color: #161; }
-#sigc-pro-lista-agenda-resumo .sp-domicilios .sp-passada { color: #777; }
-#sigc-pro-lista-agenda-resumo .sp-omitidos { color: #555; margin-top: .2rem; }
+#sigc-pro-lista-agenda-resumo .sp-download { margin-top: .3rem; border-top: 1px solid #d0d7de; padding-top: .3rem; color: #333; }
 `;
 
   function ensureStyle() {

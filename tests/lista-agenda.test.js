@@ -6,7 +6,7 @@ await import('../extension/features/lista-agenda/lista-agenda.js');
 
 const {
   parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml,
-  buildDomiciliosHtml, identificadorDomicilio,
+  buildDomiciliosTable, buildDomiciliosDocHtml, identificadorDomicilio, enderecoDomicilio,
 } = window.__sigcPro.listaAgenda;
 
 // A reserved slot's title carries every field; an open slot's title is
@@ -316,6 +316,24 @@ describe('buildResumoHtml', () => {
     expect(html).toContain('29JDM8');
     expect(html).toContain('?');
   });
+
+  // The per-household list moved out to a downloaded file; the panel now
+  // just names it, so a reader knows where the detail went.
+  test('names the downloaded file when given', () => {
+    const html = buildResumoHtml(['29JDM8'], livres, meta, 'lista-enderecos-x_agenda.html');
+    expect(html).toContain('lista-enderecos-x_agenda.html');
+  });
+
+  test('no download line when no filename is given', () => {
+    const html = buildResumoHtml(['29JDM8'], livres, meta);
+    expect(html).not.toContain('sp-download');
+  });
+
+  test('escapes the filename', () => {
+    const html = buildResumoHtml(['29JDM8'], livres, meta, '<script>alert(1)</script>.html');
+    expect(html).not.toContain('<script>alert');
+    expect(html).toContain('&lt;script&gt;');
+  });
 });
 
 const { annotateRow } = window.__sigcPro.listaAgenda;
@@ -369,70 +387,146 @@ describe('identificadorDomicilio', () => {
   });
 });
 
-describe('buildDomiciliosHtml', () => {
+describe('enderecoDomicilio', () => {
+  test('combines logradouro and número', () => {
+    expect(enderecoDomicilio('RUA X', '237')).toBe('RUA X, Nº 237');
+  });
+
+  test('tolerates missing values', () => {
+    expect(enderecoDomicilio('', '')).toBe('');
+    expect(enderecoDomicilio(undefined, null)).toBe('');
+  });
+});
+
+describe('buildDomiciliosTable', () => {
   const comDados = {
-    identificador: 'RUA X, Nº 237 (dom. 1)',
+    endereco: 'RUA X, Nº 237', nDomicilio: '1',
     agendado: '01/09/2026', futura: true, situacao: 'TRANSMITIDO', transmissao: '28/07/2026',
   };
   const semDados = {
-    identificador: 'RUA Y, Nº 10 (dom. 2)',
+    endereco: 'RUA Y, Nº 10', nDomicilio: '2',
     agendado: '', futura: false, situacao: '', transmissao: '',
   };
 
-  test('a household with data appears, identifier and fields included', () => {
-    const html = buildDomiciliosHtml([comDados]);
-    expect(html).toContain('RUA X, Nº 237 (dom. 1)');
+  test('a household with data appears with every field', () => {
+    const html = buildDomiciliosTable([comDados]);
+    expect(html).toContain('RUA X, Nº 237');
     expect(html).toContain('01/09/2026');
     expect(html).toContain('TRANSMITIDO');
     expect(html).toContain('28/07/2026');
   });
 
-  // A page of empty rows is not useful; the omitted count says whether
-  // "nothing scheduled" or "not shown" is the reason a household is absent.
-  test('a household with no data from any source is omitted and counted', () => {
-    const html = buildDomiciliosHtml([comDados, semDados]);
-    expect(html).not.toContain('RUA Y, Nº 10');
-    expect(html).toContain('1 domicílio(s) sem dados de agenda/movimento omitido(s)');
+  // THE reversal from the old buildDomiciliosHtml: nothing is omitted, and
+  // there is no omission count — a downloaded file is meant to be complete.
+  test('a household with no data from any source still appears, fields as —', () => {
+    const html = buildDomiciliosTable([comDados, semDados]);
+    expect(html).toContain('RUA Y, Nº 10');
+    expect(html).not.toMatch(/omitid/);
+    // Domicílio 2's row has three "—" cells: Agendado, Situação, Data.
+    const row2 = html.split('RUA Y, Nº 10')[1].split('</tr>')[0];
+    expect((row2.match(/—/g) || []).length).toBe(3);
   });
 
-  test('all households empty renders a message, no fabricated list', () => {
-    const html = buildDomiciliosHtml([semDados]);
-    expect(html).not.toContain('RUA Y');
-    expect(html).toContain('1 sem dados omitido(s)');
-  });
-
-  test('no households at all renders a plain empty message', () => {
-    const html = buildDomiciliosHtml([]);
-    expect(html).toContain('Nenhum domicílio anotado');
+  test('no households at all renders an empty table body, not an error', () => {
+    const html = buildDomiciliosTable([]);
+    expect(html).toContain('<tbody></tbody>');
   });
 
   // sp-futura/sp-passada distinction, carried over from the old <td> classes.
   test('a future/live appointment renders distinctly from a past one', () => {
-    const passada = { ...comDados, identificador: 'RUA Z, Nº 5 (dom. 3)', futura: false };
-    const html = buildDomiciliosHtml([comDados, passada]);
+    const passada = { ...comDados, endereco: 'RUA Z, Nº 5', nDomicilio: '3', futura: false };
+    const html = buildDomiciliosTable([comDados, passada]);
     expect(html).toContain('sp-futura');
     expect(html).toContain('sp-passada');
   });
 
-  // Omitted households (agendado/situacao/transmissao all empty) render no
-  // agendado span at all, so sp-passada must come specifically from the
-  // listed, past-appointment household above — not merely be present.
   test('an appointment without a date renders no futura/passada span', () => {
-    const semAgendado = { ...comDados, identificador: 'RUA W, Nº 1 (dom. 4)', agendado: '' };
-    const html = buildDomiciliosHtml([semAgendado]);
-    expect(html).toContain('RUA W, Nº 1 (dom. 4)');
-    expect(html).toContain('agendado —');
+    const semAgendado = { ...comDados, endereco: 'RUA W, Nº 1', nDomicilio: '4', agendado: '' };
+    const html = buildDomiciliosTable([semAgendado]);
+    expect(html).toContain('RUA W, Nº 1');
+    expect(html).not.toContain('sp-futura');
+    expect(html).not.toContain('sp-passada');
   });
 
   test('escapes interpolated values', () => {
     const malicioso = {
-      identificador: '<script>alert(1)</script>', agendado: '', futura: false,
+      endereco: '<script>alert(1)</script>', nDomicilio: '<b>1</b>', agendado: '', futura: false,
       situacao: '<b>x</b>', transmissao: '',
     };
-    const html = buildDomiciliosHtml([malicioso]);
+    const html = buildDomiciliosTable([malicioso]);
     expect(html).not.toContain('<script>alert');
     expect(html).not.toContain('<b>x</b>');
+    expect(html).not.toContain('<b>1</b>');
     expect(html).toContain('&lt;script&gt;');
     expect(html).toContain('&lt;b&gt;');
+  });
+
+  test('column headers carry a sort type for the inline script', () => {
+    const html = buildDomiciliosTable([]);
+    expect(html).toContain('data-tipo="data"');
+    expect(html).toContain('data-tipo="texto"');
+  });
+});
+
+describe('buildDomiciliosDocHtml', () => {
+  const meta = { controle: '292740805060337', quando: 'dados de 09:31', geradoEm: '2026-07-31 09:31:00' };
+  const resumoHtml = '<div id="sigc-pro-lista-agenda-resumo"><div class="sp-titulo">Slots livres</div></div>';
+  const domicilios = [
+    { endereco: 'RUA X, Nº 237', nDomicilio: '1', agendado: '01/09/2026', futura: true, situacao: 'TRANSMITIDO', transmissao: '28/07/2026' },
+    { endereco: '', nDomicilio: '2', agendado: '', futura: false, situacao: '', transmissao: '' },
+  ];
+
+  test('names the Controle and the fetch time in the header', () => {
+    const html = buildDomiciliosDocHtml(meta, resumoHtml, domicilios);
+    expect(html).toContain('292740805060337');
+    expect(html).toContain('dados de 09:31');
+    expect(html).toContain('2026-07-31 09:31:00');
+  });
+
+  test('embeds the resumo (zona summary) verbatim', () => {
+    const html = buildDomiciliosDocHtml(meta, resumoHtml, domicilios);
+    expect(html).toContain('sigc-pro-lista-agenda-resumo');
+    expect(html).toContain('Slots livres');
+  });
+
+  // Every household appears — including the data-less one — since the
+  // whole point of downloading is a complete, scannable list.
+  test('every household appears, including data-less ones', () => {
+    const html = buildDomiciliosDocHtml(meta, resumoHtml, domicilios);
+    expect(html).toContain('RUA X, Nº 237');
+    expect(html).toContain('Domicílio 2');
+  });
+
+  test('missing values render as —', () => {
+    const html = buildDomiciliosDocHtml(meta, resumoHtml, domicilios);
+    const row2 = html.split('Domicílio 2')[1].split('</tr>')[0];
+    expect((row2.match(/—/g) || []).length).toBe(3);
+  });
+
+  test('future/past scheduled dates render distinctly', () => {
+    const html = buildDomiciliosDocHtml(meta, resumoHtml, domicilios);
+    expect(html).toContain('sp-futura');
+  });
+
+  test('escapes interpolated Controle and household values', () => {
+    const malicioso = [{ endereco: '<script>alert(1)</script>', nDomicilio: '1', agendado: '', futura: false, situacao: '', transmissao: '' }];
+    const html = buildDomiciliosDocHtml({ ...meta, controle: '<script>x</script>' }, resumoHtml, malicioso);
+    expect(html).not.toContain('<script>alert');
+    expect(html).not.toContain('<script>x</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  // Self-contained: must open and work offline from a Downloads folder,
+  // with no CDN/font/image reference of any kind.
+  test('the document is self-contained: no http(s) reference', () => {
+    const html = buildDomiciliosDocHtml(meta, resumoHtml, domicilios);
+    expect(html).not.toContain('http://');
+    expect(html).not.toContain('https://');
+  });
+
+  test('carries a single inline sort script, no external script tags', () => {
+    const html = buildDomiciliosDocHtml(meta, resumoHtml, domicilios);
+    expect((html.match(/<script/g) || []).length).toBe(1);
+    expect(html).not.toMatch(/<script[^>]+src=/);
   });
 });
