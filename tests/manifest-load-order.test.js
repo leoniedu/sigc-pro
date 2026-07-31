@@ -53,4 +53,9 @@ describe('manifest content_scripts load order', () => {
       expect(await Bun.file(url).exists()).toBe(true);
     }
   });
+
+  test('lista-agenda.js is registered', () => {
+    expect(idx('features/lista-agenda/lista-agenda.js')).toBeGreaterThan(
+      idx('common/sigc-common.js'));
+  });
 });
