@@ -209,9 +209,73 @@ Reused unchanged: `parseAgendaSlotTitle`, `parseZonaEntries`,
 `agendaMinScheduleDate`, `f5Prefix`/URL shaping, `mountWidget`,
 `makeDtProButton`, `escapeHtml`.
 
+### Internal seams
+
+Build this as three stages with explicit boundaries, not one straight
+line from fetch to DOM. Two deferred follow-ups (below) each add a data
+source or a rendering, and the seams are what let them land without a
+rewrite:
+
+1. **Acquire** — one function per source, returning parsed plain objects.
+   Knows about URLs, headers and the F5 rewrite; knows nothing about the
+   table.
+2. **Index** — pure functions from parsed slots to lookup maps
+   (`by controle`, `by zona ID`). No DOM, no network. This is where the
+   unit tests live.
+3. **Render** — reads indexes, writes the column and the header line.
+   Takes indexes as arguments rather than fetching for itself.
+
+The annotation applied to a row should be an object (`{ agendado }`
+today), not a bare string, so a second source can add a key without
+changing the column-writing signature.
+
 ## Deliberately excluded
 
 - **Writing to the agenda.** Read-only; booking stays in the portal.
 - **The `status` enum.** Undocumented; the title test replaces it.
 - **Auto-fetch on page load.** Consent first, always.
 - **Persisting the cache.** Would break the zero-storage guarantee.
+
+## Possible follow-ups (deferred, not scoped)
+
+Both are deferred deliberately: this spec has one genuine unknown — no
+live `ObterSlots` response has been seen from the extension's context —
+and adding a second unverified source now would compound it. Build this,
+use it, then decide. Recorded here so the seams above stay honest.
+
+### Calendar of open slots
+
+A date-grid view of when the free slots actually are, rather than only
+how many. Free-slot counts naturally provoke "yes, but when?", so this
+is the likelier of the two to earn its place.
+
+Note it partly duplicates the portal's own Agenda page; the reason it
+would belong here is that the user is on the Lista de Endereços and does
+not want to leave it. That is a real justification but a narrow one —
+worth confirming against use before building.
+
+Needs no new fetch: the same `ObterSlots` response already carries every
+open slot's `start`. Purely a third rendering off the existing index.
+
+### Último Movimento status per household
+
+Adds collection status to each row, alongside the scheduled date.
+
+Cheap, unlike the multi-agência export: that loops one request per
+agência with a 2-second gap, but this is a **single request per
+Controle** — `/relatorio/filtrar` with the Último Movimento payload and
+`Controle` set to the actual value instead of `*`. The existing
+`buildAgenciaFilterBody` already has the field; only its value changes.
+`parseUltimoMovimentoHtml` parses the response unchanged.
+
+Consequences to weigh when it is picked up:
+
+- **A fourth `fetch(` site**, so the privacy gate moves again. Landing it
+  separately from this spec's change keeps each privacy decision
+  arguable on its own terms — two new fetch sites in one commit is
+  exactly what makes such a decision hard to review.
+- **A second annotation key**, which the `{ agendado }` object shape
+  above already accommodates.
+- **Its own staleness.** Movement status ages differently from slot
+  availability, so it wants its own timestamp rather than sharing the
+  5-minute agenda TTL.
