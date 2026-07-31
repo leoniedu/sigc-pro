@@ -1,4 +1,12 @@
 #!/usr/bin/env Rscript
+# Run from the repo ROOT (`Rscript scripts/gen-municipios.R`). The output
+# path below is repo-relative, so running this from scripts/ would
+# silently create scripts/extension/common/ and leave the real table
+# stale — fail loudly instead.
+if (!dir.exists("extension/common")) {
+  stop("run from the repo root: extension/common/ not found in ", getwd())
+}
+
 # Regenerates extension/common/municipios.js from orcedata::municipios —
 # the código IBGE -> "MUNICÍPIO - UF" lookup the Guia do Dia's Lab tab uses
 # to name each visit's município from the first 7 digits of its Controle.
