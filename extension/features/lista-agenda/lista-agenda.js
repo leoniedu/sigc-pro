@@ -429,7 +429,7 @@
         falhas,
       });
     console.log(`${TAG} ${anotacoesPorChave.size} linha(s) anotadas; ` +
-      `${livresIdx.size} zona(s) com slots livres.`);
+      `${livresIdx ? livresIdx.size : '?'} zona(s) com slots livres.`);
   }
 
   // Appended, never inserted: indexes 0-19 must stay put, since
