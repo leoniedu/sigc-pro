@@ -16,6 +16,8 @@
 (function () {
   'use strict';
 
+  const TAG = '[sigc-lista-agenda]';
+
   // --- index (pure) ---------------------------------------------------
 
   // The agenda response carries name, sex, birth date, address and
@@ -99,7 +101,46 @@
     };
   }
 
+  // Header labels vary in accent/case between SIGC screens, so match
+  // normalized rather than exact.
+  function normalizar(s) {
+    return String(s ?? '').trim().toUpperCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+
+  function acharColuna(header, alvo) {
+    const want = normalizar(alvo);
+    return (header || []).findIndex((h) => normalizar(h) === want);
+  }
+
+  // The Último Movimento report is a different table from the Lista de
+  // Endereços, and no test in this repo pins its layout — so find columns
+  // by label and return an empty index if any is missing, rather than
+  // reading whatever happens to sit at a guessed position.
+  function indexMovimento(header, rows) {
+    const map = new Map();
+    const iControle = acharColuna(header, 'Controle');
+    const iDomicilio = acharColuna(header, 'Domicílio');
+    const iPosicao = acharColuna(header, 'Última Posição');
+    const iTransmissao = acharColuna(header, 'Data Transmissão');
+    if (iControle === -1 || iDomicilio === -1 || iPosicao === -1 || iTransmissao === -1) {
+      console.warn(`${TAG} Último Movimento: colunas esperadas não encontradas`,
+        JSON.stringify(header));
+      return map;
+    }
+    (rows || []).forEach((r) => {
+      const controle = String(r[iControle] ?? '').trim();
+      const domicilio = String(r[iDomicilio] ?? '').trim();
+      if (!controle) return;
+      map.set(chaveDomicilio(controle, domicilio), {
+        situacao: String(r[iPosicao] ?? '').trim(),
+        transmissao: String(r[iTransmissao] ?? '').trim(),
+      });
+    });
+    return map;
+  }
+
   window.__sigcPro.listaAgenda = {
-    parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado,
+    parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento,
   };
 })();

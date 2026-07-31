@@ -5,7 +5,7 @@ await import('../extension/common/sigc-common.js');
 await import('../extension/features/lista-agenda/lista-agenda.js');
 
 const {
-  parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado,
+  parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento,
 } = window.__sigcPro.listaAgenda;
 
 // A reserved slot's title carries every field; an open slot's title is
@@ -177,5 +177,40 @@ describe('pickAgendado', () => {
 
   test('returns null with no slots', () => {
     expect(pickAgendado([], '2026-07-31')).toBeNull();
+  });
+});
+
+describe('indexMovimento', () => {
+  // Column positions are found by header label, never hardcoded: the
+  // Último Movimento report is a different table from the Lista de
+  // Endereços and its layout is not pinned by any test we own.
+  const header = ['Controle', 'Domicílio', 'Última Posição', 'Data Transmissão'];
+  const rows = [
+    ['292740805060337', '1', 'TRANSMITIDO', '28/07/2026'],
+    ['292740805060337', '2', 'EM COLETA', ''],
+  ];
+
+  test('keys on controle|domicilio', () => {
+    const idx = indexMovimento(header, rows);
+    expect(idx.get('292740805060337|1'))
+      .toEqual({ situacao: 'TRANSMITIDO', transmissao: '28/07/2026' });
+  });
+
+  test('keeps an empty transmission date as empty', () => {
+    expect(indexMovimento(header, rows).get('292740805060337|2').transmissao).toBe('');
+  });
+
+  test('tolerates accent and case differences in headers', () => {
+    const alt = ['CONTROLE', 'DOMICILIO', 'ULTIMA POSICAO', 'DATA TRANSMISSAO'];
+    expect(indexMovimento(alt, rows).get('292740805060337|1').situacao).toBe('TRANSMITIDO');
+  });
+
+  test('returns an empty index when a required column is missing', () => {
+    expect(indexMovimento(['Controle', 'Domicílio'], rows).size).toBe(0);
+  });
+
+  test('tolerates empty input', () => {
+    expect(indexMovimento(header, []).size).toBe(0);
+    expect(indexMovimento(null, null).size).toBe(0);
   });
 });
