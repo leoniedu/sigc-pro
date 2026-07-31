@@ -195,8 +195,10 @@ which matters:
 
 - **PDF/KML** read fixed indexes from `pesquisa.columns` — unaffected by
   an appended column.
-- **CSV** reads the live table generically and will therefore *gain* the
-  new column in its output. Intended, but verify.
+- **CSV** does NOT gain the new columns. csv-export.js reads via
+  `readDataTable()`, which pulls DataTables' *data model*
+  (`columns().header()`, `rows().data()`), not the DOM — appended
+  `<th>`/`<td>` elements are invisible to it. CSV output is unchanged.
 
 The PDF export already carries a shifted-column workaround from an
 earlier column-index change, so column positions are load-bearing in this

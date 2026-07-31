@@ -5,7 +5,7 @@
 //
 // Two sources, both same-origin and behind one click+confirm:
 //   Agenda          GET  AdministracaoAgenda/ObterSlots  (JSON)
-//   Último Movimento POST /relatorio/filtrar             (HTML fragment)
+//   Último Movimento POST /UltimoMovimento/Filtrar       (HTML fragment)
 // Both key on (Controle, Domicílio), the table's own key.
 //
 // Three seams — acquire / index / render — so the fetches stay
@@ -138,7 +138,10 @@
   // The Último Movimento report is a different table from the Lista de
   // Endereços, and no test in this repo pins its layout — so find columns
   // by label and return an empty index if any is missing, rather than
-  // reading whatever happens to sit at a guessed position.
+  // reading whatever happens to sit at a guessed position. `colunasNaoEncontradas`
+  // lets the caller distinguish that failure from genuine no-data: without
+  // it, a wrong/renamed header label produces an all-"—" column that reads
+  // exactly like "not collected yet", which the spec forbids.
   function indexMovimento(header, rows) {
     const map = new Map();
     const iControle = acharColuna(header, 'Controle');
@@ -148,7 +151,7 @@
     if (iControle === -1 || iDomicilio === -1 || iPosicao === -1 || iTransmissao === -1) {
       console.warn(`${TAG} Último Movimento: colunas esperadas não encontradas`,
         JSON.stringify(header));
-      return map;
+      return { index: map, colunasNaoEncontradas: true };
     }
     (rows || []).forEach((r) => {
       const controle = String(r[iControle] ?? '').trim();
@@ -159,7 +162,7 @@
         transmissao: String(r[iTransmissao] ?? '').trim(),
       });
     });
-    return map;
+    return { index: map, colunasNaoEncontradas: false };
   }
 
   // One decimal, pt-BR comma — same shape the day guide uses.
@@ -170,10 +173,18 @@
   // Fetch times are shown because a stale count causes a real
   // double-booking; two are shown when the sources aged differently,
   // since one timestamp would misreport the older.
+  //
+  // livresIdx === null means the agenda source failed outright — there is
+  // no data to count from, not zero free slots. A fabricated "0" there
+  // reads as real capacity information and is exactly the false signal
+  // that causes a double-booking, so that case renders "?" instead.
   function buildResumoHtml(zonaIdsDaTabela, livresIdx, meta) {
     const e = window.__sigcPro.escapeHtml;
     const ids = [...new Set((zonaIdsDaTabela || []).filter(Boolean))].sort();
     const celulas = ids.map((id) => {
+      if (livresIdx === null) {
+        return `<span class="sp-zona-livre"><strong>${e(id)}</strong>: ?</span>`;
+      }
       const c = (livresIdx && livresIdx.get(id)) || { inteiro: 0, peso: 0, compartilhado: false };
       const pond = c.compartilhado ? ` (${num1(c.peso)} ponderado)` : '';
       return `<span class="sp-zona-livre"><strong>${e(id)}</strong>: ${c.inteiro}${pond}</span>`;
@@ -185,7 +196,9 @@
 
     const falhas = (meta.falhas || []).length
       ? `<div class="sp-falha">Sem dados de ${(meta.falhas || []).map(e).join('; ')}. ` +
-        'As colunas correspondentes ficam vazias.</div>'
+        'As colunas correspondentes ficam vazias' +
+        (livresIdx === null ? ' e a contagem de slots livres por zona é desconhecida (marcada "?")' : '') +
+        '.</div>'
       : '';
 
     return [
@@ -259,7 +272,6 @@
       credentials: 'same-origin',
       headers: {
         'X-Requested-With': 'XMLHttpRequest',
-        Referer: `${location.origin}/AdministracaoAgenda`,
       },
     });
     return parseSlots(await res.json());
@@ -278,10 +290,13 @@
       IdEntrevistadores: '*',
       IdTipoAcompanhamento: '*',
     };
-    const res = await fetchViaGateway('/relatorio/filtrar?slug=UltimoMovimento', {
+    const res = await fetchViaGateway('/UltimoMovimento/Filtrar', {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
       body: 'filtro=' + encodeURIComponent(JSON.stringify(filtro)),
     });
     return parseMovimentoHtml(await res.text());
@@ -291,7 +306,7 @@
   // or run handlers. Same guarantee ultimo-movimento-export relies on.
   function parseMovimentoHtml(html) {
     const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
-    const table = doc.querySelector('table');
+    const table = doc.getElementById('tb_ultimo_movimento');
     if (!table) return null;
     const header = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
     const rows = [...table.querySelectorAll('tbody tr')].map((tr) =>
@@ -345,6 +360,10 @@
       return;
     }
     const cols = pesquisa.columns;
+    if (tabela.rows.length === 0) {
+      alert('SIGC-PRO: não há linhas na tabela para anotar.');
+      return;
+    }
     const controle = String(tabela.rows[0][cols.controle.index] || '').trim();
     const uf = controle.slice(0, 2);
     if (!controle) {
@@ -374,10 +393,17 @@
     const slots = ag ? ag.dados : [];
     const movimento = mv && mv.dados ? mv.dados : { header: [], rows: [] };
     const agendaIdx = indexByControle(slots);
-    const movimentoIdx = indexMovimento(movimento.header, movimento.rows);
+    const { index: movimentoIdx, colunasNaoEncontradas } = indexMovimento(movimento.header, movimento.rows);
+    // A non-empty response that still yielded an empty index means the
+    // report's column labels didn't match what we look for — a parsing
+    // failure, not "nothing happened yet". Left silent, it looks identical
+    // to real no-data.
+    if (mv && movimento.rows.length > 0 && colunasNaoEncontradas) {
+      falhas.push('Último Movimento: layout do relatório não reconhecido (colunas não encontradas)');
+    }
     const minDate = window.__sigcPro.agendaMinScheduleDate(new Date());
     const minDateIso = window.__sigcPro.dateToIso(minDate);
-    const livresIdx = indexZonaLivres(slots, minDateIso);
+    const livresIdx = ag ? indexZonaLivres(slots, minDateIso) : null;
     const todayIso = window.__sigcPro.dateToIso(new Date());
 
     // Keyed by household, NOT positional: tabela.rows is the full dataset

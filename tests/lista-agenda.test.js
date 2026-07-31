@@ -191,27 +191,39 @@ describe('indexMovimento', () => {
   ];
 
   test('keys on controle|domicilio', () => {
-    const idx = indexMovimento(header, rows);
-    expect(idx.get('292740805060337|1'))
+    const { index } = indexMovimento(header, rows);
+    expect(index.get('292740805060337|1'))
       .toEqual({ situacao: 'TRANSMITIDO', transmissao: '28/07/2026' });
   });
 
   test('keeps an empty transmission date as empty', () => {
-    expect(indexMovimento(header, rows).get('292740805060337|2').transmissao).toBe('');
+    expect(indexMovimento(header, rows).index.get('292740805060337|2').transmissao).toBe('');
   });
 
   test('tolerates accent and case differences in headers', () => {
     const alt = ['CONTROLE', 'DOMICILIO', 'ULTIMA POSICAO', 'DATA TRANSMISSAO'];
-    expect(indexMovimento(alt, rows).get('292740805060337|1').situacao).toBe('TRANSMITIDO');
+    expect(indexMovimento(alt, rows).index.get('292740805060337|1').situacao).toBe('TRANSMITIDO');
   });
 
   test('returns an empty index when a required column is missing', () => {
-    expect(indexMovimento(['Controle', 'Domicílio'], rows).size).toBe(0);
+    expect(indexMovimento(['Controle', 'Domicílio'], rows).index.size).toBe(0);
+  });
+
+  // The signal a caller needs to tell "columns not found" apart from
+  // genuine no-data — an all-"—" column must never look like "nothing
+  // scheduled" when it is actually a parsing failure.
+  test('flags colunasNaoEncontradas when a required column is missing', () => {
+    expect(indexMovimento(['Controle', 'Domicílio'], rows).colunasNaoEncontradas).toBe(true);
+  });
+
+  test('does not flag colunasNaoEncontradas when all columns are found', () => {
+    expect(indexMovimento(header, rows).colunasNaoEncontradas).toBe(false);
   });
 
   test('tolerates empty input', () => {
-    expect(indexMovimento(header, []).size).toBe(0);
-    expect(indexMovimento(null, null).size).toBe(0);
+    expect(indexMovimento(header, []).index.size).toBe(0);
+    expect(indexMovimento(null, null).index.size).toBe(0);
+    expect(indexMovimento(null, null).colunasNaoEncontradas).toBe(true);
   });
 });
 
@@ -275,6 +287,17 @@ describe('buildResumoHtml', () => {
     const html = buildResumoHtml(['<script>alert(1)</script>'], new Map(), meta);
     expect(html).not.toContain('<script>alert');
     expect(html).toContain('&lt;script&gt;');
+  });
+
+  // A false "0 free slots" reads as real capacity and is exactly the
+  // signal that causes a double-booking. livresIdx === null (the agenda
+  // source failed) must never render a fabricated zero.
+  test('agenda failed → no fabricated zeros', () => {
+    const html = buildResumoHtml(['29JDM8', '29LR9E'], null,
+      { ...meta, falhas: ['Agenda: HTTP 500'] });
+    expect(html).not.toContain(': 0');
+    expect(html).toContain('29JDM8');
+    expect(html).toContain('?');
   });
 });
 
