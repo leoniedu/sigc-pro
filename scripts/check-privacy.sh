@@ -13,6 +13,10 @@
 #   - extension/features/ultimo-movimento-export/ : fetch() only, same-origin
 #     only (same rationale, see
 #     docs/superpowers/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md)
+#   - extension/features/lista-agenda/     : fetch() only, same-origin
+#     (agenda slots + último movimento for the Lista de Endereços;
+#     click+confirm, see
+#     docs/superpowers/specs/2026-07-31-lista-agenda-design.md)
 #   - extension/features/settings/         : chrome.storage only, no fetch
 #     (persists the advanced-flags toggle; same spec as above)
 # Every other API stays banned everywhere, including inside these
@@ -23,7 +27,7 @@
 # standard AJAX header value "X-Requested-With: XMLHttpRequest" is a string
 # literal, not a call, and the fetch-sanctioned directories legitimately
 # send that header.
-FETCH_DIRS='extension/features/agenda-map extension/features/ultimo-movimento-export'
+FETCH_DIRS='extension/features/agenda-map extension/features/ultimo-movimento-export extension/features/lista-agenda'
 STORAGE_DIRS='extension/features/settings'
 
 PATTERN='fetch\(|["'\''"]fetch["'\''"]|import\(|new\s+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src\s*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
