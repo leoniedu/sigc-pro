@@ -60,21 +60,27 @@
     return min < TARDE_FROM_MIN ? 'manha' : 'tarde';
   }
 
-  // Sort key only: the part after the FIRST " - " ("29GAIR - 29.3.02.02
-  // 29" -> "29.3.02.02 29"), so the table reads in zona-name order
-  // instead of by the leading ID, which is opaque and groups nothing a
-  // scheduler cares about.
+  // Sort key only: the zona NAME, which is the LAST space-separated token
+  // of an entry. Full shape is "<ID> - <setor código> <nome>", e.g.
+  // "292WD9 - 29.3.01.04 29_Linus_Pituba" -> "29_Linus_Pituba". Both the
+  // ID and the setor código are opaque and group nothing a scheduler
+  // cares about; the name (<UF>_<Equipe>_<Local>, the same token
+  // agenda-slot-checks matches against equipes) is what reads as a place.
+  //
+  // Taking the last token rather than everything after " - " matters: the
+  // latter keys on the setor código, which merely LOOKS sorted because
+  // códigos and names tend to correlate.
   //
   // This does not contradict the whole-entry rule above: the entry is
-  // still displayed and counted whole, and an entry with no " - " (the
-  // slot-text shape, "29.3.03.03 29_Linus_Pituba") keys on itself rather
-  // than being dropped. Splitting only ever decides order here, so a
-  // surprising name shape misplaces a row at worst — it cannot mangle or
-  // lose one. Ties fall back to the whole entry, keeping the order total
-  // and stable for two zonas sharing a name.
+  // still displayed and counted whole, and an entry that is a single
+  // token keys on itself rather than being dropped. Splitting only ever
+  // decides order here, so a surprising shape misplaces a row at worst —
+  // it cannot mangle or lose one. Ties fall back to the whole entry,
+  // keeping the order total and stable for two zonas sharing a name.
   function zonaSortKey(zona) {
-    const i = String(zona ?? '').indexOf(' - ');
-    return i === -1 ? String(zona ?? '') : zona.slice(i + 3);
+    const s = String(zona ?? '').trim();
+    const i = s.lastIndexOf(' ');
+    return i === -1 ? s : s.slice(i + 1);
   }
 
   // rows -> { zonas: [{ zona, manha: {abertos, total}, tarde: {…},
