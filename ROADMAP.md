@@ -46,7 +46,9 @@ Working checklist; move items up/down freely. Specs live in
       /relatorio/filtrar (same-origin, click+confirm, quarantined in
       features/agenda-map/ by the reworked privacy gate) feeding the day
       guide with per-visit Google Maps route links, later replaced by the
-      dynamic checkbox selector below
+      dynamic checkbox selector below. (This and the "Guia + Mapa" entries
+      that follow record the feature under its original name; the button
+      is now simply "Guia do Dia" — see the consolidation entry below)
       (`2026-07-16-agenda-map-design.md`; a per-team GPX download shipped
       then was removed — its data: URI link doesn't open from a
       printed/PDF guide)
@@ -138,6 +140,49 @@ Working checklist; move items up/down freely. Specs live in
       on-page button. Privacy docs (README, index.html, store-listing.md,
       PRIVACY_POLICY.html) updated to match
       (`2026-07-24-ultimo-movimento-multi-agencia-export-design.md`)
+- [x] **Agenda "Slots Abertos"**: Semana-view-only panel answering what
+      the Guia do Dia cannot — across the whole week, where is there still
+      capacity to open? A zona × turno table (Manhã before 13:00, Tarde
+      from 13:00), each cell `abertos/total`. A slot listing several zonas
+      is shown two ways in the same cell because neither alone suffices:
+      the whole count counts it in every zona it lists ("de quantos slots
+      esta zona pode ser preenchida?"), which makes zona rows overshoot
+      the slot total, and the grey weighted share divides each slot evenly
+      across its zonas so the rows reconcile with TOTAL. Zona entries stay
+      whole ("29001001 - Lab 1 Oeste") — the tail after " - " is free text
+      with no reliable token count, so any split would mangle rows. Reads
+      only already-rendered FullCalendar DOM via `readAgendaSlots()`, same
+      zero-network guarantee as agenda-csv-export
+- [x] Slots Abertos counts only slots within the SIGC prazo mínimo (+3
+      days, +4 on Fridays so the horizon clears the weekend) as `abertos`,
+      reusing `agendaMinScheduleDate` rather than restating the rule
+      Verificar Slots already enforces. Only the numerator is filtered:
+      an unfillable slot still occupies the zona, so removing it from
+      `total` would overstate how free the zona is and stop TOTAL
+      reconciling with the week on screen. Since a `0/8` cell is otherwise
+      ambiguous between "saturated" and "past the prazo", the notes name
+      the cutoff date and count the free slots it excluded
+- [x] Zona labels are the ID alone ("29OU7L" — UF code plus an opaque
+      token), never with the nome appended: the ID is what identifies a
+      zona across SIGC and the coordination's own reporting. Applies to
+      the Guia do Dia grid and the route selector alike. Every zona has an
+      ID, so the nome-only fallback was unreachable and is gone — a row
+      arriving without one has no zona columns filled at all. Note these
+      are the Lista de Endereços columns 18/19, NOT the dotted codes in a
+      slot's own Zonas text ("29.3.03.03 29_Linus_Pituba")
+- [x] `manifest.json`'s `content_scripts` order pinned by a test: it is a
+      load-order contract nothing about the file's appearance declares,
+      and alphabetizing the array puts `common/municipios.js` before
+      `common/sigc-common.js` — backwards, since sigc-common assigns
+      `window.__sigcPro` wholesale and would discard
+      `municipioFromControle`. Every other test imports modules explicitly
+      in the right order, so none of them could catch it; it broke in the
+      browser instead
+- [x] `scripts/gen-municipios.R` stops when run outside the repo root:
+      the output path is repo-relative, so running it from `scripts/`
+      silently created `scripts/extension/common/` and left the real table
+      stale, surfacing only later as a lookup that did not reflect the
+      regeneration
 
 ## Next
 
