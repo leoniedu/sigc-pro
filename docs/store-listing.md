@@ -39,10 +39,14 @@ Em Administrar Agenda:
   colunas.
 • Verificar Slots — alerta sobre slots abertos agendados dentro do prazo
   mínimo de agendamento e sobre zonas cujo nome não corresponde à equipe.
+• Slots Abertos — na visão Semana, um painel com a tabela zona × turno
+  dos slots ainda abertos sobre o total de cada zona, para decidir onde
+  há capacidade a abrir.
 • Guia do Dia — guia HTML autônomo com abas: resumo do dia (com grade
   horário × equipe dos slots), aba Lab compartilhável com o laboratório
-  (nome e município por slot, sem Controle nem domicílio) e, por equipe,
-  os cartões de cada visita — pronto para imprimir por aba.
+  (hora, nome, município e zona por slot, sem Controle nem domicílio)
+  e, por equipe, os cartões de cada visita — pronto para imprimir por
+  aba.
 • Guia + Mapa (opcional) — o mesmo guia com mapa da rota do dia,
   link de navegação por visita e seleção de paradas por checkbox
   (até 9 por rota, com link do Google Maps atualizado em tempo real),
@@ -73,8 +77,8 @@ Código-fonte aberto: https://github.com/leoniedu/sigc-pro
 ```
 Adds unofficial productivity tools to SIGC (IBGE) pages: export buttons
 (PDF, KML, CSV) on report tables and Agenda helpers (CSV export, slot
-checks, printable day guide, date picker), without modifying the
-portal's native features.
+checks, open-slot capacity panel, printable day guide, date picker),
+without modifying the portal's native features.
 ```
 
 ## Host permission justification (dashboard field)
@@ -86,8 +90,9 @@ The extension injects a content script only on pages of the SIGC portal
 `w3sigcpns2025.ibge.gov.br`, the specific hosts SIGC is served from,
 not the whole ibge.gov.br domain — to add
 export buttons (PDF, KML, CSV) to report toolbars
-and Agenda helpers (CSV export, slot checks, printable day guide, date
-picker), reading data already rendered on the page. No access to any
+and Agenda helpers (CSV export, slot checks, open-slot capacity panel,
+printable day guide, date picker), reading data already rendered on the
+page. No access to any
 other site is requested. The only browser permission declared is
 `storage`, used solely to remember the on/off state of one advanced,
 off-by-default flag (set on the extension's own Options page) that
