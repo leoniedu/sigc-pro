@@ -140,7 +140,42 @@
     return map;
   }
 
+  // One decimal, pt-BR comma — same shape the day guide uses.
+  const num1 = (n) => n.toFixed(1).replace('.', ',');
+
+  // Free slots for the zonas THIS table's households belong to, not the
+  // whole UF: the question is "where can I still book these people?".
+  // Fetch times are shown because a stale count causes a real
+  // double-booking; two are shown when the sources aged differently,
+  // since one timestamp would misreport the older.
+  function buildResumoHtml(zonaIdsDaTabela, livresIdx, meta) {
+    const e = window.__sigcPro.escapeHtml;
+    const ids = [...new Set((zonaIdsDaTabela || []).filter(Boolean))].sort();
+    const celulas = ids.map((id) => {
+      const c = (livresIdx && livresIdx.get(id)) || { inteiro: 0, peso: 0, compartilhado: false };
+      const pond = c.compartilhado ? ` (${num1(c.peso)} ponderado)` : '';
+      return `<span class="sp-zona-livre"><strong>${e(id)}</strong>: ${c.inteiro}${pond}</span>`;
+    }).join(' ');
+
+    const quando = meta.agendaEm === meta.movimentoEm
+      ? `dados de ${e(meta.agendaEm)}`
+      : `agenda de ${e(meta.agendaEm)}, movimento de ${e(meta.movimentoEm)}`;
+
+    const falhas = (meta.falhas || []).length
+      ? `<div class="sp-falha">Sem dados de ${(meta.falhas || []).map(e).join('; ')}. ` +
+        'As colunas correspondentes ficam vazias.</div>'
+      : '';
+
+    return [
+      '<div id="sigc-pro-lista-agenda-resumo">',
+      `<div class="sp-titulo">Slots livres (a partir de ${e(meta.minDateBr)}) · ${quando}</div>`,
+      `<div class="sp-zonas">${celulas || '<em>Nenhuma zona nesta tabela.</em>'}</div>`,
+      falhas,
+      '</div>',
+    ].join('\n');
+  }
+
   window.__sigcPro.listaAgenda = {
-    parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento,
+    parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml,
   };
 })();

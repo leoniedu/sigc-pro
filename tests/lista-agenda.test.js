@@ -5,7 +5,7 @@ await import('../extension/common/sigc-common.js');
 await import('../extension/features/lista-agenda/lista-agenda.js');
 
 const {
-  parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento,
+  parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml,
 } = window.__sigcPro.listaAgenda;
 
 // A reserved slot's title carries every field; an open slot's title is
@@ -212,5 +212,68 @@ describe('indexMovimento', () => {
   test('tolerates empty input', () => {
     expect(indexMovimento(header, []).size).toBe(0);
     expect(indexMovimento(null, null).size).toBe(0);
+  });
+});
+
+describe('buildResumoHtml', () => {
+  const livres = new Map([
+    ['29JDM8', { inteiro: 12, peso: 3, compartilhado: true }],
+    ['29LR9E', { inteiro: 4, peso: 4, compartilhado: false }],
+    ['29TBAN', { inteiro: 0, peso: 0, compartilhado: false }],
+  ]);
+  const meta = { minDateBr: '03/08/2026', agendaEm: '09:31', movimentoEm: '09:31', falhas: [] };
+
+  test('names the cutoff and the fetch time', () => {
+    const html = buildResumoHtml(['29JDM8'], livres, meta);
+    expect(html).toContain('03/08/2026');
+    expect(html).toContain('09:31');
+  });
+
+  // The weighted figure says something only where slots are shared;
+  // elsewhere it would just repeat the whole count.
+  test('shows the weighted figure only where shared', () => {
+    const html = buildResumoHtml(['29JDM8', '29LR9E'], livres, meta);
+    expect(html).toContain('12');
+    expect(html).toContain('3,0 ponderado');
+    expect(html).toContain('4');
+    expect(html.match(/ponderado/g)).toHaveLength(1);
+  });
+
+  test('lists only the zonas present in the table', () => {
+    const html = buildResumoHtml(['29JDM8'], livres, meta);
+    expect(html).toContain('29JDM8');
+    expect(html).not.toContain('29LR9E');
+  });
+
+  test('shows zero for a zona of the table with no free slots', () => {
+    const html = buildResumoHtml(['29TBAN'], livres, meta);
+    expect(html).toContain('29TBAN');
+    expect(html).toContain('0');
+  });
+
+  test('shows zero for a zona absent from the index entirely', () => {
+    const html = buildResumoHtml(['29XXXX'], livres, meta);
+    expect(html).toContain('29XXXX');
+    expect(html).toContain('0');
+  });
+
+  // An all-"—" column must never be mistaken for "nothing scheduled".
+  test('names a failed source', () => {
+    const html = buildResumoHtml(['29JDM8'], livres,
+      { ...meta, falhas: ['Último Movimento: HTTP 500'] });
+    expect(html).toContain('Último Movimento: HTTP 500');
+  });
+
+  test('shows two fetch times when they differ', () => {
+    const html = buildResumoHtml(['29JDM8'], livres,
+      { ...meta, agendaEm: '09:31', movimentoEm: '09:47' });
+    expect(html).toContain('09:31');
+    expect(html).toContain('09:47');
+  });
+
+  test('escapes zona ids', () => {
+    const html = buildResumoHtml(['<script>alert(1)</script>'], new Map(), meta);
+    expect(html).not.toContain('<script>alert');
+    expect(html).toContain('&lt;script&gt;');
   });
 });
