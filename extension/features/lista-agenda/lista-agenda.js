@@ -190,6 +190,93 @@
     };
   }
 
+  // --- acquire --------------------------------------------------------
+  // F5 BIG-IP rewrites every path to "/f5-w-<hex>$$/<path>" off-VPN.
+  // Duplicated from ultimo-movimento-export.js rather than shared: moving
+  // fetch-adjacent code into sigc-common.js would put it outside the
+  // privacy gate's sanctioned directories.
+  function f5Prefix(pathname) {
+    const m = /^\/f5-w-([0-9a-f]+)\$\$/.exec(String(pathname || ''));
+    return m ? { prefix: m[0], hex: m[1] } : null;
+  }
+
+  function gatewayUrl(origin, pathname, path, simple) {
+    const f5 = f5Prefix(pathname);
+    if (!f5) return `${origin}${path}`;
+    return simple
+      ? `${origin}${f5.prefix}${path}`
+      : `${origin}${f5.prefix}/f5-h-$$${path};F5_origin=${f5.hex}&F5CH=I`;
+  }
+
+  async function fetchViaGateway(path, options) {
+    const urls = [...new Set([
+      gatewayUrl(location.origin, location.pathname, path, true),
+      gatewayUrl(location.origin, location.pathname, path, false),
+    ])];
+    let lastErr = new Error('sem resposta');
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, options);
+        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
+        return res;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
+  }
+
+  // Query built by hand: percent-encoding the "$$" in the F5 path turns
+  // the URL into a 404 (learned in pns.zonas/R/sigc_agendamentos.R).
+  async function fetchAgenda(uf, startIso, endIso) {
+    const query = `idUf=${encodeURIComponent(uf)}` +
+      `&start=${encodeURIComponent(startIso)}` +
+      `&end=${encodeURIComponent(endIso)}` +
+      '&semana=true&idEquipe=';
+    const res = await fetchViaGateway(`/AdministracaoAgenda/ObterSlots?${query}`, {
+      credentials: 'same-origin',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        Referer: `${location.origin}/AdministracaoAgenda`,
+      },
+    });
+    return parseSlots(await res.json());
+  }
+
+  // One request for the whole Controle: buildAgenciaFilterBody's payload
+  // with Controle set to the real value instead of "*" returns every
+  // domicílio at once. NOT the multi-agência loop.
+  async function fetchMovimento(uf, controle) {
+    const filtro = {
+      IdFiltro: '',
+      IdUf: String(uf),
+      IdAgencia: '*',
+      IdMunicipio: '*',
+      Controle: String(controle),
+      IdEntrevistadores: '*',
+      IdTipoAcompanhamento: '*',
+    };
+    const res = await fetchViaGateway('/relatorio/filtrar?slug=UltimoMovimento', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      body: 'filtro=' + encodeURIComponent(JSON.stringify(filtro)),
+    });
+    return parseMovimentoHtml(await res.text());
+  }
+
+  // DOMParser is inert — nothing in the fetched markup can load resources
+  // or run handlers. Same guarantee ultimo-movimento-export relies on.
+  function parseMovimentoHtml(html) {
+    const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    const table = doc.querySelector('table');
+    if (!table) return null;
+    const header = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+    const rows = [...table.querySelectorAll('tbody tr')].map((tr) =>
+      [...tr.querySelectorAll('td')].map((td) => td.textContent.trim()));
+    return { header, rows };
+  }
+
   window.__sigcPro.listaAgenda = {
     parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml, annotateRow,
   };
