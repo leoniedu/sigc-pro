@@ -14,8 +14,12 @@ const { buildDayGrid } = window.__sigcPro.dayGuide;
 function row({
   reservado = true, horaInicio = '09:00', nome = 'Fulano de Tal',
   controle = '2927408000123', domicilio = 'D1', dtNascimento = '17/02/1948',
+  telefone = '', endereco = '', sexo = '', idade = '', observacao = '',
 } = {}) {
-  return { reservado, horaInicio, horaFim: '09:30', nome, controle, domicilio, dtNascimento, equipe: 'A' };
+  return {
+    reservado, horaInicio, horaFim: '09:30', nome, controle, domicilio,
+    dtNascimento, telefone, endereco, sexo, idade, observacao, equipe: 'A',
+  };
 }
 
 describe('municipioFromControle', () => {
@@ -79,6 +83,54 @@ describe('buildDayGrid — Lab variant', () => {
     expect(html).not.toContain('17/02/1948');
   });
 
+  // WHITELIST, deliberately the inverse of the test above. The Lab tab
+  // is the one artifact designed to leave the institution, and a
+  // blacklist only catches fields someone already thought to forbid — a
+  // newly added field passes it silently (that is exactly how zona
+  // entered the Lab tab in 0c0eb28 without review).
+  //
+  // The sanctioned set is {hora, nome, município, zona}. Adding a fifth
+  // field must be a deliberate edit to THIS list, with the privacy
+  // question answered in the commit message — not a silent pass. Zona is
+  // in the set by an explicit decision: the laboratory needs the area to
+  // plan its collection routes.
+  test('Lab cells carry ONLY the sanctioned fields', () => {
+    // Deliberately POPULATED with every sensitive field a real reserved
+    // slot carries. A sparse fixture would defeat the whole test: a
+    // newly rendered field whose fixture value is empty emits nothing
+    // and passes silently, which is the failure mode this test exists
+    // to prevent.
+    const cheio = row({
+      telefone: '71 99999-0000',
+      endereco: 'Rua Exemplo, 100',
+      sexo: 'F',
+      idade: '78',
+      observacao: 'observação sensível',
+    });
+    const enderecos = new Map([
+      ['2927408000123|D1', { idZona: '12', zona: 'Centro', lat: null, lon: null }],
+    ]);
+    const html = buildDayGrid(
+      [{ equipe: 'Equipe A', rows: [cheio] }], true, enderecos);
+
+    const SANCTIONED = ['grid-hora', 'grid-nome', 'grid-municipio', 'grid-zona'];
+    const spanClasses = [...html.matchAll(/<span class="(grid-[a-z-]+)"/g)]
+      .map((m) => m[1]);
+    const unexpected = [...new Set(spanClasses)]
+      .filter((c) => !SANCTIONED.includes(c));
+    expect(unexpected).toEqual([]);
+
+    // The sanctioned four are present…
+    expect(html).toContain('09:00');
+    expect(html).toContain('Fulano de Tal');
+    expect(html).toContain('SALVADOR - BA');
+    expect(html).toContain('Zona: 12');
+
+    // …and no populated non-sanctioned value leaked through.
+    ['71 99999-0000', 'Rua Exemplo, 100', 'observação sensível', '17/02/1948']
+      .forEach((v) => expect(html).not.toContain(v));
+  });
+
   test('unknown código: nome still shown, município omitted', () => {
     const g = [{ equipe: 'Equipe A', rows: [row({ controle: '9999999000123' })] }];
     const html = buildDayGrid(g, true);
@@ -125,13 +177,13 @@ describe('buildDayGrid — zona', () => {
 
   test('appends the zona in the non-Lab variant', () => {
     const html = buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, enderecos());
-    expect(html).toContain('<span class="grid-zona">Zona 12 Centro</span>');
+    expect(html).toContain('<span class="grid-zona">Zona: 12</span>');
     expect(html).toContain('2927408000123');
   });
 
   test('appends the zona in the Lab variant', () => {
     const html = buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], true, enderecos());
-    expect(html).toContain('<span class="grid-zona">Zona 12 Centro</span>');
+    expect(html).toContain('<span class="grid-zona">Zona: 12</span>');
     expect(html).toContain('SALVADOR - BA');
     expect(html).not.toContain('2927408000123');
   });
@@ -146,13 +198,20 @@ describe('buildDayGrid — zona', () => {
     expect(buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, e)).not.toContain('grid-zona');
   });
 
-  test('renders idZona or zona alone when the other is missing', () => {
-    const soId = enderecos({ lat: null, lon: null, zona: null, idZona: '12' });
-    expect(buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, soId))
-      .toContain('<span class="grid-zona">Zona 12</span>');
+  // The ID alone identifies the zona; the nome is never appended to it.
+  test('shows the ID alone when both ID and name are present', () => {
+    const ambos = enderecos({ lat: null, lon: null, zona: 'Centro', idZona: '12' });
+    const html = buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, ambos);
+    expect(html).toContain('<span class="grid-zona">Zona: 12</span>');
+    expect(html).not.toContain('Centro');
+  });
+
+  // No nome-only fallback: every zona in SIGC has an ID, so a row without
+  // one has no zona at all and must render blank rather than a bare nome.
+  test('renders no zona when there is no idZona', () => {
     const soNome = enderecos({ lat: null, lon: null, zona: 'Centro', idZona: null });
     expect(buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, soNome))
-      .toContain('<span class="grid-zona">Zona Centro</span>');
+      .not.toContain('grid-zona');
   });
 
   test('a row with no matching endereço gets no zona', () => {
@@ -165,8 +224,10 @@ describe('buildDayGrid — zona', () => {
     expect(buildDayGrid(g, false, enderecos())).not.toContain('grid-zona');
   });
 
+  // Payload goes in idZona, the field actually rendered — putting it in
+  // zona would pass vacuously now that the nome is never shown.
   test('escapes the zona', () => {
-    const e = enderecos({ lat: null, lon: null, zona: '<script>alert(1)</script>', idZona: null });
+    const e = enderecos({ lat: null, lon: null, zona: '', idZona: '<script>alert(1)</script>' });
     const html = buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, e);
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');

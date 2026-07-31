@@ -1,0 +1,56 @@
+import { describe, test, expect } from 'bun:test';
+
+// manifest.json's content_scripts order is a LOAD-ORDER CONTRACT, not a
+// stylistic list — but nothing about the file's appearance says so, and
+// every other test imports modules explicitly in the right order, so a
+// reordered manifest cannot fail them. It fails in the browser instead,
+// where the whole Guia do Dia download dies on a TypeError.
+//
+// The trap is that alphabetizing the array is a natural tidy-up:
+// "common/municipios.js" sorts BEFORE "common/sigc-common.js", which is
+// exactly backwards. These tests make that a red suite instead.
+const manifest = await Bun.file(
+  new URL('../extension/manifest.json', import.meta.url)
+).json();
+
+// The MAIN-world content script — the one carrying the feature modules.
+const mainScript = manifest.content_scripts.find((s) => s.world === 'MAIN');
+const js = mainScript.js;
+const idx = (path) => js.indexOf(path);
+
+describe('manifest content_scripts load order', () => {
+  test('the MAIN-world script block exists and lists its modules', () => {
+    expect(mainScript).toBeDefined();
+    expect(Array.isArray(js)).toBe(true);
+    expect(js.length).toBeGreaterThan(0);
+  });
+
+  // sigc-common.js assigns window.__sigcPro WHOLESALE; municipios.js
+  // augments that object. Loading municipios.js first means its
+  // municipioFromControle is discarded by the later wholesale assign,
+  // and the Lab tab throws at agenda-day-guide.js's call site.
+  test('municipios.js loads AFTER sigc-common.js', () => {
+    const common = idx('common/sigc-common.js');
+    const municipios = idx('common/municipios.js');
+    expect(common).toBeGreaterThanOrEqual(0);
+    expect(municipios).toBeGreaterThanOrEqual(0);
+    expect(municipios).toBeGreaterThan(common);
+  });
+
+  // Every feature module reads window.__sigcPro at its own import-time
+  // top level (mountWidget registration), so the common runtime must be
+  // in place before any of them.
+  test('sigc-common.js loads before every feature module', () => {
+    const common = idx('common/sigc-common.js');
+    js.forEach((path, i) => {
+      if (path.startsWith('features/')) expect(i).toBeGreaterThan(common);
+    });
+  });
+
+  test('every listed script actually exists on disk', async () => {
+    for (const path of js) {
+      const url = new URL(`../extension/${path}`, import.meta.url);
+      expect(await Bun.file(url).exists()).toBe(true);
+    }
+  });
+});
