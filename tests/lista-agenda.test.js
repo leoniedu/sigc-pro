@@ -6,6 +6,7 @@ await import('../extension/features/lista-agenda/lista-agenda.js');
 
 const {
   parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml,
+  buildDomiciliosHtml, identificadorDomicilio,
 } = window.__sigcPro.listaAgenda;
 
 // A reserved slot's title carries every field; an open slot's title is
@@ -184,10 +185,17 @@ describe('indexMovimento', () => {
   // Column positions are found by header label, never hardcoded: the
   // Último Movimento report is a different table from the Lista de
   // Endereços and its layout is not pinned by any test we own.
-  const header = ['Controle', 'Domicílio', 'Última Posição', 'Data Transmissão'];
+  //
+  // Verbatim live header (browser console, real Último Movimento report):
+  // the four columns we read sit at indexes 0, 1, 4, 5 — non-adjacent —
+  // with Entrevistador/Tipo de Entrevista/Observação in between and
+  // around them, so a tidy 4-column fixture would not have caught the
+  // 'Data Transmissão' vs 'Data' mismatch this test guards against.
+  const header = ['Controle', 'Domicilio', 'Entrevistador', 'Tipo de Entrevista',
+    'Última Posição', 'Data', 'Observação'];
   const rows = [
-    ['292740805060337', '1', 'TRANSMITIDO', '28/07/2026'],
-    ['292740805060337', '2', 'EM COLETA', ''],
+    ['292740805060337', '1', 'João', 'Presencial', 'TRANSMITIDO', '28/07/2026', ''],
+    ['292740805060337', '2', 'João', 'Presencial', 'EM COLETA', '', ''],
   ];
 
   test('keys on controle|domicilio', () => {
@@ -201,7 +209,8 @@ describe('indexMovimento', () => {
   });
 
   test('tolerates accent and case differences in headers', () => {
-    const alt = ['CONTROLE', 'DOMICILIO', 'ULTIMA POSICAO', 'DATA TRANSMISSAO'];
+    const alt = ['CONTROLE', 'DOMICILIO', 'ENTREVISTADOR', 'TIPO DE ENTREVISTA',
+      'ULTIMA POSICAO', 'DATA', 'OBSERVACAO'];
     expect(indexMovimento(alt, rows).index.get('292740805060337|1').situacao).toBe('TRANSMITIDO');
   });
 
@@ -214,6 +223,14 @@ describe('indexMovimento', () => {
   // scheduled" when it is actually a parsing failure.
   test('flags colunasNaoEncontradas when a required column is missing', () => {
     expect(indexMovimento(['Controle', 'Domicílio'], rows).colunasNaoEncontradas).toBe(true);
+  });
+
+  // Regression guard for the live defect: 'Data Transmissão' does not
+  // exist in the real report, only 'Data'. A header carrying the old,
+  // wrong label must be treated exactly like a missing column.
+  test('flags colunasNaoEncontradas when the header still says Data Transmissão', () => {
+    const oldHeader = ['Controle', 'Domicílio', 'Última Posição', 'Data Transmissão'];
+    expect(indexMovimento(oldHeader, rows).colunasNaoEncontradas).toBe(true);
   });
 
   test('does not flag colunasNaoEncontradas when all columns are found', () => {
@@ -338,32 +355,84 @@ describe('annotateRow', () => {
   });
 });
 
-const { chaveDeLinha } = window.__sigcPro.listaAgenda;
-
-// The bug this guards against: escreverColunas resolves each rendered <tr>
-// to its household via dt.row(tr).data(), a DIFFERENT row-data shape than
-// tabela.rows (readDataTable's cellText-cleaned array). Both call sites
-// must key identically or annotations land on the wrong household as soon
-// as the table sorts, filters or paginates.
-describe('chaveDeLinha', () => {
-  const cols = { controle: { index: 1 }, nDomicilio: { index: 3 } };
-
-  test('builds the same key as chaveDomicilio from plain-text cells', () => {
-    const row = ['x', '292740805060337', 'y', '1'];
-    expect(chaveDeLinha(row, cols.controle.index, cols.nDomicilio.index))
-      .toBe('292740805060337|1');
+describe('identificadorDomicilio', () => {
+  test('combines logradouro, número and domicílio number', () => {
+    expect(identificadorDomicilio('RUA X', '237', '1')).toBe('RUA X, Nº 237 (dom. 1)');
   });
 
-  // dt.row(tr).data() returns raw cell data, which — unlike tabela.rows —
-  // has NOT been through cellText. Any markup must strip to the same text.
-  test('strips HTML the same way cellText does, so keys match tabela.rows', () => {
-    const row = ['x', '<span>292740805060337</span>', 'y', ' 1 '];
-    expect(chaveDeLinha(row, cols.controle.index, cols.nDomicilio.index))
-      .toBe('292740805060337|1');
+  test('falls back to a domicílio label when logradouro/número are empty', () => {
+    expect(identificadorDomicilio('', '', '2')).toBe('Domicílio 2 (dom. 2)');
   });
 
-  test('missing cells key on empty strings rather than throwing', () => {
-    const row = ['x', undefined, 'y', null];
-    expect(chaveDeLinha(row, cols.controle.index, cols.nDomicilio.index)).toBe('|');
+  test('tolerates missing values', () => {
+    expect(identificadorDomicilio(undefined, null, undefined)).toBe('Domicílio  (dom. )');
+  });
+});
+
+describe('buildDomiciliosHtml', () => {
+  const comDados = {
+    identificador: 'RUA X, Nº 237 (dom. 1)',
+    agendado: '01/09/2026', futura: true, situacao: 'TRANSMITIDO', transmissao: '28/07/2026',
+  };
+  const semDados = {
+    identificador: 'RUA Y, Nº 10 (dom. 2)',
+    agendado: '', futura: false, situacao: '', transmissao: '',
+  };
+
+  test('a household with data appears, identifier and fields included', () => {
+    const html = buildDomiciliosHtml([comDados]);
+    expect(html).toContain('RUA X, Nº 237 (dom. 1)');
+    expect(html).toContain('01/09/2026');
+    expect(html).toContain('TRANSMITIDO');
+    expect(html).toContain('28/07/2026');
+  });
+
+  // A page of empty rows is not useful; the omitted count says whether
+  // "nothing scheduled" or "not shown" is the reason a household is absent.
+  test('a household with no data from any source is omitted and counted', () => {
+    const html = buildDomiciliosHtml([comDados, semDados]);
+    expect(html).not.toContain('RUA Y, Nº 10');
+    expect(html).toContain('1 domicílio(s) sem dados de agenda/movimento omitido(s)');
+  });
+
+  test('all households empty renders a message, no fabricated list', () => {
+    const html = buildDomiciliosHtml([semDados]);
+    expect(html).not.toContain('RUA Y');
+    expect(html).toContain('1 sem dados omitido(s)');
+  });
+
+  test('no households at all renders a plain empty message', () => {
+    const html = buildDomiciliosHtml([]);
+    expect(html).toContain('Nenhum domicílio anotado');
+  });
+
+  // sp-futura/sp-passada distinction, carried over from the old <td> classes.
+  test('a future/live appointment renders distinctly from a past one', () => {
+    const passada = { ...comDados, identificador: 'RUA Z, Nº 5 (dom. 3)', futura: false };
+    const html = buildDomiciliosHtml([comDados, passada]);
+    expect(html).toContain('sp-futura');
+    expect(html).toContain('sp-passada');
+  });
+
+  // Omitted households (agendado/situacao/transmissao all empty) render no
+  // agendado span at all, so sp-passada must come specifically from the
+  // listed, past-appointment household above — not merely be present.
+  test('an appointment without a date renders no futura/passada span', () => {
+    const semAgendado = { ...comDados, identificador: 'RUA W, Nº 1 (dom. 4)', agendado: '' };
+    const html = buildDomiciliosHtml([semAgendado]);
+    expect(html).toContain('RUA W, Nº 1 (dom. 4)');
+    expect(html).toContain('agendado —');
+  });
+
+  test('escapes interpolated values', () => {
+    const malicioso = {
+      identificador: '<script>alert(1)</script>', agendado: '', futura: false,
+      situacao: '<b>x</b>', transmissao: '',
+    };
+    const html = buildDomiciliosHtml([malicioso]);
+    expect(html).not.toContain('<script>alert');
+    expect(html).not.toContain('<b>x</b>');
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).toContain('&lt;b&gt;');
   });
 });

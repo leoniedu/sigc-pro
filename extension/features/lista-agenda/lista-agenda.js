@@ -53,28 +53,6 @@
 
   const chaveDomicilio = (controle, domicilio) => `${controle}|${domicilio}`;
 
-  // Cell text the same way sigc-common's cellText reduces it (DOMParser,
-  // then trim) so a key built here matches a key built from tabela.rows —
-  // DataTables' row().data() returns raw cell data, which readDataTable()
-  // (source of tabela.rows) always passes through cellText first. DOMParser
-  // is inert on plain text too, so this is safe even though Controle and
-  // N.º Domicilio are plain numeric/ID strings with no markup in practice.
-  function textoCelula(v) {
-    const doc = new DOMParser().parseFromString(String(v ?? ''), 'text/html');
-    return (doc.body.textContent || '').trim();
-  }
-
-  // Pure: row data (raw, possibly-HTML cells) + the two column indexes ->
-  // the same chaveDomicilio key used to index annotations. Shared by the
-  // build side (tabela.rows, already cellText'd) and the render side
-  // (dt.row(tr).data(), raw) so both sides key identically regardless of
-  // which shape of row data they start from.
-  function chaveDeLinha(rowData, colControleIdx, colDomicilioIdx) {
-    return chaveDomicilio(
-      textoCelula(rowData[colControleIdx]),
-      textoCelula(rowData[colDomicilioIdx]));
-  }
-
   function indexByControle(slots) {
     const map = new Map();
     slots.forEach((s) => {
@@ -147,7 +125,7 @@
     const iControle = acharColuna(header, 'Controle');
     const iDomicilio = acharColuna(header, 'Domicílio');
     const iPosicao = acharColuna(header, 'Última Posição');
-    const iTransmissao = acharColuna(header, 'Data Transmissão');
+    const iTransmissao = acharColuna(header, 'Data');
     if (iControle === -1 || iDomicilio === -1 || iPosicao === -1 || iTransmissao === -1) {
       console.warn(`${TAG} Último Movimento: colunas esperadas não encontradas`,
         JSON.stringify(header));
@@ -178,7 +156,7 @@
   // no data to count from, not zero free slots. A fabricated "0" there
   // reads as real capacity information and is exactly the false signal
   // that causes a double-booking, so that case renders "?" instead.
-  function buildResumoHtml(zonaIdsDaTabela, livresIdx, meta) {
+  function buildResumoHtml(zonaIdsDaTabela, livresIdx, meta, domicilios) {
     const e = window.__sigcPro.escapeHtml;
     const ids = [...new Set((zonaIdsDaTabela || []).filter(Boolean))].sort();
     const celulas = ids.map((id) => {
@@ -206,8 +184,71 @@
       `<div class="sp-titulo">Slots livres (a partir de ${e(meta.minDateBr)}) · ${quando}</div>`,
       `<div class="sp-zonas">${celulas || '<em>Nenhuma zona nesta tabela.</em>'}</div>`,
       falhas,
+      buildDomiciliosHtml(domicilios || []),
       '</div>',
     ].join('\n');
+  }
+
+  // Per-household detail, rendered inside the summary panel INSTEAD of
+  // extra table columns. DataTables owns the table's column model
+  // (aoColumns): appending <th>/<td> elements from outside leaves that
+  // model out of sync with the DOM, and a later adjust()/redraw walks off
+  // the end of it and throws (live: "Cannot read properties of undefined
+  // (reading 'colEl')"). The table must stay untouched; this panel is the
+  // only place per-household data can safely live.
+  // One line per household with data — bare Controle is
+  // unreadable, so logradouro + número identifies it, with the domicílio
+  // number to tell apart multiple households at the same address.
+  //
+  // Households with NO data from either source are omitted rather than
+  // padding the list with rows of "—", but the omitted count is shown so
+  // "nothing scheduled" (a household IS listed, fields are "—") reads
+  // differently from "not shown" (never fetched/matched at all).
+  function buildDomiciliosHtml(domicilios) {
+    const e = window.__sigcPro.escapeHtml;
+    const comDados = (domicilios || []).filter((d) =>
+      d.agendado || d.situacao || d.transmissao);
+    const omitidos = (domicilios || []).length - comDados.length;
+
+    if (comDados.length === 0) {
+      const nada = omitidos > 0
+        ? `<em>Nenhum domicílio com dados de agenda/movimento (${omitidos} sem dados omitido(s)).</em>`
+        : '<em>Nenhum domicílio anotado.</em>';
+      return `<div class="sp-domicilios">${nada}</div>`;
+    }
+
+    const linhas = comDados.map((d) => {
+      const classe = d.futura ? 'sp-futura' : 'sp-passada';
+      const agendado = d.agendado
+        ? `<span class="${classe}">${e(d.agendado)}</span>`
+        : '—';
+      return '<li>' +
+        `<strong>${e(d.identificador)}</strong>: ` +
+        `agendado ${agendado} · ` +
+        `situação ${e(d.situacao || '—')} · ` +
+        `transmissão ${e(d.transmissao || '—')}` +
+        '</li>';
+    }).join('\n');
+
+    const rodape = omitidos > 0
+      ? `<div class="sp-omitidos">${e(String(omitidos))} domicílio(s) sem dados de agenda/movimento omitido(s).</div>`
+      : '';
+
+    return [
+      '<div class="sp-domicilios">',
+      `<ul>${linhas}</ul>`,
+      rodape,
+      '</div>',
+    ].join('\n');
+  }
+
+  // Human-readable household identifier: logradouro + número, with the
+  // domicílio number appended to disambiguate multiple households at one
+  // address. A bare Controle carries no meaning to a reader of this panel.
+  function identificadorDomicilio(logradouro, numero, nDomicilio) {
+    const end = [logradouro, numero].map((s) => String(s ?? '').trim()).filter(Boolean).join(', Nº ');
+    const base = end || `Domicílio ${String(nDomicilio ?? '').trim()}`;
+    return `${base} (dom. ${String(nDomicilio ?? '').trim()})`;
   }
 
   // Returns an OBJECT, not a bare string, so a further source adds a key
@@ -316,7 +357,7 @@
 
   window.__sigcPro.listaAgenda = {
     parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml, annotateRow,
-    chaveDeLinha,
+    buildDomiciliosHtml, identificadorDomicilio,
   };
 
   // --- caches ---------------------------------------------------------
@@ -340,8 +381,6 @@
   const horaDe = (ms) => new Date(ms).toTimeString().slice(0, 5);
 
   // --- render ---------------------------------------------------------
-  const COLUNAS = ['Agendado', 'Situação', 'Transmissão'];
-
   let consentGiven = false;
   const CONSENT_MSG =
     'SIGC-PRO: isto fará duas consultas ao próprio servidor do SIGC — a ' +
@@ -408,17 +447,18 @@
 
     // Keyed by household, NOT positional: tabela.rows is the full dataset
     // in original data order (readDataTable's "stable across pagination/
-    // sort" guarantee), but the <tr> elements escreverColunas writes into
-    // are only the current page in current sort/filter order. A positional
-    // array silently mismatches the two as soon as the user sorts, filters
-    // or paginates.
-    const anotacoesPorChave = new Map(tabela.rows.map((r) => [
-      chaveDeLinha(r, cols.controle.index, cols.nDomicilio.index),
-      annotateRow(r[cols.controle.index], r[cols.nDomicilio.index],
-        { agendaIdx, movimentoIdx, todayIso }),
-    ]));
+    // sort" guarantee); the panel lists every household regardless of
+    // current page/sort/filter, so this order is exactly what we want.
+    const domicilios = tabela.rows.map((r) => {
+      const a = annotateRow(r[cols.controle.index], r[cols.nDomicilio.index],
+        { agendaIdx, movimentoIdx, todayIso });
+      return {
+        ...a,
+        identificador: identificadorDomicilio(
+          r[cols.logradouro.index], r[cols.numero.index], r[cols.nDomicilio.index]),
+      };
+    });
 
-    escreverColunas(anotacoesPorChave, cols);
     escreverResumo(
       tabela.rows.map((r) => String(r[cols.idZona.index] || '').trim()),
       livresIdx,
@@ -427,93 +467,21 @@
         agendaEm: ag ? horaDe(ag.em) : '—',
         movimentoEm: mv ? horaDe(mv.em) : '—',
         falhas,
-      });
-    console.log(`${TAG} ${anotacoesPorChave.size} linha(s) anotadas; ` +
+      },
+      domicilios);
+    console.log(`${TAG} ${domicilios.length} domicílio(s) anotados; ` +
       `${livresIdx ? livresIdx.size : '?'} zona(s) com slots livres.`);
   }
 
-  // Appended, never inserted: indexes 0-19 must stay put, since
-  // tableMatchesLayout validates by index and PDF/KML read fixed ones.
-  // Idempotent — safe to call on every draw, header check guards re-adding.
-  function garantirCabecalho(dt) {
-    const thead = dt.table().header();
-    const jaTem = [...thead.querySelectorAll('th')]
-      .some((th) => th.textContent.trim() === COLUNAS[0]);
-    if (jaTem) return;
-    const tr = thead.querySelector('tr');
-    COLUNAS.forEach((nome) => {
-      const th = document.createElement('th');
-      th.textContent = nome;
-      tr.appendChild(th);
-    });
-  }
-
-  // Resolves each rendered <tr> to its household via the DataTables API
-  // (dt.row(tr).data()) rather than by position: the body only ever holds
-  // the CURRENT page in the CURRENT sort/filter order, which does not
-  // match tabela.rows' full-dataset original order. Skips rows with no
-  // matching annotation (e.g. mid-fetch layout hiccup) rather than
-  // guessing.
-  function escreverCorpo(dt, anotacoesPorChave, cols) {
-    const corpo = dt.table().body();
-    [...corpo.querySelectorAll('tr')].forEach((tr) => {
-      const dados = dt.row(tr).data();
-      if (!dados) return;
-      const chave = chaveDeLinha(dados, cols.controle.index, cols.nDomicilio.index);
-      const a = anotacoesPorChave.get(chave);
-      // Re-annotating (including on redraw) replaces rather than appends
-      // again — DataTables re-renders <tr>s from its data model on every
-      // draw, discarding any <td>s appended outside its control.
-      [...tr.querySelectorAll('td.sigc-pro-anotacao')].forEach((td) => td.remove());
-      if (!a) return;
-      [
-        { texto: a.agendado, classe: a.futura ? 'sp-futura' : 'sp-passada' },
-        { texto: a.situacao, classe: '' },
-        { texto: a.transmissao, classe: '' },
-      ].forEach(({ texto, classe }) => {
-        const td = document.createElement('td');
-        td.className = `sigc-pro-anotacao ${classe}`.trim();
-        td.textContent = texto || '—';
-        tr.appendChild(td);
-      });
-    });
-  }
-
-  // Survives redraw (sort/search/page change): DataTables re-renders body
-  // rows from its data model on every draw, which would otherwise strand
-  // the header at 3 extra columns with no matching body cells. Registered
-  // once — repeat clicks must not stack handlers — and always replays the
-  // MOST RECENT annotations/cols via the closure variables below, so a
-  // draw firing after a second, different anotar() run stays correct.
-  let drawHandlerRegistrado = false;
-  let ultimasAnotacoes = null;
-  let ultimasCols = null;
-
-  function escreverColunas(anotacoesPorChave, cols) {
-    const dt = window.__sigcPro.getDataTable();
-    if (!dt) return;
-    ultimasAnotacoes = anotacoesPorChave;
-    ultimasCols = cols;
-    garantirCabecalho(dt);
-    escreverCorpo(dt, anotacoesPorChave, cols);
-    if (!drawHandlerRegistrado) {
-      dt.on('draw', () => {
-        if (!ultimasAnotacoes || !ultimasCols) return;
-        garantirCabecalho(dt);
-        escreverCorpo(dt, ultimasAnotacoes, ultimasCols);
-      });
-      drawHandlerRegistrado = true;
-    }
-  }
-
-  function escreverResumo(zonaIds, livresIdx, meta) {
+  function escreverResumo(zonaIds, livresIdx, meta, domicilios) {
     const antigo = document.getElementById('sigc-pro-lista-agenda-resumo');
     if (antigo) antigo.remove();
     const alvo = document.querySelector('.dataTables_wrapper') ||
       window.__sigcPro.getDataTable().table().container();
     const div = document.createElement('div');
-    // Built from escaped strings only (escapeHtml on every zona id).
-    div.innerHTML = buildResumoHtml(zonaIds, livresIdx, meta);
+    // Built from escaped strings only (escapeHtml on every interpolated
+    // value, including per-household fields — see buildDomiciliosHtml).
+    div.innerHTML = buildResumoHtml(zonaIds, livresIdx, meta, domicilios);
     alvo.parentNode.insertBefore(div.firstElementChild, alvo);
   }
 
@@ -525,8 +493,12 @@
 #sigc-pro-lista-agenda-resumo .sp-titulo { color: #555; margin-bottom: .2rem; }
 #sigc-pro-lista-agenda-resumo .sp-zona-livre { display: inline-block; margin-right: .9rem; }
 #sigc-pro-lista-agenda-resumo .sp-falha { color: #a11; margin-top: .2rem; }
-td.sigc-pro-anotacao.sp-futura { font-weight: 700; color: #161; }
-td.sigc-pro-anotacao.sp-passada { color: #777; }
+#sigc-pro-lista-agenda-resumo .sp-domicilios { margin-top: .3rem; border-top: 1px solid #d0d7de; padding-top: .3rem; }
+#sigc-pro-lista-agenda-resumo .sp-domicilios ul { margin: 0; padding-left: 1.1rem; }
+#sigc-pro-lista-agenda-resumo .sp-domicilios li { margin: .1rem 0; }
+#sigc-pro-lista-agenda-resumo .sp-domicilios .sp-futura { font-weight: 700; color: #161; }
+#sigc-pro-lista-agenda-resumo .sp-domicilios .sp-passada { color: #777; }
+#sigc-pro-lista-agenda-resumo .sp-omitidos { color: #555; margin-top: .2rem; }
 `;
 
   function ensureStyle() {
