@@ -90,10 +90,15 @@
     return (r.reservado && enderecos && enderecos.get(enderecoKey(r))) || null;
   }
 
-  // The zona's ID alone ("29.3.03.03"), never the nome appended to it:
-  // the ID is what identifies the zona across SIGC and the coordination's
-  // own reporting, and the nome is often just the código repeated
-  // ("29001002 - 29001002"), so it only lengthens every label.
+  // The "ID Zona" column alone ("29OU7L" — UF code plus an opaque token),
+  // never with "Nome ZONA" appended: the ID is what identifies the zona
+  // across SIGC and the coordination's own reporting, so the nome only
+  // lengthens every label.
+  //
+  // Note these are the Lista de Endereços columns 18/19, NOT the dotted
+  // codes in a slot's own Zonas text ("29.3.03.03 29_Linus_Pituba") that
+  // agenda-slot-checks.js parses — different field, different format.
+  //
   // Every zona in SIGC has an ID, so there is no nome-only fallback: a
   // row reaching here without one has no zona columns filled at all
   // (see agenda-map.js — coordinates alone are enough for an entry).
