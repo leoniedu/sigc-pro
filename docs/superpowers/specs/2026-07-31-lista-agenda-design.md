@@ -347,14 +347,31 @@ would belong here is that the user is on the Lista de Endereços and does
 not want to leave it. A real justification, but a narrow one — worth
 confirming against use before building.
 
-## Known unknown
+## What is proven vs inferred
 
-No live `ObterSlots` response has been observed from the extension's
-context. Everything about that endpoint comes from
-`pns.zonas/R/sigc_agendamentos.R`, which is working code but runs from R
-with its own session handling.
+`ObterSlots` is not speculative. `pns.zonas/R/sigc_agendamentos.R` is
+working code written against real responses: the URL, the hand-built
+query string, the XHR/Referer headers, and the response's field names
+(`id`, `start`, `end`, `resourceId`, `status`, `backgroundColor`,
+`title`) are all observed facts, not guesses. The array-of-objects shape
+is likewise established.
 
-**Step one of implementation is confirming the response shape**, before
-building anything on top of it. If it surprises us, the Agenda half of
-this design shifts; the Último Movimento half does not, since that
-endpoint and parser are already proven inside this extension.
+Two things are **inferred** and want a single live response to confirm:
+
+1. **An open slot's `title` in JSON.** The open-vs-reserved test here
+   rests on an open slot's title carrying no `Controle:` line, and the
+   zona index rests on it carrying a `Zonas:` line. Both hold for the DOM
+   titles this extension already parses, and the R client parses the JSON
+   `title` as the same `"Label: value"` shape — but the JSON title of an
+   *open* slot specifically was never inspected. A sparser title, or a
+   different label, would break the zona index.
+2. **The F5 path from this context.** The R client hardcodes the
+   `f5-h-$$` segment; the extension derives it. `fetchViaGateway`'s
+   two-attempt strategy already exists for exactly this uncertainty, so
+   this is a check rather than a risk.
+
+**Step one of implementation:** log one `ObterSlots` response and read
+the title of an open slot. Minutes, not an investigation. If it
+surprises us, the Agenda half shifts; the Último Movimento half does
+not, since that endpoint and parser are already proven inside this
+extension.
