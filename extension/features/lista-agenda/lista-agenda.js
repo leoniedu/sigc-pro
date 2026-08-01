@@ -219,24 +219,6 @@
     ].join('\n');
   }
 
-  // Single-destination Google Maps link. Deliberately NOT reusing
-  // agenda-day-guide's gmapsRouteUrl: that builds multi-point routes
-  // with waypoints, and exporting a route-builder for a one-pin use
-  // would be a worse dependency than this line.
-  //
-  // Returns '' when either coordinate is missing, so callers render
-  // plain text — a dead link looks actionable and goes nowhere.
-  //
-  // URL built from parts to avoid triggering privacy gate (links in
-  // generated HTML are user-initiated navigation, not automatic requests).
-  function mapsUrl(lat, lon) {
-    if (lat == null || lon == null) return '';
-    const proto = String.fromCharCode(104, 116, 116, 112, 115) + ':' + String.fromCharCode(47, 47);
-    const host = ['www.google.com', '/maps/dir/?api=1&travelmode=driving'].join('');
-    return proto + host +
-      `&destination=${encodeURIComponent(`${lat},${lon}`)}`;
-  }
-
   // Per-household detail used to live in the on-page panel as an <ul>, but
   // 15-40 households made that panel an unwieldy wall of text. It is now a
   // sortable table inside a DOWNLOADED, SELF-CONTAINED HTML file instead
@@ -257,12 +239,8 @@
         ? `<span class="${classe}">${agendadoTxt}</span>`
         : agendadoTxt;
       const endereco = d.endereco || `Domicílio ${d.nDomicilio ?? ''}`.trim();
-      const url = mapsUrl(d.lat, d.lon);
-      const enderecoCell = url
-        ? `<a href="${e(url)}" target="_blank" rel="noopener">${e(endereco || '—')}</a>`
-        : e(endereco || '—');
       return '<tr>' +
-        `<td>${enderecoCell}</td>` +
+        `<td>${e(endereco || '—')}</td>` +
         `<td>${e(String(d.nDomicilio ?? '').trim() || '—')}</td>` +
         `<td data-sort="${e(d.agendado || '')}">${agendadoCell}</td>` +
         `<td>${e(d.situacao || '—')}</td>` +
@@ -502,7 +480,6 @@ ${buildDomiciliosTable(domicilios)}
   window.__sigcPro.listaAgenda = {
     parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml, annotateRow,
     buildDomiciliosTable, buildDomiciliosDocHtml, enderecoDomicilio, fetchLabel, nomeArquivoDomicilios, linhasSelecionadas,
-    mapsUrl,
   };
 
   // --- caches ---------------------------------------------------------
@@ -620,8 +597,6 @@ ${buildDomiciliosTable(domicilios)}
         ...a,
         endereco: enderecoDomicilio(r[cols.logradouro.index], r[cols.numero.index]),
         nDomicilio: String(r[cols.nDomicilio.index] ?? '').trim(),
-        lat: window.__sigcPro.parseCoord(r[cols.latitude.index]),
-        lon: window.__sigcPro.parseCoord(r[cols.longitude.index]),
       };
     });
 

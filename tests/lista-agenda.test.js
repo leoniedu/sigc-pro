@@ -540,17 +540,10 @@ describe('buildDomiciliosDocHtml', () => {
 
   // Self-contained: must open and work offline from a Downloads folder,
   // with no CDN/font/image reference of any kind.
-  test('the only external URLs are Google Maps links', () => {
+  test('the document is self-contained: no http(s) reference', () => {
     const html = buildDomiciliosDocHtml(meta, resumoHtml, domicilios);
-    // Links, not loaded resources: nothing is fetched when the file
-    // opens — clicking one is an explicit navigation. A CDN script or
-    // font import would still be a privacy regression, so the rule is
-    // tightened rather than dropped.
     expect(html).not.toContain('http://');
-    const externos = [...html.matchAll(/https:\/\/[^"'\s)]+/g)].map((m) => m[0]);
-    externos.forEach((u) => expect(u).toStartWith('https://www.google.com/maps'));
-    expect(html).not.toContain('<script src');
-    expect(html).not.toContain('@import');
+    expect(html).not.toContain('https://');
   });
 
   test('carries a single inline sort script, no external script tags', () => {
@@ -593,57 +586,5 @@ describe('nomeArquivoDomicilios', () => {
   test('keeps the exportFileBase prefix and the _agenda tag', () => {
     const nome = nomeArquivoDomicilios('lista-enderecos-cd_292740805060337_selecionados_2026-07-31', '093100');
     expect(nome).toBe('lista-enderecos-cd_292740805060337_selecionados_2026-07-31_agenda_093100.html');
-  });
-});
-
-const { mapsUrl } = window.__sigcPro.listaAgenda;
-
-describe('mapsUrl', () => {
-  test('builds a destination link from coordinates', () => {
-    const url = mapsUrl(-12.9, -38.5);
-    expect(url).toContain('google.com/maps');
-    expect(url).toContain('-12.9');
-    expect(url).toContain('-38.5');
-  });
-
-  // A dead link is worse than plain text: it looks actionable and goes
-  // nowhere useful.
-  test('returns empty string when either coordinate is missing', () => {
-    expect(mapsUrl(null, -38.5)).toBe('');
-    expect(mapsUrl(-12.9, null)).toBe('');
-    expect(mapsUrl(null, null)).toBe('');
-  });
-});
-
-describe('buildDomiciliosTable — maps link', () => {
-  const comCoord = [{
-    endereco: 'RUA DAS FLORES, 100', nDomicilio: '1',
-    lat: -12.9, lon: -38.5,
-    agendado: '', futura: false, situacao: '', transmissao: '',
-  }];
-  const semCoord = [{
-    endereco: 'RUA SEM COORDENADA, 5', nDomicilio: '2',
-    lat: null, lon: null,
-    agendado: '', futura: false, situacao: '', transmissao: '',
-  }];
-
-  test('links the address when coordinates are present', () => {
-    const html = buildDomiciliosTable(comCoord);
-    expect(html).toContain('<a href="https://www.google.com/maps');
-    expect(html).toContain('RUA DAS FLORES, 100');
-  });
-
-  test('renders plain text, never an anchor, without coordinates', () => {
-    const html = buildDomiciliosTable(semCoord);
-    expect(html).toContain('RUA SEM COORDENADA, 5');
-    expect(html).not.toContain('<a href');
-  });
-
-  test('escapes the address inside the link', () => {
-    const html = buildDomiciliosTable([{
-      ...comCoord[0], endereco: 'RUA <b>X</b> & CIA',
-    }]);
-    expect(html).not.toContain('<b>X</b>');
-    expect(html).toContain('&lt;b&gt;');
   });
 });
