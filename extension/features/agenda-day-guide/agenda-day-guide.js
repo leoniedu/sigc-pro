@@ -639,13 +639,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
   // one — it identifies the slot's area without naming the household.
   function buildDayGrid(groups, lab, enderecos) {
     const e = escapeHtml;
-    const toMin = (hhmm) => {
-      const m = /^(\d{1,2}):(\d{2})/.exec(hhmm || '');
-      return m ? Number(m[1]) * 60 + Number(m[2]) : null;
-    };
-    const fmtMin = (min) =>
-      `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
-    const starts = groups.flatMap((g) => g.rows.map((r) => toMin(r.horaInicio)))
+    const starts = groups.flatMap((g) => g.rows.map((r) => window.__sigcPro.toMin(r.horaInicio)))
       .filter((v) => v != null);
     if (!starts.length) return '';
     const marks = [];
@@ -655,7 +649,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     const body = marks.map((t) => {
       const cells = groups.map((g) => {
         const slots = g.rows.filter((r) => {
-          const s = toMin(r.horaInicio);
+          const s = window.__sigcPro.toMin(r.horaInicio);
           return s != null && s - (s % 30) === t;
         });
         if (!slots.length) return '<td class="sem-slot"></td>';
@@ -695,7 +689,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
         }).join('<br>');
         return `<td>${conteudo}</td>`;
       }).join('');
-      return `<tr><th>${fmtMin(t)}</th>${cells}</tr>`;
+      return `<tr><th>${window.__sigcPro.fmtMin(t)}</th>${cells}</tr>`;
     }).join('\n');
     const stats = groups.map((g) => computeStats(g.rows));
     const foot = [

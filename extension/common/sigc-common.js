@@ -323,6 +323,20 @@
     return String(zonas ?? '').split(',').map((s) => s.trim()).filter(Boolean);
   }
 
+  // "HH:MM" -> minutes since midnight, null when there is no parseable
+  // time. Callers branch on null, so an unparseable value must never
+  // collapse to 0 — midnight and "no time" are different. Shared because
+  // three features need it (agenda-slots-abertos, agenda-day-guide,
+  // lista-agenda) and the copies had already drifted apart in form.
+  function toMin(hhmm) {
+    const m = /^(\d{1,2}):(\d{2})/.exec(hhmm || '');
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  }
+
+  function fmtMin(min) {
+    return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+  }
+
   function isoToBr(iso) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
     return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso || '');
@@ -663,6 +677,8 @@
     onAgendaPage,
     findAgendaToolbarChunk,
     parseZonaEntries,
+    toMin,
+    fmtMin,
     parseAgendaSlotTitle,
     isoToBr,
     dateToIso,

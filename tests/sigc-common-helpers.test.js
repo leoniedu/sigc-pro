@@ -106,3 +106,38 @@ describe('parseAgendaSlotTitle', () => {
     expect(f['Telefone']).toBeUndefined();
   });
 });
+
+describe('toMin / fmtMin', () => {
+  test('parses HH:MM to minutes since midnight', () => {
+    expect(window.__sigcPro.toMin('00:00')).toBe(0);
+    expect(window.__sigcPro.toMin('09:30')).toBe(570);
+    expect(window.__sigcPro.toMin('23:59')).toBe(1439);
+  });
+
+  // A one-digit hour is what the agenda's own slot text emits.
+  test('accepts a one-digit hour', () => {
+    expect(window.__sigcPro.toMin('9:05')).toBe(545);
+  });
+
+  // Callers branch on null, so an unparseable value must not become 0 —
+  // midnight and "no time at all" are different things.
+  test('returns null when there is no parseable time', () => {
+    expect(window.__sigcPro.toMin('')).toBeNull();
+    expect(window.__sigcPro.toMin(null)).toBeNull();
+    expect(window.__sigcPro.toMin('LIVRE')).toBeNull();
+  });
+
+  test('ignores trailing text after the time', () => {
+    expect(window.__sigcPro.toMin('09:30 - 10:00')).toBe(570);
+  });
+
+  test('fmtMin renders zero-padded HH:MM', () => {
+    expect(window.__sigcPro.fmtMin(0)).toBe('00:00');
+    expect(window.__sigcPro.fmtMin(570)).toBe('09:30');
+    expect(window.__sigcPro.fmtMin(1439)).toBe('23:59');
+  });
+
+  test('fmtMin round-trips toMin', () => {
+    expect(window.__sigcPro.fmtMin(window.__sigcPro.toMin('14:45'))).toBe('14:45');
+  });
+});

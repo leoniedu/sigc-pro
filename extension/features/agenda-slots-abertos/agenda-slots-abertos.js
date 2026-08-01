@@ -46,16 +46,11 @@
   // cut the coordination's own turno reporting uses.
   const TARDE_FROM_MIN = 13 * 60;
 
-  function toMin(hhmm) {
-    const m = /^(\d{1,2}):(\d{2})/.exec(hhmm || '');
-    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
-  }
-
   // null when the row carries no parseable start time — such a row can't
   // be attributed to a turno and is excluded from the table rather than
   // guessed into one.
   function turnoOf(r) {
-    const min = toMin(r.horaInicio);
+    const min = window.__sigcPro.toMin(r.horaInicio);
     if (min == null) return null;
     return min < TARDE_FROM_MIN ? 'manha' : 'tarde';
   }
