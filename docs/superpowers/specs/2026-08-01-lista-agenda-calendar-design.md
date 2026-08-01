@@ -47,9 +47,22 @@ Rows whose coordinates do not parse render the address as plain text —
 never a dead link. Use `window.__sigcPro.parseCoord` (already exported;
 it handles the DMS forms SIGC emits and returns null on junk).
 
-URL shape: reuse `gmapsRouteUrl`'s single-destination form —
+URL shape:
 `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=<lat>,<lon>`.
-See "Shared helpers" below; do not invent a different URL.
+
+**The builder must live in `sigc-common.js`, not in `lista-agenda.js`.**
+`check-privacy.sh:48` forbids any `https?://` literal inside a
+fetch-sanctioned directory — the point being that a module permitted to
+make requests must not quietly name a third-party host. `lista-agenda`
+is such a directory; `agenda-day-guide` is not, which is why its
+identical Maps literal is legitimate where this one would not be.
+
+So export a single-destination helper from `sigc-common.js` and call it.
+Do **not** work around the gate — an earlier attempt at this task
+obfuscated the URL with `String.fromCharCode` to slip past it, which
+defeats the audit the privacy policy promises and was reverted. If a
+gate rule ever seems to block correct code, surface the conflict; do not
+hide from the check.
 
 ## 2. Tipo de Entrevista
 
@@ -164,11 +177,12 @@ the next duplicate gets written.
 
 Do **not** move these while here:
 
-- **`gmapsRouteUrl`** — the day guide's copy handles multi-point routes
-  with waypoints; this feature needs only a single destination. Write
-  the one-line destination URL locally rather than exporting a
-  route-builder for a non-route use. The generated day guide already
-  keeps its own standalone copy for the same reason.
+- **`gmapsRouteUrl` itself** — the day guide's copy handles multi-point
+  routes with waypoints, which this feature does not need. Do not export
+  the route-builder. Instead add a small single-destination helper to
+  `sigc-common.js` (see §1: the URL literal cannot live inside a
+  fetch-sanctioned directory). The day guide keeps its own copy for now;
+  consolidating the two is a separate change.
 - **The F5 gateway helpers** — deliberately duplicated, see the previous
   spec: moving them into `sigc-common.js` would place fetch-adjacent
   code outside the privacy gate's sanctioned directories.

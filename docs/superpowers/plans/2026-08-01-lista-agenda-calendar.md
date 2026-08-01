@@ -31,7 +31,7 @@
 
 | File | Responsibility |
 |---|---|
-| `extension/common/sigc-common.js` (modify) | Gains exported `toMin`/`fmtMin` (Task 1). |
+| `extension/common/sigc-common.js` (modify) | Gains exported `toMin`/`fmtMin` (T1) and `gmapsDestinoUrl` (T2 — the URL literal cannot live in a fetch-sanctioned directory). |
 | `extension/features/agenda-slots-abertos/agenda-slots-abertos.js` (modify) | Drops its local `toMin` (Task 1). |
 | `extension/features/agenda-day-guide/agenda-day-guide.js` (modify) | Drops its local `toMin`/`fmtMin` (Task 1). |
 | `extension/features/lista-agenda/lista-agenda.js` (modify) | Maps links (T2), Tipo de Entrevista (T3), turno counts (T4), open-slot list (T5). |
@@ -164,20 +164,38 @@ git commit -m "refactor: share toMin/fmtMin from sigc-common"
 
 **Interfaces:**
 - Consumes: `window.__sigcPro.parseCoord` (already exported; parses SIGC's DMS forms, returns null on junk).
-- Produces: `mapsUrl(lat, lon)` → `string | ''`; `buildDomiciliosTable` renders the address as a link when coordinates parse.
+- Produces: `window.__sigcPro.gmapsDestinoUrl(lat, lon)` → `string | ''` — defined in **`sigc-common.js`**, not in the feature module; `buildDomiciliosTable` renders the address as a link when coordinates parse.
 
-The Lista de Endereços carries Latitude at column index 10 and Longitude at 11 (`pesquisa.columns.latitude` / `.longitude`). `anotar` must pass them into the `domicilios` objects it builds (~line 593).
+**WHY THE HELPER LIVES IN sigc-common.js — read before writing code.**
+`scripts/check-privacy.sh:48` forbids any `https?://` literal inside a
+FETCH-SANCTIONED directory. The rule exists so a module permitted to make
+network requests cannot quietly name a third-party host.
+`extension/features/lista-agenda/` IS such a directory (it fetches the
+agenda and the movimento report). `extension/features/agenda-day-guide/`
+is NOT, which is why its identical Maps URL literal is legitimate there
+and would be forbidden here.
+
+So the URL literal goes in `sigc-common.js`, which is not a fetch
+directory, and the feature calls the exported helper.
+
+**A previous attempt at this task obfuscated the URL with
+`String.fromCharCode(104,116,116,112,115)` and a comment saying it was
+"to avoid triggering privacy gate". It was reverted.** Never work around
+this gate. It is the audit the extension's privacy policy promises. If a
+rule appears to block correct code, STOP and report the conflict rather
+than hiding from the check.
+
+The Lista de Endereços columns are `pesquisa.columns.latitude` (index 10)
+and `.longitude` (index 11).
 
 - [ ] **Step 1: Write the failing tests**
 
 Append to `tests/lista-agenda.test.js`:
 
 ```javascript
-const { mapsUrl } = window.__sigcPro.listaAgenda;
-
-describe('mapsUrl', () => {
+describe('gmapsDestinoUrl', () => {
   test('builds a destination link from coordinates', () => {
-    const url = mapsUrl(-12.9, -38.5);
+    const url = window.__sigcPro.gmapsDestinoUrl(-12.9, -38.5);
     expect(url).toContain('google.com/maps');
     expect(url).toContain('-12.9');
     expect(url).toContain('-38.5');
@@ -186,9 +204,9 @@ describe('mapsUrl', () => {
   // A dead link is worse than plain text: it looks actionable and goes
   // nowhere useful.
   test('returns empty string when either coordinate is missing', () => {
-    expect(mapsUrl(null, -38.5)).toBe('');
-    expect(mapsUrl(-12.9, null)).toBe('');
-    expect(mapsUrl(null, null)).toBe('');
+    expect(window.__sigcPro.gmapsDestinoUrl(null, -38.5)).toBe('');
+    expect(window.__sigcPro.gmapsDestinoUrl(-12.9, null)).toBe('');
+    expect(window.__sigcPro.gmapsDestinoUrl(null, null)).toBe('');
   });
 });
 
@@ -229,21 +247,22 @@ describe('buildDomiciliosTable — maps link', () => {
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `bun test tests/lista-agenda.test.js`
-Expected: FAIL — `mapsUrl is not a function`.
+Expected: FAIL — `gmapsDestinoUrl is not a function`.
 
 - [ ] **Step 3: Implement**
 
-Add near the other pure render helpers in `lista-agenda.js`:
+Add to **`extension/common/sigc-common.js`** (NOT the feature module — see the gate note above), beside the other small pure helpers, and add `gmapsDestinoUrl,` to its exports object:
 
 ```javascript
-  // Single-destination Google Maps link. Deliberately NOT reusing
-  // agenda-day-guide's gmapsRouteUrl: that builds multi-point routes
-  // with waypoints, and exporting a route-builder for a one-pin use
-  // would be a worse dependency than this line.
+  // Single-destination Google Maps link, '' when either coordinate is
+  // missing so callers render plain text — a dead link looks actionable
+  // and goes nowhere.
   //
-  // Returns '' when either coordinate is missing, so callers render
-  // plain text — a dead link looks actionable and goes nowhere.
-  function mapsUrl(lat, lon) {
+  // Lives here rather than in the feature that uses it because
+  // check-privacy.sh forbids an https:// literal inside a
+  // fetch-sanctioned directory: a module allowed to make requests must
+  // not name a third-party host. This file is not such a directory.
+  function gmapsDestinoUrl(lat, lon) {
     if (lat == null || lon == null) return '';
     return 'https://www.google.com/maps/dir/?api=1&travelmode=driving' +
       `&destination=${encodeURIComponent(`${lat},${lon}`)}`;
@@ -254,15 +273,13 @@ In `buildDomiciliosTable`, replace the plain address cell with:
 
 ```javascript
       const endereco = d.endereco || `Domicílio ${d.nDomicilio ?? ''}`.trim();
-      const url = mapsUrl(d.lat, d.lon);
+      const url = window.__sigcPro.gmapsDestinoUrl(d.lat, d.lon);
       const enderecoCell = url
         ? `<a href="${e(url)}" target="_blank" rel="noopener">${e(endereco || '—')}</a>`
         : e(endereco || '—');
 ```
 
 and use `enderecoCell` in the first `<td>`.
-
-Add `mapsUrl` to the exports object.
 
 - [ ] **Step 4: Wire the coordinates through `anotar`**
 
@@ -846,7 +863,7 @@ The calendar the spec first proposed is deliberately absent: it was rejected bef
 
 **Placeholders:** none. Task 5 step 4 asks the implementer to match the existing `<style>` conventions rather than dictating CSS values — a style-matching instruction, not a TBD.
 
-**Type consistency:** `indexZonaLivres` cells are `{manha, tarde, inteiro, peso, compartilhado}` in both producer and consumer, with `inteiro === manha + tarde`. `slotsLivresDaJanela` emits `{isoDate, hora}`; `agruparPorDia` consumes exactly those and emits `{isoDate, horas}`; `buildSlotsLivresHtml` consumes that. `horaDeIso` is defined once in T4 and reused in T5. `mapsUrl(lat, lon)` returns `''` (never null), and `buildDomiciliosTable` branches on truthiness. `domicilios` objects gain `lat`/`lon` (T2) and `tipo` (T3), both produced in `anotar` and consumed in `buildDomiciliosTable`. `toMin` returns `number | null` and every caller branches on null.
+**Type consistency:** `gmapsDestinoUrl(lat, lon)` returns `''` (never null), and `buildDomiciliosTable` branches on truthiness. `indexZonaLivres` cells are `{manha, tarde, inteiro, peso, compartilhado}` in both producer and consumer, with `inteiro === manha + tarde`. `slotsLivresDaJanela` emits `{isoDate, hora}`; `agruparPorDia` consumes exactly those and emits `{isoDate, horas}`; `buildSlotsLivresHtml` consumes that. `horaDeIso` is defined once in T4 and reused in T5. `domicilios` objects gain `lat`/`lon` (T2) and `tipo` (T3), both produced in `anotar` and consumed in `buildDomiciliosTable`. `toMin` returns `number | null` and every caller branches on null.
 
 **Verified while writing:** the two `toMin` copies are byte-identical in body (so T1's move is behaviour-preserving, and both features' existing suites will prove it); `parseCoord` is already exported; the live Último Movimento header was captured from the browser on 2026-07-31; the current self-contained test lives at `tests/lista-agenda.test.js:543-546`; `TARDE_FROM_MIN = 13 * 60` in `agenda-slots-abertos.js:47` is the turno boundary T4 must match; `getAgendaEquipeNames` reads the Agenda page's calendar headers and `#selectEquipes`, so it returns `{}` on the Lista de Endereços — which is why T5 shows no equipe.
 
