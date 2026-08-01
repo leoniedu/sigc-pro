@@ -1,4 +1,4 @@
-# Lista de Endereços agenda — maps, tipo de entrevista, calendar
+# Lista de Endereços agenda — maps, tipo de entrevista, turno counts
 
 Three additions to the AGENDA PRO export
 (`2026-07-31-lista-agenda-design.md`). None needs a new network request:
@@ -9,8 +9,26 @@ currently discarded.
    own Latitude/Longitude columns.
 2. **Tipo de Entrevista column** — already in the Último Movimento
    response, currently parsed past.
-3. **Calendar of the zona's slots** — from the same `ObterSlots`
-   response the free-slot counts already use.
+3. **Free slots per turno, next 2 weeks** — a refinement of the existing
+   free-slots line, from the `ObterSlots` response it already uses.
+
+## A calendar was designed and then rejected
+
+An earlier draft of this spec specified a day × half-hour grid of the
+zona's slots. It was dropped before implementation, for reasons worth
+recording so it is not proposed again:
+
+- **Occupied slots are already in the household table** below it in the
+  same file. Rendering them a second time is duplication, not context.
+- **The actual question is a count, not a grid**: "are there free slots,
+  per turno, in the next two weeks?" A 14-day grid is a large, mostly
+  empty artifact answering something you can read in one line.
+- **Multiple equipes share a zona**, so a day × time grid needs a third
+  axis (or anonymous stacking, which reads as duplicates). That cost
+  buys nothing once the question is a count.
+
+The turno breakdown below replaces it and needs no `end` field, no
+`resourceId`, and no new rendering machinery.
 
 ## 1. Google Maps link
 
@@ -49,65 +67,45 @@ Absent column ⇒ same treatment as the others: the household's value is
 signal so a layout change still surfaces to the user rather than
 silently emptying a column.
 
-## 3. Calendar
+## 3. Free slots per turno, next 2 weeks
 
-**One zona per Controle.** Confirmed by the user, and it removes the
-ambiguity the free-slots summary has to live with: the calendar shows
-*the* slots for these households, not a merge across zonas.
+The panel and the export already carry a free-slots line per zona, e.g.
+`29JDM8: 12 (3,0 ponderado)`. Two changes:
 
-The existing code collects zona IDs into a `Set` and sorts them. That is
-harmless with one element and is **not** to be restructured as part of
-this change.
+1. **Split it by turno** — Manhã (start before 13:00) and Tarde (13:00
+   on), the same cut `agenda-slots-abertos.js` uses (`TARDE_FROM_MIN =
+   13 * 60`). Reuse that boundary; do not restate the arithmetic, or the
+   two features will drift.
+2. **Bound it to the next 2 weeks** — from the prazo mínimo through
+   today + 14 days. The current figure counts the whole fetched year,
+   which overstates what is realistically bookable.
 
-### Range and filtering
+Rendered shape (Portuguese, matching the existing line's register):
 
-- **Range:** today → +14 days.
-- **Free slots** appear only from the prazo mínimo onward — +3 days, +4
-  on Fridays so the horizon clears the weekend. A free slot before the
-  cutoff cannot be filled, so showing it would advertise capacity that
-  does not exist.
-- **Filled slots appear across the whole range, including the next 3
-  days.** This asymmetry is deliberate: a filled slot is a real
-  appointment somebody must keep. Hiding it would make the coming days
-  look empty when they are the busiest.
+```
+Slots livres (a partir de 04/08, próximas 2 semanas) · dados de 09:31
+29JDM8 — Manhã: 7   Tarde: 5   Total: 12
+```
 
-Use `window.__sigcPro.agendaMinScheduleDate` for the cutoff — the same
-function Verificar Slots, Slots Abertos and the free-slot counts already
-call, so the four cannot drift apart.
+**The window must be stated**, since bounding it changes a number the
+user has been reading. A count that silently shrank would look like
+capacity disappearing.
 
-### Two states
-
-- **livre** — free and bookable now.
-- **preenchido** — filled; shows the household (Controle/Domicílio) so
-  the reader can see who holds it.
-
-No third "unbookable" state: those slots are omitted entirely, per the
-rule above.
-
-### Shape and placement
-
-A **days × half-hour-marks grid** in the downloaded file, placed **above
-the household table** — it is the booking-decision view; the table is
-the reference.
-
-Note the axis differs from `agenda-day-guide`'s `buildDayGrid`, which is
-one day × equipes. This is many days × time. The grid *logic* is
-therefore not reusable, but its half-hour-mark treatment is the
-established pattern and should be followed: slot starts do not
-necessarily align to :00/:30, so each slot lands in the mark containing
-its start and the cell shows the real start time.
+The weighted figure keeps its existing suppression rule: shown only
+where a zona's slots are shared, because elsewhere it merely repeats the
+whole count.
 
 ### Data
 
-No new fetch. `ObterSlots` already carries what is needed, but
-`parseSlots` currently keeps only `{start, isoDate, controle, domicilio,
-zonas, aberto}`. The calendar also needs **`end`**, to render a slot's
-time span.
+`indexZonaLivres` already counts free slots per zona with the prazo
+filter applied. It gains a turno split and an upper date bound. No new
+field at the parse boundary — `start` is already retained, and `end`,
+`resourceId` and the rest stay discarded.
 
-Retaining `end` is a one-field change at the parse boundary and carries
-nothing personal — it is a timestamp. The privacy narrowing rule is
-unchanged: name, sex, birth date, address and telephone are still
-discarded there and must never be retained.
+Note this deliberately does NOT distinguish equipes. Several teams may
+serve one zona, so a count aggregates across them — which is correct for
+"is there room?", the question being asked. Naming the team would only
+matter for a grid, which is not being built.
 
 ## Shared helpers — reduce duplication while here
 
@@ -117,9 +115,10 @@ would be the **third** copy.
 
 **Move it to `sigc-common.js` and export it**, updating both existing
 call sites. It is pure, trivially testable, and already proven identical
-in both copies. Its companion `fmtMin` (minutes back to "HH:MM") lives
-only in the day guide today; move it too if the calendar needs it, so
-the pair stays together.
+in both copies. Move its companion `fmtMin` (minutes back to "HH:MM",
+day guide only) alongside it so the pair stays together, even though the
+turno split needs only `toMin` — splitting them across two homes is how
+the next duplicate gets written.
 
 Do **not** move these while here:
 
@@ -141,11 +140,10 @@ Pure functions, following the existing pattern:
   coordinates.
 - Tipo de Entrevista: present in the index and the rendered table;
   absent column joins `colunasNaoEncontradas`.
-- Calendar: a free slot before the cutoff is omitted; a **filled** slot
-  before the cutoff is KEPT; the cutoff date itself counts as bookable;
-  slots outside the 14-day window are omitted; a slot whose start does
-  not align to :00/:30 lands in the containing mark with its real time
-  shown.
+- Turno counts: a slot starting before 13:00 counts as Manhã and 13:00
+  on as Tarde; the 13:00 boundary itself is Tarde; a free slot before
+  the prazo mínimo is excluded; the prazo date itself counts; a slot
+  beyond today + 14 days is excluded; Manhã + Tarde equals the total.
 - `toMin` after the move: covered in the common helpers test, and both
   existing features' suites still pass unchanged.
 

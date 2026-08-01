@@ -1,10 +1,12 @@
-# Maps Links, Tipo de Entrevista and Zona Calendar Implementation Plan
+# Maps Links, Tipo de Entrevista and Turno Counts Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add Google Maps links per domicílio, a Tipo de Entrevista column, and a two-week calendar of the zona's slots to the AGENDA PRO export — none of which needs a new network request.
+**Goal:** Add Google Maps links per domicílio, a Tipo de Entrevista column, and a per-turno free-slot count bounded to the next two weeks — none of which needs a new network request.
 
-**Architecture:** Three independent additions to `extension/features/lista-agenda/lista-agenda.js`, each a pure function feeding the existing downloaded-HTML builder. One shared-helper move (`toMin`/`fmtMin` → `sigc-common.js`) removes a duplication that would otherwise reach three copies.
+**Architecture:** Three independent additions to `extension/features/lista-agenda/lista-agenda.js`, each a pure function feeding the existing renderers. One shared-helper move (`toMin`/`fmtMin` → `sigc-common.js`) removes a duplication that would otherwise reach three copies.
+
+**A calendar was specified and rejected before implementation** — occupied slots are already in the household table, and the real question ("free slots per turno, next 2 weeks?") is a count, not a 14-day grid. See the spec.
 
 **Tech Stack:** Vanilla JS (IIFE modules, no build step), `bun test` + happy-dom, Chrome MV3 content scripts.
 
@@ -17,7 +19,7 @@
 - **Never push.** Commit only.
 - **Conventional commits**, subject under 72 chars, English.
 - **No new network request.** Every field in this plan comes from data already fetched or already on screen. Adding a `fetch(` anywhere is out of scope.
-- **The parse boundary still narrows.** `parseSlots` gains exactly one field (`end`). Name, sex, birth date, address and telephone stay discarded and must never be retained.
+- **The parse boundary is unchanged.** No new field is retained — `end` and `resourceId` stay discarded along with name, sex, birth date, address and telephone.
 - **Zero structural changes to the portal's table.** This feature reads it; it never writes to it.
 - **No new MutationObserver** in the feature module — the shared observer in `sigc-common.js` covers it.
 - **All interpolated values** go through `window.__sigcPro.escapeHtml`. The export is built by string concatenation and injected as a file.
@@ -32,11 +34,11 @@
 | `extension/common/sigc-common.js` (modify) | Gains exported `toMin`/`fmtMin` (Task 1). |
 | `extension/features/agenda-slots-abertos/agenda-slots-abertos.js` (modify) | Drops its local `toMin` (Task 1). |
 | `extension/features/agenda-day-guide/agenda-day-guide.js` (modify) | Drops its local `toMin`/`fmtMin` (Task 1). |
-| `extension/features/lista-agenda/lista-agenda.js` (modify) | Maps links (T2), Tipo de Entrevista (T3), calendar (T4-T5). |
+| `extension/features/lista-agenda/lista-agenda.js` (modify) | Maps links (T2), Tipo de Entrevista (T3), turno counts (T4). |
 | `tests/sigc-common-helpers.test.js` (modify) | Covers the moved helpers. |
-| `tests/lista-agenda.test.js` (modify) | Covers T2-T5. |
+| `tests/lista-agenda.test.js` (modify) | Covers T2-T4. |
 
-Tasks 2, 3 and 4/5 are independent of each other; all depend on Task 1 only for the calendar's time handling.
+Tasks 2, 3 and 4 are independent of each other; only Task 4 depends on Task 1 (for `toMin`).
 
 ---
 
@@ -406,103 +408,103 @@ git commit -m "feat: show tipo de entrevista per domicílio"
 
 ---
 
-### Task 4: Calendar data — retain `end`, select the window's slots
+### Task 4: Free slots per turno, bounded to the next 2 weeks
 
 **Files:**
 - Modify: `extension/features/lista-agenda/lista-agenda.js`
 - Test: `tests/lista-agenda.test.js`
 
 **Interfaces:**
-- Extends: `parseSlots` output gains `end`.
-- Produces: `slotsDaJanela(slots, zonaId, hojeIso, limiteIso, fimIso)` → `[{isoDate, horaInicio, horaFim, aberto, controle, domicilio}]`, sorted by date then start time.
+- Consumes: Task 1's `window.__sigcPro.toMin`.
+- Changes: `indexZonaLivres(slots, minDateIso, fimIso)` — gains an upper
+  date bound and splits its counts by turno. Cell shape becomes
+  `{ manha, tarde, inteiro, peso, compartilhado }` where `manha`/`tarde`
+  are whole counts and `inteiro` stays the total (`manha + tarde`).
+- `buildResumoHtml` renders the split and states the window.
 
-**THE CORE RULE — free and filled slots are filtered differently:**
-- A **free** slot appears only when `isoDate >= limiteIso` (the prazo mínimo). Before that it cannot be booked, so showing it advertises capacity that does not exist.
-- A **filled** slot appears across the whole window, including before the prazo. It is an appointment somebody must keep; hiding it would make the coming days look empty when they are the busiest.
-- Both are bounded by `isoDate <= fimIso` (today + 14 days) and `isoDate >= hojeIso`.
+**A calendar was specified here and rejected before implementation.**
+Occupied slots are already in the household table; the real question is
+"are there free slots, per turno, in the next 2 weeks?" — a count, not a
+14-day grid. See the spec's "A calendar was designed and then rejected".
+
+**Turno boundary:** before 13:00 is Manhã, 13:00 on is Tarde — the same
+cut `agenda-slots-abertos.js` uses (`TARDE_FROM_MIN = 13 * 60`). Do not
+restate the arithmetic differently or the two features drift.
 
 - [ ] **Step 1: Write the failing tests**
 
 Append to `tests/lista-agenda.test.js`:
 
 ```javascript
-const { slotsDaJanela } = window.__sigcPro.listaAgenda;
+describe('indexZonaLivres — turno split and 2-week window', () => {
+  const LIMITE = '2026-08-04';
+  const FIM = '2026-08-15';
+  const Z = '29JDM8 - 29.2.01.02 29_Linus_Lauro';
+  const aberto = (isoDate, hora) => parseSlots([slotJson({
+    start: `${isoDate}T${hora}:00`, title: `Zonas: ${Z}`,
+  })]);
 
-describe('parseSlots — end retained', () => {
-  test('keeps end alongside start', () => {
-    const [s] = parseSlots([slotJson({ end: '2026-08-10T09:30:00' })]);
-    expect(s.end).toBe('2026-08-10T09:30:00');
+  test('counts a morning slot as manha', () => {
+    const idx = indexZonaLivres(aberto('2026-08-10', '09:00'), LIMITE, FIM);
+    expect(idx.get('29JDM8').manha).toBe(1);
+    expect(idx.get('29JDM8').tarde).toBe(0);
   });
 
-  // The privacy narrowing is unchanged by adding a timestamp.
-  test('still discards personal data', () => {
-    const json = JSON.stringify(parseSlots([slotJson()]));
-    expect(json).not.toContain('RUA X');
-    expect(json).not.toContain('71 99999-0000');
+  // 13:00 itself is Tarde — the boundary must match Slots Abertos.
+  test('13:00 counts as tarde, 12:59 as manha', () => {
+    const t = indexZonaLivres(aberto('2026-08-10', '13:00'), LIMITE, FIM);
+    expect(t.get('29JDM8').tarde).toBe(1);
+    const m = indexZonaLivres(aberto('2026-08-10', '12:59'), LIMITE, FIM);
+    expect(m.get('29JDM8').manha).toBe(1);
+  });
+
+  test('manha plus tarde equals the total', () => {
+    const slots = [
+      ...aberto('2026-08-10', '09:00'), ...aberto('2026-08-10', '14:00'),
+      ...aberto('2026-08-11', '10:00'),
+    ];
+    const c = indexZonaLivres(slots, LIMITE, FIM).get('29JDM8');
+    expect(c.manha).toBe(2);
+    expect(c.tarde).toBe(1);
+    expect(c.inteiro).toBe(3);
+  });
+
+  test('excludes slots beyond the window end', () => {
+    expect(indexZonaLivres(aberto('2026-08-20', '09:00'), LIMITE, FIM).size).toBe(0);
+  });
+
+  test('excludes free slots before the prazo, keeps the prazo date itself', () => {
+    expect(indexZonaLivres(aberto('2026-08-02', '09:00'), LIMITE, FIM).size).toBe(0);
+    expect(indexZonaLivres(aberto(LIMITE, '09:00'), LIMITE, FIM).get('29JDM8').inteiro).toBe(1);
+  });
+
+  test('a slot with no readable time counts in neither turno', () => {
+    const semHora = parseSlots([slotJson({ start: '', title: `Zonas: ${Z}` })]);
+    expect(indexZonaLivres(semHora, LIMITE, FIM).size).toBe(0);
   });
 });
 
-describe('slotsDaJanela', () => {
-  const HOJE = '2026-08-01';
-  const LIMITE = '2026-08-04';   // prazo mínimo
-  const FIM = '2026-08-15';      // hoje + 14
+describe('buildResumoHtml — turno line', () => {
+  const livres = new Map([
+    ['29JDM8', { manha: 7, tarde: 5, inteiro: 12, peso: 12, compartilhado: false }],
+  ]);
+  const meta = { minDateBr: '04/08/2026', agendaEm: '09:31', movimentoEm: '09:31', falhas: [] };
 
-  const slot = (isoDate, hora, aberto) => parseSlots([slotJson({
-    start: `${isoDate}T${hora}:00`,
-    end: `${isoDate}T${hora}:00`,
-    title: aberto
-      ? 'Zonas: 29JDM8 - 29.2.01.02 29_Linus_Lauro'
-      : `Zonas: 29JDM8 - 29.2.01.02 29_Linus_Lauro\nControle: C1\nDomicílio: 1`,
-  })])[0];
-
-  test('a free slot before the prazo is omitted', () => {
-    const r = slotsDaJanela([slot('2026-08-02', '09:00', true)], '29JDM8', HOJE, LIMITE, FIM);
-    expect(r).toHaveLength(0);
+  test('shows manha, tarde and total', () => {
+    const html = buildResumoHtml(['29JDM8'], livres, meta, '');
+    expect(html).toContain('7');
+    expect(html).toContain('5');
+    expect(html).toContain('12');
+    expect(html).toMatch(/Manh/);
+    expect(html).toContain('Tarde');
   });
 
-  // The asymmetry: a booked visit in the next 3 days is real work that
-  // must stay visible.
-  test('a FILLED slot before the prazo is kept', () => {
-    const r = slotsDaJanela([slot('2026-08-02', '09:00', false)], '29JDM8', HOJE, LIMITE, FIM);
-    expect(r).toHaveLength(1);
-    expect(r[0].aberto).toBe(false);
-  });
-
-  test('a free slot on the prazo date itself is kept', () => {
-    const r = slotsDaJanela([slot(LIMITE, '09:00', true)], '29JDM8', HOJE, LIMITE, FIM);
-    expect(r).toHaveLength(1);
-  });
-
-  test('slots past the window end are omitted, free or filled', () => {
-    const r = slotsDaJanela([
-      slot('2026-08-20', '09:00', true), slot('2026-08-20', '10:00', false),
-    ], '29JDM8', HOJE, LIMITE, FIM);
-    expect(r).toHaveLength(0);
-  });
-
-  test('slots before today are omitted', () => {
-    const r = slotsDaJanela([slot('2026-07-20', '09:00', false)], '29JDM8', HOJE, LIMITE, FIM);
-    expect(r).toHaveLength(0);
-  });
-
-  test('only this zona\'s slots are included', () => {
-    const outra = parseSlots([slotJson({
-      start: '2026-08-10T09:00:00',
-      title: 'Zonas: 29ZZZZ - 29.9.09.09 29_Linus_Outra',
-    })])[0];
-    const r = slotsDaJanela([outra], '29JDM8', HOJE, LIMITE, FIM);
-    expect(r).toHaveLength(0);
-  });
-
-  test('sorted by date then start time', () => {
-    const r = slotsDaJanela([
-      slot('2026-08-10', '14:00', true),
-      slot('2026-08-05', '09:00', true),
-      slot('2026-08-10', '09:00', true),
-    ], '29JDM8', HOJE, LIMITE, FIM);
-    expect(r.map((s) => `${s.isoDate} ${s.horaInicio}`)).toEqual([
-      '2026-08-05 09:00', '2026-08-10 09:00', '2026-08-10 14:00',
-    ]);
+  // Bounding the count changes a number the user has been reading, so
+  // the window has to be stated or capacity looks like it vanished.
+  test('states the 2-week window', () => {
+    const html = buildResumoHtml(['29JDM8'], livres, meta, '');
+    expect(html).toContain('04/08/2026');
+    expect(html).toMatch(/2 semanas|duas semanas/);
   });
 });
 ```
@@ -510,233 +512,83 @@ describe('slotsDaJanela', () => {
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `bun test tests/lista-agenda.test.js`
-Expected: FAIL — `s.end` undefined and `slotsDaJanela is not a function`.
+Expected: FAIL — cells have no `manha`/`tarde`.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: Implement the turno split**
 
-In `parseSlots`, add `end: String((s && s.end) || ''),` to the returned object. Update its comment to note that `end` is a timestamp, so the narrowing rule is unchanged.
+In `indexZonaLivres`, add the `fimIso` parameter and the turno logic:
 
-Add:
+```javascript
+  // Manhã before 13:00, Tarde from 13:00 — the same cut Slots Abertos
+  // uses. Shared boundary, or the two features drift.
+  const TARDE_FROM_MIN = 13 * 60;
+
+  // minDateIso: earliest bookable date (prazo mínimo).
+  // fimIso: end of the 2-week horizon — a slot months out is not
+  // realistically bookable, and counting it overstated capacity.
+  function indexZonaLivres(slots, minDateIso, fimIso) {
+    const map = new Map();
+    slots.forEach((s) => {
+      if (!s.aberto) return;
+      if (s.isoDate && s.isoDate < minDateIso) return;
+      if (fimIso && s.isoDate && s.isoDate > fimIso) return;
+      const min = window.__sigcPro.toMin(horaDeIso(s.start));
+      if (min == null) return;
+      const turno = min < TARDE_FROM_MIN ? 'manha' : 'tarde';
+      const ids = new Set(
+        window.__sigcPro.parseZonaEntries(s.zonas).map(zonaIdOf).filter(Boolean));
+      if (ids.size === 0) return;
+      const peso = 1 / ids.size;
+      ids.forEach((id) => {
+        if (!map.has(id)) {
+          map.set(id, { manha: 0, tarde: 0, inteiro: 0, peso: 0, compartilhado: false });
+        }
+        const cell = map.get(id);
+        cell[turno] += 1;
+        cell.inteiro += 1;
+        cell.peso += peso;
+        if (ids.size > 1) cell.compartilhado = true;
+      });
+    });
+    return map;
+  }
+```
+
+Add the `horaDeIso` helper if not already present:
 
 ```javascript
   const horaDeIso = (iso) => String(iso || '').slice(11, 16);
-
-  // Free and filled slots are filtered DIFFERENTLY, deliberately:
-  // a free slot before the prazo mínimo cannot be booked, so showing it
-  // would advertise capacity that does not exist — but a FILLED slot in
-  // that same window is an appointment somebody must keep, and hiding it
-  // would make the coming days look empty when they are the busiest.
-  function slotsDaJanela(slots, zonaId, hojeIso, limiteIso, fimIso) {
-    return (slots || [])
-      .filter((s) => {
-        if (!s.isoDate || s.isoDate < hojeIso || s.isoDate > fimIso) return false;
-        if (s.aberto && s.isoDate < limiteIso) return false;
-        const ids = window.__sigcPro.parseZonaEntries(s.zonas).map(zonaIdOf);
-        return ids.includes(zonaId);
-      })
-      .map((s) => ({
-        isoDate: s.isoDate,
-        horaInicio: horaDeIso(s.start),
-        horaFim: horaDeIso(s.end),
-        aberto: s.aberto,
-        controle: s.controle,
-        domicilio: s.domicilio,
-      }))
-      .sort((a, b) => a.isoDate.localeCompare(b.isoDate) ||
-        a.horaInicio.localeCompare(b.horaInicio));
-  }
 ```
 
-Add `slotsDaJanela` to the exports object.
+- [ ] **Step 4: Render the split**
 
-- [ ] **Step 4: Run to verify it passes**
+In `buildResumoHtml`, change the per-zona cell from `${c.inteiro}` to a
+Manhã/Tarde/Total breakdown, and extend the title line to state the
+window. Keep the existing weighted-figure suppression (shown only when
+`compartilhado`) and the `livresIdx === null` "?" behaviour unchanged —
+both are load-bearing and separately tested.
 
-Run: `bun test tests/lista-agenda.test.js`
-Expected: PASS.
+Portuguese, matching the existing register, e.g.
+`Slots livres (a partir de ${minDateBr}, próximas 2 semanas)` and
+`<strong>29JDM8</strong> — Manhã: 7 Tarde: 5 Total: 12`.
 
-- [ ] **Step 5: Verify and commit**
+- [ ] **Step 5: Pass the window bound in `anotar`**
 
-```bash
-bun test
-bun build --no-bundle extension/features/lista-agenda/lista-agenda.js > /dev/null
-bash scripts/check-privacy.sh
-git add extension/features/lista-agenda/lista-agenda.js tests/lista-agenda.test.js
-git commit -m "feat: select the zona's bookable and booked slots"
-```
-
----
-
-### Task 5: Render the calendar into the export
-
-**Files:**
-- Modify: `extension/features/lista-agenda/lista-agenda.js`
-- Test: `tests/lista-agenda.test.js`
-
-**Interfaces:**
-- Consumes: Task 4's `slotsDaJanela` output, Task 1's `toMin`/`fmtMin`.
-- Produces: `buildCalendarioHtml(slots)` → HTML string; embedded by `buildDomiciliosDocHtml` **above** the household table.
-
-**Shape:** rows = half-hour marks, columns = days. Slot starts do not necessarily align to :00/:30, so each slot lands in the mark **containing** its start and the cell shows the real start time — the same treatment `agenda-day-guide`'s grid uses. Two states: **livre** and **preenchido** (showing Controle/Domicílio).
-
-- [ ] **Step 1: Write the failing tests**
-
-Append to `tests/lista-agenda.test.js`:
+`anotar` already computes `minDateIso`. Add the end of the horizon and
+pass it through:
 
 ```javascript
-const { buildCalendarioHtml } = window.__sigcPro.listaAgenda;
-
-describe('buildCalendarioHtml', () => {
-  const s = (isoDate, horaInicio, aberto, controle = '', domicilio = '') =>
-    ({ isoDate, horaInicio, horaFim: '', aberto, controle, domicilio });
-
-  test('renders a column per distinct day and a row per half-hour mark', () => {
-    const html = buildCalendarioHtml([
-      s('2026-08-05', '09:00', true), s('2026-08-06', '09:00', true),
-    ]);
-    expect(html).toContain('05/08');
-    expect(html).toContain('06/08');
-    expect(html).toContain('09:00');
-  });
-
-  test('marks free and filled slots distinguishably', () => {
-    const html = buildCalendarioHtml([
-      s('2026-08-05', '09:00', true),
-      s('2026-08-05', '10:00', false, 'C1', '1'),
-    ]);
-    expect(html).toContain('sp-cal-livre');
-    expect(html).toContain('sp-cal-cheio');
-  });
-
-  test('a filled slot names the household', () => {
-    const html = buildCalendarioHtml([s('2026-08-05', '10:00', false, 'C1', '7')]);
-    expect(html).toContain('C1');
-    expect(html).toContain('7');
-  });
-
-  // A 09:15 start belongs in the 09:00 mark but must show its real time,
-  // or the reader books the wrong slot.
-  test('an off-mark start lands in its containing mark, showing the real time', () => {
-    const html = buildCalendarioHtml([s('2026-08-05', '09:15', true)]);
-    expect(html).toContain('09:15');
-  });
-
-  test('says so when there is nothing to show', () => {
-    expect(buildCalendarioHtml([])).toContain('Nenhum slot');
-  });
-
-  test('escapes household text', () => {
-    const html = buildCalendarioHtml([
-      s('2026-08-05', '10:00', false, '<script>alert(1)</script>', '1'),
-    ]);
-    expect(html).not.toContain('<script>alert');
-    expect(html).toContain('&lt;script&gt;');
-  });
-});
-
-describe('buildDomiciliosDocHtml — calendar placement', () => {
-  test('the calendar precedes the household table', () => {
-    const html = buildDomiciliosDocHtml(
-      { controle: 'C1', quando: 'dados de 09:31' },
-      '<div class="sp-titulo">resumo</div>',
-      [{ endereco: 'R X, 1', nDomicilio: '1', lat: null, lon: null,
-         agendado: '', futura: false, situacao: '', transmissao: '', tipo: '' }],
-      buildCalendarioHtml([{ isoDate: '2026-08-05', horaInicio: '09:00',
-        horaFim: '', aberto: true, controle: '', domicilio: '' }])
-    );
-    expect(html.indexOf('sp-calendario')).toBeGreaterThan(-1);
-    expect(html.indexOf('sp-calendario')).toBeLessThan(html.indexOf('sp-tabela-domicilios'));
-  });
-});
-```
-
-- [ ] **Step 2: Run to verify it fails**
-
-Run: `bun test tests/lista-agenda.test.js`
-Expected: FAIL — `buildCalendarioHtml is not a function`.
-
-- [ ] **Step 3: Implement**
-
-```javascript
-  // Days × half-hour marks. Slot starts do not necessarily align to
-  // :00/:30, so each slot lands in the mark CONTAINING its start and the
-  // cell shows the real start time — the same treatment
-  // agenda-day-guide's grid uses, and for the same reason: a reader who
-  // sees only the mark books the wrong slot.
-  function buildCalendarioHtml(slots) {
-    const e = window.__sigcPro.escapeHtml;
-    const lista = slots || [];
-    if (lista.length === 0) {
-      return '<p class="sp-cal-vazio">Nenhum slot nesta zona no período.</p>';
-    }
-    const toMin = window.__sigcPro.toMin;
-    const fmtMin = window.__sigcPro.fmtMin;
-
-    const dias = [...new Set(lista.map((s) => s.isoDate))].sort();
-    const mins = lista.map((s) => toMin(s.horaInicio)).filter((v) => v != null);
-    const marks = [];
-    for (let t = Math.min(...mins) - (Math.min(...mins) % 30);
-      t <= Math.max(...mins); t += 30) marks.push(t);
-
-    const diaLabel = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
-    const head = `<tr><th>Hora</th>${dias
-      .map((d) => `<th>${e(diaLabel(d))}</th>`).join('')}</tr>`;
-
-    const corpo = marks.map((t) => {
-      const celulas = dias.map((d) => {
-        const noMark = lista.filter((s) => {
-          const m = toMin(s.horaInicio);
-          return s.isoDate === d && m != null && m - (m % 30) === t;
-        });
-        if (noMark.length === 0) return '<td class="sp-cal-vazia"></td>';
-        const conteudo = noMark.map((s) => {
-          const hora = `<span class="sp-cal-hora">${e(s.horaInicio)}</span>`;
-          if (s.aberto) return `${hora} <span class="sp-cal-livre">LIVRE</span>`;
-          const dom = s.domicilio ? ` / ${e(s.domicilio)}` : '';
-          return `${hora} <span class="sp-cal-cheio">${e(s.controle) || '—'}${dom}</span>`;
-        }).join('<br>');
-        return `<td>${conteudo}</td>`;
-      }).join('');
-      return `<tr><th>${e(fmtMin(t))}</th>${celulas}</tr>`;
-    }).join('\n');
-
-    return [
-      '<table class="sp-tabela" id="sp-calendario">',
-      head, corpo,
-      '</table>',
-    ].join('\n');
-  }
-```
-
-Add `buildCalendarioHtml` to the exports object.
-
-- [ ] **Step 4: Embed it in the document**
-
-Give `buildDomiciliosDocHtml` a `calendarioHtml` parameter and render it **between the resumo and the household table**, under a heading (e.g. `<h2>Agenda da zona (próximas 2 semanas)</h2>`). Add CSS for `.sp-cal-livre` (green, bold — matching the panel's `sp-livre`), `.sp-cal-cheio` (muted), `.sp-cal-vazia`, `.sp-cal-hora`, `.sp-cal-vazio`. Follow the existing `<style>` block's conventions.
-
-Give the household table the id `sp-tabela-domicilios` if it does not already have one, so the placement test can locate it.
-
-- [ ] **Step 5: Wire it in `anotar`**
-
-Compute the window and pass the rendered calendar through:
-
-```javascript
-    const hojeIso = window.__sigcPro.dateToIso(new Date());
     const fim = new Date();
     fim.setDate(fim.getDate() + 14);
     const fimIso = window.__sigcPro.dateToIso(fim);
-    // One zona per Controle, so the calendar is unambiguous — these are
-    // THE slots for these households.
-    const zonaId = zonaIds[0] || '';
-    const calendarioHtml = buildCalendarioHtml(
-      zonaId ? slotsDaJanela(slots, zonaId, hojeIso, minDateIso, fimIso) : []);
+    const livresIdx = ag ? indexZonaLivres(slots, minDateIso, fimIso) : null;
 ```
-
-`minDateIso` already exists in `anotar` (the prazo mínimo). Use the zona id list already computed for the resumo — take its first entry.
 
 - [ ] **Step 6: Run to verify it passes**
 
 Run: `bun test tests/lista-agenda.test.js`
-Expected: PASS.
+Expected: PASS. Existing `indexZonaLivres` tests may need their call
+updated to the new arity — update them, do NOT weaken their assertions.
 
 - [ ] **Step 7: Verify and commit**
 
@@ -745,7 +597,7 @@ bun test
 bun build --no-bundle extension/features/lista-agenda/lista-agenda.js > /dev/null
 bash scripts/check-privacy.sh
 git add extension/features/lista-agenda/lista-agenda.js tests/lista-agenda.test.js
-git commit -m "feat: add a two-week zona calendar to the agenda export"
+git commit -m "feat: split free slots by turno over a 2-week window"
 ```
 
 ---
@@ -764,7 +616,7 @@ Reload at `chrome://extensions`, open a Lista de Endereços, click **AGENDA PRO*
 
 - **Maps links:** addresses are clickable and open the right location; rows without coordinates are plain text, not dead links.
 - **Tipo de Entrevista:** the column populates. If every row shows `—`, check the panel for a `colunasNaoEncontradas` message — the live label may differ from `'Tipo de Entrevista'`.
-- **Calendar:** shows the coming two weeks; free slots start at the prazo mínimo (+3 days, +4 on Friday); **filled slots in the next 3 days are still visible**; off-mark starts (e.g. 09:15) show their real time.
+- **Turno counts:** the free-slots line shows Manhã/Tarde/Total and names the 2-week window. Sanity-check the split against the Agenda's own Semana view for the same zona — Manhã + Tarde must equal the total, and the total should be smaller than the old year-wide figure.
 
 - [ ] **Step 3: Check the still-open questions from the previous round**
 
@@ -779,10 +631,12 @@ If nothing needed fixing, note that instead of committing.
 
 ## Self-Review
 
-**Spec coverage:** maps link from existing lat/lon columns (T2), plain text without coordinates (T2), Tipo de Entrevista from the already-fetched response (T3), `colunasNaoEncontradas` on a missing Tipo column (T3), calendar with no new fetch (T4), `end` retained at the parse boundary (T4), today→+14 window (T4), free slots gated by the prazo (T4), **filled slots kept inside the prazo** (T4), single zona (T4/T5), two states (T5), half-hour marks with real start times (T5), placement above the table (T5), `toMin`/`fmtMin` shared (T1), `gmapsRouteUrl` and F5 helpers deliberately NOT shared (T2 comment), tightened self-contained assertion (T2). All covered.
+**Spec coverage:** maps link from existing lat/lon columns (T2), plain text without coordinates (T2), Tipo de Entrevista from the already-fetched response (T3), `colunasNaoEncontradas` on a missing Tipo column (T3), turno split at 13:00 matching Slots Abertos (T4), 2-week upper bound (T4), free slots still gated by the prazo (T4), window stated in the rendered line (T4), weighted-figure suppression and the `livresIdx === null` "?" behaviour preserved (T4), `toMin`/`fmtMin` shared (T1), `gmapsRouteUrl` and F5 helpers deliberately NOT shared (T2 comment), tightened self-contained assertion (T2). All covered.
+
+The calendar the spec first proposed is deliberately absent: it was rejected before implementation (occupied slots already appear in the household table; the question is a count, not a grid; and multiple equipes per zona would need a third axis). The spec records the reasoning so it is not re-proposed.
 
 **Placeholders:** none. Task 5 step 4 asks the implementer to match the existing `<style>` conventions rather than dictating CSS values — a style-matching instruction, not a TBD.
 
-**Type consistency:** `slotsDaJanela` emits `{isoDate, horaInicio, horaFim, aberto, controle, domicilio}`; `buildCalendarioHtml` consumes exactly those names. `mapsUrl(lat, lon)` returns `''` (never null), and `buildDomiciliosTable` branches on truthiness. `domicilios` objects gain `lat`/`lon` (T2) and `tipo` (T3), both produced in `anotar` and consumed in `buildDomiciliosTable`. `toMin` returns `number | null` and every caller branches on null.
+**Type consistency:** `indexZonaLivres` cells are `{manha, tarde, inteiro, peso, compartilhado}` in both producer and consumer, with `inteiro === manha + tarde`. `mapsUrl(lat, lon)` returns `''` (never null), and `buildDomiciliosTable` branches on truthiness. `domicilios` objects gain `lat`/`lon` (T2) and `tipo` (T3), both produced in `anotar` and consumed in `buildDomiciliosTable`. `toMin` returns `number | null` and every caller branches on null.
 
-**Verified while writing:** the two `toMin` copies are byte-identical in body (so T1's move is behaviour-preserving, and both features' existing suites will prove it); `parseCoord` is already exported; the live Último Movimento header was captured from the browser on 2026-07-31; the current self-contained test lives at `tests/lista-agenda.test.js:543-546`.
+**Verified while writing:** the two `toMin` copies are byte-identical in body (so T1's move is behaviour-preserving, and both features' existing suites will prove it); `parseCoord` is already exported; the live Último Movimento header was captured from the browser on 2026-07-31; the current self-contained test lives at `tests/lista-agenda.test.js:543-546`; `TARDE_FROM_MIN = 13 * 60` in `agenda-slots-abertos.js:47` is the turno boundary T4 must match.
