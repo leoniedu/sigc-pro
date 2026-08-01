@@ -6,7 +6,7 @@ await import('../extension/features/lista-agenda/lista-agenda.js');
 
 const {
   parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml,
-  buildDomiciliosTable, buildDomiciliosDocHtml, identificadorDomicilio, enderecoDomicilio,
+  buildDomiciliosTable, buildDomiciliosDocHtml, enderecoDomicilio, fetchLabel, nomeArquivoDomicilios,
 } = window.__sigcPro.listaAgenda;
 
 // A reserved slot's title carries every field; an open slot's title is
@@ -373,20 +373,6 @@ describe('annotateRow', () => {
   });
 });
 
-describe('identificadorDomicilio', () => {
-  test('combines logradouro, número and domicílio number', () => {
-    expect(identificadorDomicilio('RUA X', '237', '1')).toBe('RUA X, Nº 237 (dom. 1)');
-  });
-
-  test('falls back to a domicílio label when logradouro/número are empty', () => {
-    expect(identificadorDomicilio('', '', '2')).toBe('Domicílio 2 (dom. 2)');
-  });
-
-  test('tolerates missing values', () => {
-    expect(identificadorDomicilio(undefined, null, undefined)).toBe('Domicílio  (dom. )');
-  });
-});
-
 describe('enderecoDomicilio', () => {
   test('combines logradouro and número', () => {
     expect(enderecoDomicilio('RUA X', '237')).toBe('RUA X, Nº 237');
@@ -528,5 +514,41 @@ describe('buildDomiciliosDocHtml', () => {
     const html = buildDomiciliosDocHtml(meta, resumoHtml, domicilios);
     expect((html.match(/<script/g) || []).length).toBe(1);
     expect(html).not.toMatch(/<script[^>]+src=/);
+  });
+});
+
+describe('fetchLabel', () => {
+  // The panel shows the fetch time specifically because a stale count
+  // causes a real double-booking — a cache hit (up to 5 min old) must not
+  // read identically to a just-fetched value.
+  test('a fresh fetch shows only the time, no cache marker', () => {
+    const em = new Date('2026-07-31T09:31:00').getTime();
+    const label = fetchLabel(em, false);
+    expect(label).not.toContain('cache');
+    expect(label).toContain('09:31');
+  });
+
+  test('a cache hit is marked distinctly from a fresh fetch', () => {
+    const em = new Date('2026-07-31T09:31:00').getTime();
+    const cached = fetchLabel(em, true);
+    expect(cached).not.toBe(fetchLabel(em, false));
+    expect(cached).toContain('cache');
+    expect(cached).toContain('09:31');
+  });
+});
+
+describe('nomeArquivoDomicilios', () => {
+  // Repeat exports in one page life must not collide: consentGiven
+  // latches, so a second click re-downloads with no other change to the
+  // filename unless the time component makes it unique.
+  test('appends the time so repeat exports get distinct names', () => {
+    const a = nomeArquivoDomicilios('lista-enderecos-cd_292740805060337_selecionados_2026-07-31', '093100');
+    const b = nomeArquivoDomicilios('lista-enderecos-cd_292740805060337_selecionados_2026-07-31', '094512');
+    expect(a).not.toBe(b);
+  });
+
+  test('keeps the exportFileBase prefix and the _agenda tag', () => {
+    const nome = nomeArquivoDomicilios('lista-enderecos-cd_292740805060337_selecionados_2026-07-31', '093100');
+    expect(nome).toBe('lista-enderecos-cd_292740805060337_selecionados_2026-07-31_agenda_093100.html');
   });
 });

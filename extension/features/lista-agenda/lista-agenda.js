@@ -1,7 +1,10 @@
-// SIGC-PRO feature: annotates the Lista de Endereços (selecionados view)
-// with data the page itself does not carry — each household's scheduled
-// interview and collection status, plus how many slots remain bookable
-// in its zonas.
+// SIGC-PRO feature: on the Lista de Endereços (selecionados view), consults
+// the agenda and the último movimento of the current Controle — data the
+// page itself does not carry — and downloads a self-contained HTML file
+// with a sortable per-household table (scheduled interview, collection
+// status). The on-page panel itself only shows a free-slots-per-zona
+// summary and points at the downloaded file; it does not annotate the
+// portal's own table.
 //
 // Two sources, both same-origin and behind one click+confirm:
 //   Agenda          GET  AdministracaoAgenda/ObterSlots  (JSON)
@@ -351,18 +354,9 @@ ${buildDomiciliosTable(domicilios)}
 `;
   }
 
-  // Human-readable household identifier: logradouro + número, with the
-  // domicílio number appended to disambiguate multiple households at one
-  // address. A bare Controle carries no meaning to a reader of this panel.
-  function identificadorDomicilio(logradouro, numero, nDomicilio) {
-    const end = [logradouro, numero].map((s) => String(s ?? '').trim()).filter(Boolean).join(', Nº ');
-    const base = end || `Domicílio ${String(nDomicilio ?? '').trim()}`;
-    return `${base} (dom. ${String(nDomicilio ?? '').trim()})`;
-  }
-
-  // Bare "logradouro, Nº número" for the table's Endereço column, WITHOUT
-  // the trailing "(dom. N)" identificadorDomicilio appends — that number
-  // gets its own Domicílio column in the table instead of being folded in.
+  // "logradouro, Nº número" for the table's Endereço column. The domicílio
+  // number gets its own Domicílio column in the table rather than being
+  // folded in here.
   function enderecoDomicilio(logradouro, numero) {
     return [logradouro, numero].map((s) => String(s ?? '').trim()).filter(Boolean).join(', Nº ');
   }
@@ -473,7 +467,7 @@ ${buildDomiciliosTable(domicilios)}
 
   window.__sigcPro.listaAgenda = {
     parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml, annotateRow,
-    buildDomiciliosTable, buildDomiciliosDocHtml, identificadorDomicilio, enderecoDomicilio,
+    buildDomiciliosTable, buildDomiciliosDocHtml, enderecoDomicilio, fetchLabel, nomeArquivoDomicilios,
   };
 
   // --- caches ---------------------------------------------------------
@@ -486,15 +480,24 @@ ${buildDomiciliosTable(domicilios)}
 
   function doCache(cache, chave, produzir) {
     const hit = cache.get(chave);
-    if (hit && Date.now() - hit.em < TTL_MS) return Promise.resolve(hit);
+    if (hit && Date.now() - hit.em < TTL_MS) return Promise.resolve({ ...hit, cache: true });
     return produzir().then((dados) => {
       const entrada = { dados, em: Date.now() };
       cache.set(chave, entrada);
-      return entrada;
+      return { ...entrada, cache: false };
     });
   }
 
   const horaDe = (ms) => new Date(ms).toTimeString().slice(0, 5);
+
+  // A cache hit and a fresh fetch must not look the same: the panel shows
+  // the fetch time specifically because a stale count causes a real
+  // double-booking, so the one case that IS knowably stale (served from
+  // the in-memory cache, up to TTL_MS old) has to say so rather than just
+  // naming the clock time as if it had just been fetched.
+  function fetchLabel(em, cache) {
+    return cache ? `${horaDe(em)} (em cache)` : horaDe(em);
+  }
 
   // --- render ---------------------------------------------------------
   let consentGiven = false;
@@ -504,6 +507,15 @@ ${buildDomiciliosTable(domicilios)}
     'IBGE. Continuar?';
 
   async function anotar(btn) {
+    // The button is always present but only truly usable on the
+    // all-selecionados view (see noSelecionados). Its disabled/title state
+    // is refreshed on a best-effort basis (build time + table mutations),
+    // so this is the authoritative check: it runs at the moment of the
+    // click, against whatever the table looks like right now.
+    if (noSelecionados.disabledReason()) {
+      alert(`SIGC-PRO: ${noSelecionados.disabledReason()}`);
+      return;
+    }
     if (!consentGiven) {
       if (!confirm(CONSENT_MSG)) return;
       consentGiven = true;
@@ -578,8 +590,8 @@ ${buildDomiciliosTable(domicilios)}
 
     const meta = {
       minDateBr: window.__sigcPro.isoToBr(minDateIso),
-      agendaEm: ag ? horaDe(ag.em) : '—',
-      movimentoEm: mv ? horaDe(mv.em) : '—',
+      agendaEm: ag ? fetchLabel(ag.em, ag.cache) : '—',
+      movimentoEm: mv ? fetchLabel(mv.em, mv.cache) : '—',
       falhas,
     };
     const arquivo = baixarTabelaDomicilios(controle, meta, pesquisa, tabela.rows, domicilios, livresIdx);
@@ -599,10 +611,20 @@ ${buildDomiciliosTable(domicilios)}
   // — the same base every other Lista de Endereços export uses — with an
   // "_agenda" tag added so this file (agenda/movimento annotations) is
   // never confused with the plain CSV/KML/PDF exports of the same table.
+  //
+  // The time (HHMMSS) is appended too, not just the date: consentGiven
+  // latches after the first click, so every later export in the same page
+  // life re-downloads under what would otherwise be the identical name —
+  // Chrome then silently appends "(1)", "(2)"… with no way to tell which
+  // file is which. A time-distinct name makes repeat exports self-naming.
+  function nomeArquivoDomicilios(base, hora) {
+    return `${base}_agenda_${hora}.html`;
+  }
+
   function baixarTabelaDomicilios(controle, meta, pesquisa, rows, domicilios, livresIdx) {
     const base = window.__sigcPro.exportFileBase(pesquisa, rows);
-    const arquivo = `${base}_agenda.html`;
     const { data, hora } = window.__sigcPro.timestampSlug();
+    const arquivo = nomeArquivoDomicilios(base, hora);
     const quando = meta.agendaEm === meta.movimentoEm
       ? `dados de ${meta.agendaEm}`
       : `agenda de ${meta.agendaEm}, movimento de ${meta.movimentoEm}`;
@@ -663,21 +685,64 @@ ${buildDomiciliosTable(domicilios)}
     return tabela.rows.every((r) => /^sim$/i.test(String(r[i] || '').trim()));
   }
 
+  // Explains why the button cannot be used right now, or '' when it can.
+  // Used both for the disabled tooltip and as anotar's click-time guard —
+  // one predicate, so the tooltip's promise and the click's behavior can
+  // never drift apart.
+  noSelecionados.disabledReason = function () {
+    return noSelecionados() ? '' :
+      'esta consulta só funciona na visão só-selecionados. Filtre o ' +
+      'relatório por Selecionado = Sim e tente novamente.';
+  };
+
+  // Reflects the current table onto the button's disabled/title state.
+  // Called at build time and on every table mutation (see observer below)
+  // — the button element itself is built exactly once by mountWidget, but
+  // the table's content (filter/page) changes after that, so nothing else
+  // would ever revisit this element.
+  function refreshBotaoEstado(btn) {
+    const motivo = noSelecionados.disabledReason();
+    btn.disabled = !!motivo;
+    btn.title = motivo
+      ? `SIGC-PRO: ${motivo}`
+      : 'Consulta a agenda e o último movimento deste Controle (mediante ' +
+        'confirmação) e baixa uma tabela por domicílio (SIGC-PRO)';
+  }
+
   window.__sigcPro.mountWidget({
     id: 'sigc-pro-lista-agenda-button',
     // dtToolbar() is the ".dt-buttons" bar, the same anchor csv-export
     // uses. onListaEnderecos is a direct __sigcPro export, NOT on ctx.
     anchor: (ctx) => ctx.dtToolbar(),
-    when: () => window.__sigcPro.onListaEnderecos() && noSelecionados(),
+    // Always present on the Lista de Endereços — DISABLED (not absent)
+    // when the table isn't all-selecionados. Absence read as a broken
+    // install next to PDF-PRO/KML-PRO/CSV-PRO, which are always there;
+    // mountWidget's `when` has no disabled concept, so the enabled/
+    // disabled state is handled separately (refreshBotaoEstado), not here.
+    when: () => window.__sigcPro.onListaEnderecos(),
     build: () => {
       ensureStyle();
       console.log(`${TAG} Agenda button added.`);
-      return window.__sigcPro.makeDtProButton({
+      const btn = window.__sigcPro.makeDtProButton({
         id: 'sigc-pro-lista-agenda-button',
         lines: ['AGENDA', 'PRO'],
-        title: 'Anotar agendamento e situação de cada domicílio (SIGC-PRO)',
+        title: '',
         onClick: (e) => anotar(e.currentTarget),
       });
+      refreshBotaoEstado(btn);
+      // mountWidget builds this element exactly once and otherwise only
+      // inserts/removes it; nothing else re-visits it as the user filters
+      // or pages the table. Piggyback on the DOM mutations that a
+      // filter/page change itself produces, scoped to the table wrapper
+      // so unrelated page mutations don't cost a re-check. anotar()
+      // re-checks at click time regardless, so this is a display
+      // refresh, not the source of truth.
+      const wrapper = document.querySelector('.dataTables_wrapper');
+      if (wrapper) {
+        new MutationObserver(() => refreshBotaoEstado(btn))
+          .observe(wrapper, { childList: true, subtree: true, characterData: true });
+      }
+      return btn;
     },
   });
 })();
