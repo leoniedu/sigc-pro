@@ -1,4 +1,4 @@
-# Lista de Endereços agenda — maps, tipo de entrevista, turno counts
+# Lista de Endereços agenda — maps, tipo de entrevista, free slots
 
 Three additions to the AGENDA PRO export
 (`2026-07-31-lista-agenda-design.md`). None needs a new network request:
@@ -9,8 +9,9 @@ currently discarded.
    own Latitude/Longitude columns.
 2. **Tipo de Entrevista column** — already in the Último Movimento
    response, currently parsed past.
-3. **Free slots per turno, next 2 weeks** — a refinement of the existing
-   free-slots line, from the `ObterSlots` response it already uses.
+3. **Free slots for the next 2 weeks** — per-turno counts as the
+   headline, with the individual open slots listed beneath, from the
+   `ObterSlots` response the existing free-slots line already uses.
 
 ## A calendar was designed and then rejected
 
@@ -27,8 +28,11 @@ recording so it is not proposed again:
   axis (or anonymous stacking, which reads as duplicates). That cost
   buys nothing once the question is a count.
 
-The turno breakdown below replaces it and needs no `end` field, no
-`resourceId`, and no new rendering machinery.
+What replaces it — turno counts plus a list of the OPEN slots grouped by
+day — keeps the useful half. The distinction that matters: a list of
+bookable slots is what you read to pick one, where a grid of every slot
+mostly re-renders the household table. It needs no `end` field and no
+`resourceId`.
 
 ## 1. Google Maps link
 
@@ -67,7 +71,7 @@ Absent column ⇒ same treatment as the others: the household's value is
 signal so a layout change still surfaces to the user rather than
 silently emptying a column.
 
-## 3. Free slots per turno, next 2 weeks
+## 3. Free slots for the next 2 weeks
 
 The panel and the export already carry a free-slots line per zona, e.g.
 `29JDM8: 12 (3,0 ponderado)`. Two changes:
@@ -95,17 +99,55 @@ The weighted figure keeps its existing suppression rule: shown only
 where a zona's slots are shared, because elsewhere it merely repeats the
 whole count.
 
+### The slots themselves, listed under the summary
+
+The turno counts answer "is there room?". The list answers "when?" — and
+the two belong together, the counts as the headline and the slots as the
+detail.
+
+**Only OPEN slots appear.** Filled ones are already in the household
+table below; listing them again is the duplication that sank the
+calendar.
+
+Grouped by day, times beneath each date — it scans naturally for "when
+this week?" and a fortnight stays a short block rather than a wall:
+
+```
+Slots livres (a partir de 04/08, próximas 2 semanas) · dados de 09:31
+29JDM8 — Manhã: 7   Tarde: 5   Total: 12
+
+ter 04/08   09:00  09:30  14:00
+qua 05/08   08:30  09:00
+sex 07/08   13:30
+```
+
+Same window and same filter as the counts, from the same
+`slotsLivresDaJanela` selection — the summary must never disagree with
+the list beneath it. Both are derived from one function, not two.
+
+### Equipes are deliberately not shown
+
+Several teams can serve one zona, and `resourceId` identifies them in
+the response — but it is a uuid, and the only place it resolves to a
+readable name is the Agenda page's own calendar headers and
+`#selectEquipes`, **neither of which exists on the Lista de Endereços**.
+`getAgendaEquipeNames` returns `{}` there.
+
+So `resourceId` stays discarded and the parse boundary is unchanged.
+
+The consequence, accepted deliberately: two teams free at the same
+date and time render as two identical lines. That reads as a duplicate
+but is not one — two lines mean two bookable slots, and the count above
+agrees. With one zona per Controle over a fortnight this is rare, and
+showing a uuid to disambiguate it would cost every reader clarity to
+serve an uncommon case.
+
 ### Data
 
 `indexZonaLivres` already counts free slots per zona with the prazo
 filter applied. It gains a turno split and an upper date bound. No new
 field at the parse boundary — `start` is already retained, and `end`,
 `resourceId` and the rest stay discarded.
-
-Note this deliberately does NOT distinguish equipes. Several teams may
-serve one zona, so a count aggregates across them — which is correct for
-"is there room?", the question being asked. Naming the team would only
-matter for a grid, which is not being built.
 
 ## Shared helpers — reduce duplication while here
 
@@ -144,6 +186,11 @@ Pure functions, following the existing pattern:
   on as Tarde; the 13:00 boundary itself is Tarde; a free slot before
   the prazo mínimo is excluded; the prazo date itself counts; a slot
   beyond today + 14 days is excluded; Manhã + Tarde equals the total.
+- Slot list: only open slots appear (a filled one in the window is
+  excluded); slots group under their date in chronological order, times
+  ascending within a day; a day with no open slots renders no heading;
+  the listed slot count equals the summary's total, since both derive
+  from one selection.
 - `toMin` after the move: covered in the common helpers test, and both
   existing features' suites still pass unchanged.
 
