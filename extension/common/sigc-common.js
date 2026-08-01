@@ -265,6 +265,20 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  // Single-destination Google Maps link, '' when either coordinate is
+  // missing so callers render plain text — a dead link looks actionable
+  // and goes nowhere.
+  //
+  // Lives here rather than in the feature that uses it because
+  // check-privacy.sh forbids an https:// literal inside a
+  // fetch-sanctioned directory: a module allowed to make requests must
+  // not name a third-party host. This file is not such a directory.
+  function gmapsDestinoUrl(lat, lon) {
+    if (lat == null || lon == null) return '';
+    return 'https://www.google.com/maps/dir/?api=1&travelmode=driving' +
+      `&destination=${encodeURIComponent(`${lat},${lon}`)}`;
+  }
+
   // --- Agenda (AdministracaoAgenda) shared reading -------------------
   // Used by both agenda-csv-export and agenda-slot-checks, which both
   // need "every slot in the currently rendered calendar, parsed" — kept
@@ -668,6 +682,7 @@
     getTableRows,
     exportFileBase,
     parseCoord,
+    gmapsDestinoUrl,
     escapeHtml,
     buildCsv,
     downloadFile,

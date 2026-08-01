@@ -239,8 +239,12 @@
         ? `<span class="${classe}">${agendadoTxt}</span>`
         : agendadoTxt;
       const endereco = d.endereco || `Domicílio ${d.nDomicilio ?? ''}`.trim();
+      const url = window.__sigcPro.gmapsDestinoUrl(d.lat, d.lon);
+      const enderecoCell = url
+        ? `<a href="${e(url)}" target="_blank" rel="noopener">${e(endereco || '—')}</a>`
+        : e(endereco || '—');
       return '<tr>' +
-        `<td>${e(endereco || '—')}</td>` +
+        `<td>${enderecoCell}</td>` +
         `<td>${e(String(d.nDomicilio ?? '').trim() || '—')}</td>` +
         `<td data-sort="${e(d.agendado || '')}">${agendadoCell}</td>` +
         `<td>${e(d.situacao || '—')}</td>` +
@@ -597,6 +601,8 @@ ${buildDomiciliosTable(domicilios)}
         ...a,
         endereco: enderecoDomicilio(r[cols.logradouro.index], r[cols.numero.index]),
         nDomicilio: String(r[cols.nDomicilio.index] ?? '').trim(),
+        lat: window.__sigcPro.parseCoord(r[cols.latitude.index]),
+        lon: window.__sigcPro.parseCoord(r[cols.longitude.index]),
       };
     });
 
