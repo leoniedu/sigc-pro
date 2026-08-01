@@ -676,7 +676,11 @@ ${buildDomiciliosTable(domicilios)}
   // Selecionados view only — a correctness requirement, not a
   // preference: zona columns are populated only for selecionado
   // households, so on the completos view the zona index would silently
-  // under-count (see agenda-map.js).
+  // under-count (see agenda-map.js). Authoritative version, used by
+  // anotar()'s click-time guard: goes through getTableRows so the same
+  // header-layout validation every other read of this table gets applies
+  // here too. Click frequency is low, so its cost (reads and HTML-strips
+  // every cell of every column, all pages, via readDataTable) is fine here.
   function noSelecionados() {
     const pesquisa = window.__sigcPro.detectPesquisa();
     const tabela = pesquisa && window.__sigcPro.getTableRows(pesquisa);
@@ -685,23 +689,65 @@ ${buildDomiciliosTable(domicilios)}
     return tabela.rows.every((r) => /^sim$/i.test(String(r[i] || '').trim()));
   }
 
+  // Cheap version for the disabled-state DISPLAY, re-run on every shared-
+  // observer tick (see `when` below) — i.e. on every DOM mutation of the
+  // whole page, not just clicks. getTableRows/readDataTable would read and
+  // HTML-strip every cell of every column across all pages on each of
+  // those ticks, which is real cost on a large table. This instead reads
+  // ONLY the Selecionado column via the DataTables API's column-scoped
+  // accessor, and short-circuits on the first non-Sim cell instead of
+  // materializing the whole column. Not the authoritative check — anotar()
+  // still re-validates via noSelecionados() at click time — so it can
+  // afford to skip the header-label validation getTableRows does.
+  function noSelecionadosRapido() {
+    const pesquisa = window.__sigcPro.detectPesquisa();
+    const table = pesquisa && window.__sigcPro.getDataTable();
+    if (!table) return false;
+    const i = pesquisa.columns.selecionado.index;
+    const valores = table.column(i).data();
+    if (valores.length === 0) return false;
+    for (let k = 0; k < valores.length; k += 1) {
+      if (!/^sim$/i.test(window.__sigcPro.cellText(valores[k]))) return false;
+    }
+    return true;
+  }
+
+  const SELECIONADOS_HINT =
+    'esta consulta só funciona na visão só-selecionados. Filtre o ' +
+    'relatório por Selecionado = Sim e tente novamente.';
+
   // Explains why the button cannot be used right now, or '' when it can.
-  // Used both for the disabled tooltip and as anotar's click-time guard —
-  // one predicate, so the tooltip's promise and the click's behavior can
-  // never drift apart.
+  // Used as anotar's click-time guard: the authoritative check, run once
+  // per click, so its cost (goes through getTableRows/readDataTable — see
+  // noSelecionados above) does not matter.
   noSelecionados.disabledReason = function () {
-    return noSelecionados() ? '' :
-      'esta consulta só funciona na visão só-selecionados. Filtre o ' +
-      'relatório por Selecionado = Sim e tente novamente.';
+    return noSelecionados() ? '' : SELECIONADOS_HINT;
+  };
+
+  // Same explanation, backed by the cheap check — used for the per-tick
+  // DISPLAY refresh below. Two predicates, one shared hint string, so the
+  // tooltip text can't drift between the fast and authoritative paths.
+  noSelecionadosRapido.disabledReason = function () {
+    return noSelecionadosRapido() ? '' : SELECIONADOS_HINT;
   };
 
   // Reflects the current table onto the button's disabled/title state.
-  // Called at build time and on every table mutation (see observer below)
-  // — the button element itself is built exactly once by mountWidget, but
-  // the table's content (filter/page) changes after that, so nothing else
-  // would ever revisit this element.
+  // Called from `build` (first paint) and from `when` on every shared-
+  // observer tick (see mountWidget below) — the button element itself is
+  // built exactly once by mountWidget, but the table's content (filter/
+  // page) changes after that, so `when` re-running each tick is the only
+  // thing that ever revisits it. Tolerates a null btn: on the very tick
+  // that builds the button, `when` runs BEFORE `build`, so the element
+  // doesn't exist in the DOM yet.
+  //
+  // Uses noSelecionadosRapido, NOT noSelecionados: this runs on every DOM
+  // mutation of the whole page (the shared observer's tick), so it must
+  // stay cheap — see noSelecionadosRapido's own comment. anotar()'s click
+  // handler re-validates with the authoritative, slower noSelecionados()
+  // regardless, so a display refresh being non-authoritative is fine.
   function refreshBotaoEstado(btn) {
-    const motivo = noSelecionados.disabledReason();
+    if (!btn) return;
+    const motivo = noSelecionadosRapido.disabledReason();
     btn.disabled = !!motivo;
     btn.title = motivo
       ? `SIGC-PRO: ${motivo}`
@@ -709,8 +755,10 @@ ${buildDomiciliosTable(domicilios)}
         'confirmação) e baixa uma tabela por domicílio (SIGC-PRO)';
   }
 
+  const BUTTON_ID = 'sigc-pro-lista-agenda-button';
+
   window.__sigcPro.mountWidget({
-    id: 'sigc-pro-lista-agenda-button',
+    id: BUTTON_ID,
     // dtToolbar() is the ".dt-buttons" bar, the same anchor csv-export
     // uses. onListaEnderecos is a direct __sigcPro export, NOT on ctx.
     anchor: (ctx) => ctx.dtToolbar(),
@@ -718,30 +766,34 @@ ${buildDomiciliosTable(domicilios)}
     // when the table isn't all-selecionados. Absence read as a broken
     // install next to PDF-PRO/KML-PRO/CSV-PRO, which are always there;
     // mountWidget's `when` has no disabled concept, so the enabled/
-    // disabled state is handled separately (refreshBotaoEstado), not here.
-    when: () => window.__sigcPro.onListaEnderecos(),
+    // disabled state is handled separately (refreshBotaoEstado).
+    //
+    // `when` is re-evaluated by tickMount on EVERY shared-observer tick,
+    // not just at build time (sigc-common.js ~L500-512) — the repo
+    // deliberately consolidated every feature's DOM-mutation watching
+    // into that one shared observer, so a private MutationObserver here
+    // would regress that. Piggybacking the refresh onto `when` costs
+    // nothing extra: the tick already runs, we just also use it to sync
+    // the button's disabled state to whatever the table looks like now
+    // (filtered/paged since the last tick). `document.getElementById`
+    // rather than closing over the built element, since the tick that
+    // BUILDS the button runs `when` before `build` — no element exists
+    // yet on that first call, and refreshBotaoEstado tolerates null.
+    when: (ctx) => {
+      const ok = window.__sigcPro.onListaEnderecos() && !!ctx.dtToolbar();
+      if (ok) refreshBotaoEstado(document.getElementById(BUTTON_ID));
+      return ok;
+    },
     build: () => {
       ensureStyle();
       console.log(`${TAG} Agenda button added.`);
       const btn = window.__sigcPro.makeDtProButton({
-        id: 'sigc-pro-lista-agenda-button',
+        id: BUTTON_ID,
         lines: ['AGENDA', 'PRO'],
         title: '',
         onClick: (e) => anotar(e.currentTarget),
       });
       refreshBotaoEstado(btn);
-      // mountWidget builds this element exactly once and otherwise only
-      // inserts/removes it; nothing else re-visits it as the user filters
-      // or pages the table. Piggyback on the DOM mutations that a
-      // filter/page change itself produces, scoped to the table wrapper
-      // so unrelated page mutations don't cost a re-check. anotar()
-      // re-checks at click time regardless, so this is a display
-      // refresh, not the source of truth.
-      const wrapper = document.querySelector('.dataTables_wrapper');
-      if (wrapper) {
-        new MutationObserver(() => refreshBotaoEstado(btn))
-          .observe(wrapper, { childList: true, subtree: true, characterData: true });
-      }
       return btn;
     },
   });
