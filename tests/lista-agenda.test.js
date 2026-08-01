@@ -7,6 +7,7 @@ await import('../extension/features/lista-agenda/lista-agenda.js');
 const {
   parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml,
   buildDomiciliosTable, buildDomiciliosDocHtml, enderecoDomicilio, fetchLabel, nomeArquivoDomicilios,
+  linhasSelecionadas,
 } = window.__sigcPro.listaAgenda;
 
 // A reserved slot's title carries every field; an open slot's title is
@@ -76,6 +77,41 @@ describe('zonaIdOf', () => {
   test('tolerates empty and missing input', () => {
     expect(zonaIdOf('')).toBe('');
     expect(zonaIdOf(null)).toBe('');
+  });
+});
+
+describe('linhasSelecionadas', () => {
+  // Column 15 is Selecionado (see PESQUISAS.PNS2026.columns.selecionado);
+  // the row shape here only needs that one index populated.
+  const row = (selecionado) => {
+    const r = new Array(16).fill('');
+    r[15] = selecionado;
+    return r;
+  };
+
+  test('keeps only Sim rows out of a mixed table', () => {
+    const rows = [row('Sim'), row('Não'), row('Sim')];
+    expect(linhasSelecionadas(rows, 15)).toHaveLength(2);
+  });
+
+  test('an all-Sim table passes through unchanged', () => {
+    const rows = [row('Sim'), row('Sim')];
+    expect(linhasSelecionadas(rows, 15)).toEqual(rows);
+  });
+
+  test('an all-Não table yields empty', () => {
+    const rows = [row('Não'), row('Não')];
+    expect(linhasSelecionadas(rows, 15)).toEqual([]);
+  });
+
+  test('tolerates case and whitespace variations', () => {
+    const rows = [row('sim'), row(' Sim '), row('SIM'), row('não')];
+    expect(linhasSelecionadas(rows, 15)).toHaveLength(3);
+  });
+
+  test('tolerates empty or missing input', () => {
+    expect(linhasSelecionadas([], 15)).toEqual([]);
+    expect(linhasSelecionadas(null, 15)).toEqual([]);
   });
 });
 

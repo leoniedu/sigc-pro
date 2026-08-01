@@ -652,7 +652,6 @@
     getDataTable,
     readDataTable,
     getTableRows,
-    cellText,
     exportFileBase,
     parseCoord,
     escapeHtml,

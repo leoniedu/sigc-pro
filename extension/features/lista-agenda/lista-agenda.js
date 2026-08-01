@@ -61,6 +61,18 @@
 
   const chaveDomicilio = (controle, domicilio) => `${controle}|${domicilio}`;
 
+  // Zona columns are populated only for selecionado households (see
+  // agenda-map.js), so counting free slots over a mixed table would
+  // undercount. Filtering the rows down to Selecionado = Sim fixes that at
+  // the source, letting the button work on every Lista de Endereços view
+  // — including the default mixed report — instead of being disabled
+  // outright whenever the table isn't already all-selecionados. The
+  // per-household annotation was never at risk from non-selecionado rows;
+  // this filter just also narrows its scope to match the zona figures.
+  function linhasSelecionadas(rows, iSelecionado) {
+    return (rows || []).filter((r) => /^sim$/i.test(String(r[iSelecionado] ?? '').trim()));
+  }
+
   function indexByControle(slots) {
     const map = new Map();
     slots.forEach((s) => {
@@ -467,7 +479,7 @@ ${buildDomiciliosTable(domicilios)}
 
   window.__sigcPro.listaAgenda = {
     parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml, annotateRow,
-    buildDomiciliosTable, buildDomiciliosDocHtml, enderecoDomicilio, fetchLabel, nomeArquivoDomicilios,
+    buildDomiciliosTable, buildDomiciliosDocHtml, enderecoDomicilio, fetchLabel, nomeArquivoDomicilios, linhasSelecionadas,
   };
 
   // --- caches ---------------------------------------------------------
@@ -507,19 +519,6 @@ ${buildDomiciliosTable(domicilios)}
     'IBGE. Continuar?';
 
   async function anotar(btn) {
-    // The button is always present but only truly usable on the
-    // all-selecionados view (see noSelecionados). Its disabled/title state
-    // is refreshed on a best-effort basis (build time + table mutations),
-    // so this is the authoritative check: it runs at the moment of the
-    // click, against whatever the table looks like right now.
-    if (noSelecionados.disabledReason()) {
-      alert(`SIGC-PRO: ${noSelecionados.disabledReason()}`);
-      return;
-    }
-    if (!consentGiven) {
-      if (!confirm(CONSENT_MSG)) return;
-      consentGiven = true;
-    }
     const pesquisa = window.__sigcPro.detectPesquisa();
     const tabela = pesquisa && window.__sigcPro.getTableRows(pesquisa);
     if (!tabela) {
@@ -527,11 +526,23 @@ ${buildDomiciliosTable(domicilios)}
       return;
     }
     const cols = pesquisa.columns;
-    if (tabela.rows.length === 0) {
-      alert('SIGC-PRO: não há linhas na tabela para anotar.');
+    // Filtered here, once, and used everywhere below instead of
+    // tabela.rows: zona columns are only populated for selecionado
+    // households (see linhasSelecionadas), so a mixed table's non-Sim rows
+    // must never reach the domicilios build, the download or the zona
+    // count. A report that is entirely non-selecionado (rows.length > 0 but
+    // nothing survives the filter) has nothing to annotate — checked here,
+    // before spending the confirm/fetch, rather than after.
+    const linhas = linhasSelecionadas(tabela.rows, cols.selecionado.index);
+    if (linhas.length === 0) {
+      alert('SIGC-PRO: não há domicílios selecionados (Selecionado = Sim) nesta tabela para anotar.');
       return;
     }
-    const controle = String(tabela.rows[0][cols.controle.index] || '').trim();
+    if (!consentGiven) {
+      if (!confirm(CONSENT_MSG)) return;
+      consentGiven = true;
+    }
+    const controle = String(linhas[0][cols.controle.index] || '').trim();
     const uf = controle.slice(0, 2);
     if (!controle) {
       alert('SIGC-PRO: não foi possível ler o Controle da tabela.');
@@ -573,12 +584,13 @@ ${buildDomiciliosTable(domicilios)}
     const livresIdx = ag ? indexZonaLivres(slots, minDateIso) : null;
     const todayIso = window.__sigcPro.dateToIso(new Date());
 
-    // Keyed by household, NOT positional: tabela.rows is the full dataset
-    // in original data order (readDataTable's "stable across pagination/
-    // sort" guarantee); the downloaded table lists every household
-    // regardless of current page/sort/filter, so this order is exactly
-    // what we want (the file's own sort takes over from there).
-    const domicilios = tabela.rows.map((r) => {
+    // Keyed by household, NOT positional: linhas is the selecionado subset
+    // of the full dataset in original data order (readDataTable's "stable
+    // across pagination/sort" guarantee); the downloaded table lists every
+    // selecionado household regardless of current page/sort/filter, so this
+    // order is exactly what we want (the file's own sort takes over from
+    // there).
+    const domicilios = linhas.map((r) => {
       const a = annotateRow(r[cols.controle.index], r[cols.nDomicilio.index],
         { agendaIdx, movimentoIdx, todayIso });
       return {
@@ -594,10 +606,10 @@ ${buildDomiciliosTable(domicilios)}
       movimentoEm: mv ? fetchLabel(mv.em, mv.cache) : '—',
       falhas,
     };
-    const arquivo = baixarTabelaDomicilios(controle, meta, pesquisa, tabela.rows, domicilios, livresIdx);
+    const arquivo = baixarTabelaDomicilios(controle, meta, pesquisa, linhas, domicilios, livresIdx);
 
     escreverResumo(
-      tabela.rows.map((r) => String(r[cols.idZona.index] || '').trim()),
+      linhas.map((r) => String(r[cols.idZona.index] || '').trim()),
       livresIdx,
       meta,
       arquivo);
@@ -673,88 +685,6 @@ ${buildDomiciliosTable(domicilios)}
     document.head.appendChild(style);
   }
 
-  // Selecionados view only — a correctness requirement, not a
-  // preference: zona columns are populated only for selecionado
-  // households, so on the completos view the zona index would silently
-  // under-count (see agenda-map.js). Authoritative version, used by
-  // anotar()'s click-time guard: goes through getTableRows so the same
-  // header-layout validation every other read of this table gets applies
-  // here too. Click frequency is low, so its cost (reads and HTML-strips
-  // every cell of every column, all pages, via readDataTable) is fine here.
-  function noSelecionados() {
-    const pesquisa = window.__sigcPro.detectPesquisa();
-    const tabela = pesquisa && window.__sigcPro.getTableRows(pesquisa);
-    if (!tabela || tabela.rows.length === 0) return false;
-    const i = pesquisa.columns.selecionado.index;
-    return tabela.rows.every((r) => /^sim$/i.test(String(r[i] || '').trim()));
-  }
-
-  // Cheap version for the disabled-state DISPLAY, re-run on every shared-
-  // observer tick (see `when` below) — i.e. on every DOM mutation of the
-  // whole page, not just clicks. getTableRows/readDataTable would read and
-  // HTML-strip every cell of every column across all pages on each of
-  // those ticks, which is real cost on a large table. This instead reads
-  // ONLY the Selecionado column via the DataTables API's column-scoped
-  // accessor, and short-circuits on the first non-Sim cell instead of
-  // materializing the whole column. Not the authoritative check — anotar()
-  // still re-validates via noSelecionados() at click time — so it can
-  // afford to skip the header-label validation getTableRows does.
-  function noSelecionadosRapido() {
-    const pesquisa = window.__sigcPro.detectPesquisa();
-    const table = pesquisa && window.__sigcPro.getDataTable();
-    if (!table) return false;
-    const i = pesquisa.columns.selecionado.index;
-    const valores = table.column(i).data();
-    if (valores.length === 0) return false;
-    for (let k = 0; k < valores.length; k += 1) {
-      if (!/^sim$/i.test(window.__sigcPro.cellText(valores[k]))) return false;
-    }
-    return true;
-  }
-
-  const SELECIONADOS_HINT =
-    'esta consulta só funciona na visão só-selecionados. Filtre o ' +
-    'relatório por Selecionado = Sim e tente novamente.';
-
-  // Explains why the button cannot be used right now, or '' when it can.
-  // Used as anotar's click-time guard: the authoritative check, run once
-  // per click, so its cost (goes through getTableRows/readDataTable — see
-  // noSelecionados above) does not matter.
-  noSelecionados.disabledReason = function () {
-    return noSelecionados() ? '' : SELECIONADOS_HINT;
-  };
-
-  // Same explanation, backed by the cheap check — used for the per-tick
-  // DISPLAY refresh below. Two predicates, one shared hint string, so the
-  // tooltip text can't drift between the fast and authoritative paths.
-  noSelecionadosRapido.disabledReason = function () {
-    return noSelecionadosRapido() ? '' : SELECIONADOS_HINT;
-  };
-
-  // Reflects the current table onto the button's disabled/title state.
-  // Called from `build` (first paint) and from `when` on every shared-
-  // observer tick (see mountWidget below) — the button element itself is
-  // built exactly once by mountWidget, but the table's content (filter/
-  // page) changes after that, so `when` re-running each tick is the only
-  // thing that ever revisits it. Tolerates a null btn: on the very tick
-  // that builds the button, `when` runs BEFORE `build`, so the element
-  // doesn't exist in the DOM yet.
-  //
-  // Uses noSelecionadosRapido, NOT noSelecionados: this runs on every DOM
-  // mutation of the whole page (the shared observer's tick), so it must
-  // stay cheap — see noSelecionadosRapido's own comment. anotar()'s click
-  // handler re-validates with the authoritative, slower noSelecionados()
-  // regardless, so a display refresh being non-authoritative is fine.
-  function refreshBotaoEstado(btn) {
-    if (!btn) return;
-    const motivo = noSelecionadosRapido.disabledReason();
-    btn.disabled = !!motivo;
-    btn.title = motivo
-      ? `SIGC-PRO: ${motivo}`
-      : 'Consulta a agenda e o último movimento deste Controle (mediante ' +
-        'confirmação) e baixa uma tabela por domicílio (SIGC-PRO)';
-  }
-
   const BUTTON_ID = 'sigc-pro-lista-agenda-button';
 
   window.__sigcPro.mountWidget({
@@ -762,38 +692,17 @@ ${buildDomiciliosTable(domicilios)}
     // dtToolbar() is the ".dt-buttons" bar, the same anchor csv-export
     // uses. onListaEnderecos is a direct __sigcPro export, NOT on ctx.
     anchor: (ctx) => ctx.dtToolbar(),
-    // Always present on the Lista de Endereços — DISABLED (not absent)
-    // when the table isn't all-selecionados. Absence read as a broken
-    // install next to PDF-PRO/KML-PRO/CSV-PRO, which are always there;
-    // mountWidget's `when` has no disabled concept, so the enabled/
-    // disabled state is handled separately (refreshBotaoEstado).
-    //
-    // `when` is re-evaluated by tickMount on EVERY shared-observer tick,
-    // not just at build time (sigc-common.js ~L500-512) — the repo
-    // deliberately consolidated every feature's DOM-mutation watching
-    // into that one shared observer, so a private MutationObserver here
-    // would regress that. Piggybacking the refresh onto `when` costs
-    // nothing extra: the tick already runs, we just also use it to sync
-    // the button's disabled state to whatever the table looks like now
-    // (filtered/paged since the last tick). `document.getElementById`
-    // rather than closing over the built element, since the tick that
-    // BUILDS the button runs `when` before `build` — no element exists
-    // yet on that first call, and refreshBotaoEstado tolerates null.
-    when: (ctx) => {
-      const ok = window.__sigcPro.onListaEnderecos() && !!ctx.dtToolbar();
-      if (ok) refreshBotaoEstado(document.getElementById(BUTTON_ID));
-      return ok;
-    },
+    when: (ctx) => window.__sigcPro.onListaEnderecos() && !!ctx.dtToolbar(),
     build: () => {
       ensureStyle();
       console.log(`${TAG} Agenda button added.`);
       const btn = window.__sigcPro.makeDtProButton({
         id: BUTTON_ID,
         lines: ['AGENDA', 'PRO'],
-        title: '',
+        title: 'Consulta a agenda e o último movimento dos domicílios selecionados ' +
+          'deste Controle (mediante confirmação) e baixa uma tabela por domicílio (SIGC-PRO)',
         onClick: (e) => anotar(e.currentTarget),
       });
-      refreshBotaoEstado(btn);
       return btn;
     },
   });
