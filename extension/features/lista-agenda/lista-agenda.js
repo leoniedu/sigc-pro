@@ -95,19 +95,32 @@
 
   // Free = open AND on/after the prazo mínimo. A slot before the cutoff
   // cannot be filled anymore, so counting it would advertise capacity
-  // that does not exist.
-  function indexZonaLivres(slots, minDateIso) {
+  // that does not exist. fimIso (optional) bounds the far end so a slot
+  // months out does not overstate realistically bookable capacity.
+  //
+  // Manhã before 13:00, Tarde from 13:00 — the same cut Slots Abertos
+  // uses. Shared boundary, or the two features drift.
+  const TARDE_FROM_MIN = 13 * 60;
+
+  function indexZonaLivres(slots, minDateIso, fimIso) {
     const map = new Map();
     slots.forEach((s) => {
       if (!s.aberto) return;
       if (s.isoDate && s.isoDate < minDateIso) return;
+      if (fimIso && s.isoDate && s.isoDate > fimIso) return;
+      const min = window.__sigcPro.toMin(horaDeIso(s.start));
+      if (min == null) return;
+      const turno = min < TARDE_FROM_MIN ? 'manha' : 'tarde';
       const ids = new Set(
         window.__sigcPro.parseZonaEntries(s.zonas).map(zonaIdOf).filter(Boolean));
       if (ids.size === 0) return;
       const peso = 1 / ids.size;
       ids.forEach((id) => {
-        if (!map.has(id)) map.set(id, { inteiro: 0, peso: 0, compartilhado: false });
+        if (!map.has(id)) {
+          map.set(id, { manha: 0, tarde: 0, inteiro: 0, peso: 0, compartilhado: false });
+        }
         const cell = map.get(id);
+        cell[turno] += 1;
         cell.inteiro += 1;
         cell.peso += peso;
         if (ids.size > 1) cell.compartilhado = true;
@@ -123,6 +136,11 @@
     const m = /^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})/.exec(String(start || ''));
     return m ? `${m[1]}:${m[2]}` : '';
   }
+
+  // HH:MM from an ISO string for the turno split — a bare slice rather
+  // than a regex so the caller passes the result to toMin, which rejects
+  // unparseable values itself.
+  const horaDeIso = (iso) => String(iso || '').slice(11, 16);
 
   // Only one schedule is live at a time, so a future date wins outright;
   // otherwise show the most recent past one, flagged so a completed
@@ -224,9 +242,9 @@
       if (livresIdx === null) {
         return `<span class="sp-zona-livre"><strong>${e(id)}</strong>: ?</span>`;
       }
-      const c = (livresIdx && livresIdx.get(id)) || { inteiro: 0, peso: 0, compartilhado: false };
+      const c = (livresIdx && livresIdx.get(id)) || { manha: 0, tarde: 0, inteiro: 0, peso: 0, compartilhado: false };
       const pond = c.compartilhado ? ` (${num1(c.peso)} ponderado)` : '';
-      return `<span class="sp-zona-livre"><strong>${e(id)}</strong>: ${c.inteiro}${pond}</span>`;
+      return `<span class="sp-zona-livre"><strong>${e(id)}</strong> — Manhã: ${c.manha} Tarde: ${c.tarde} Total: ${c.inteiro}${pond}</span>`;
     }).join(' ');
 
     const quando = meta.agendaEm === meta.movimentoEm
@@ -246,7 +264,7 @@
 
     return [
       '<div id="sigc-pro-lista-agenda-resumo">',
-      `<div class="sp-titulo">Slots livres (a partir de ${e(meta.minDateBr)}) · ${quando}</div>`,
+      `<div class="sp-titulo">Slots livres (a partir de ${e(meta.minDateBr)}, próximas 2 semanas) · ${quando}</div>`,
       `<div class="sp-zonas">${celulas || '<em>Nenhuma zona nesta tabela.</em>'}</div>`,
       falhas,
       download,
@@ -639,7 +657,10 @@ ${buildDomiciliosTable(domicilios)}
     }
     const minDate = window.__sigcPro.agendaMinScheduleDate(new Date());
     const minDateIso = window.__sigcPro.dateToIso(minDate);
-    const livresIdx = ag ? indexZonaLivres(slots, minDateIso) : null;
+    const fim = new Date();
+    fim.setDate(fim.getDate() + 14);
+    const fimIso = window.__sigcPro.dateToIso(fim);
+    const livresIdx = ag ? indexZonaLivres(slots, minDateIso, fimIso) : null;
     const todayIso = window.__sigcPro.dateToIso(new Date());
 
     // Keyed by household, NOT positional: linhas is the selecionado subset

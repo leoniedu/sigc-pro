@@ -211,6 +211,78 @@ describe('indexZonaLivres', () => {
   });
 });
 
+describe('indexZonaLivres — turno split and 2-week window', () => {
+  const LIMITE = '2026-08-04';
+  const FIM = '2026-08-15';
+  const Z = '29JDM8 - 29.2.01.02 29_Linus_Lauro';
+  const aberto = (isoDate, hora) => parseSlots([slotJson({
+    start: `${isoDate}T${hora}:00`, title: `Zonas: ${Z}`,
+  })]);
+
+  test('counts a morning slot as manha', () => {
+    const idx = indexZonaLivres(aberto('2026-08-10', '09:00'), LIMITE, FIM);
+    expect(idx.get('29JDM8').manha).toBe(1);
+    expect(idx.get('29JDM8').tarde).toBe(0);
+  });
+
+  // 13:00 itself is Tarde — the boundary must match Slots Abertos.
+  test('13:00 counts as tarde, 12:59 as manha', () => {
+    const t = indexZonaLivres(aberto('2026-08-10', '13:00'), LIMITE, FIM);
+    expect(t.get('29JDM8').tarde).toBe(1);
+    const m = indexZonaLivres(aberto('2026-08-10', '12:59'), LIMITE, FIM);
+    expect(m.get('29JDM8').manha).toBe(1);
+  });
+
+  test('manha plus tarde equals the total', () => {
+    const slots = [
+      ...aberto('2026-08-10', '09:00'), ...aberto('2026-08-10', '14:00'),
+      ...aberto('2026-08-11', '10:00'),
+    ];
+    const c = indexZonaLivres(slots, LIMITE, FIM).get('29JDM8');
+    expect(c.manha).toBe(2);
+    expect(c.tarde).toBe(1);
+    expect(c.inteiro).toBe(3);
+  });
+
+  test('excludes slots beyond the window end', () => {
+    expect(indexZonaLivres(aberto('2026-08-20', '09:00'), LIMITE, FIM).size).toBe(0);
+  });
+
+  test('excludes free slots before the prazo, keeps the prazo date itself', () => {
+    expect(indexZonaLivres(aberto('2026-08-02', '09:00'), LIMITE, FIM).size).toBe(0);
+    expect(indexZonaLivres(aberto(LIMITE, '09:00'), LIMITE, FIM).get('29JDM8').inteiro).toBe(1);
+  });
+
+  test('a slot with no readable time counts in neither turno', () => {
+    const semHora = parseSlots([slotJson({ start: '', title: `Zonas: ${Z}` })]);
+    expect(indexZonaLivres(semHora, LIMITE, FIM).size).toBe(0);
+  });
+});
+
+describe('buildResumoHtml — turno line', () => {
+  const livres = new Map([
+    ['29JDM8', { manha: 7, tarde: 5, inteiro: 12, peso: 12, compartilhado: false }],
+  ]);
+  const meta = { minDateBr: '04/08/2026', agendaEm: '09:31', movimentoEm: '09:31', falhas: [] };
+
+  test('shows manha, tarde and total', () => {
+    const html = buildResumoHtml(['29JDM8'], livres, meta, '');
+    expect(html).toContain('7');
+    expect(html).toContain('5');
+    expect(html).toContain('12');
+    expect(html).toMatch(/Manh/);
+    expect(html).toContain('Tarde');
+  });
+
+  // Bounding the count changes a number the user has been reading, so
+  // the window has to be stated or capacity looks like it vanished.
+  test('states the 2-week window', () => {
+    const html = buildResumoHtml(['29JDM8'], livres, meta, '');
+    expect(html).toContain('04/08/2026');
+    expect(html).toMatch(/2 semanas|duas semanas/);
+  });
+});
+
 describe('pickAgendado', () => {
   const em = (isoDate, hhmm = '09:00') =>
     parseSlots([slotJson({ start: `${isoDate}T${hhmm}:00` })])[0];
