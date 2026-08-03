@@ -21,10 +21,12 @@ Na Lista de Endereços:
 • KML-pro — exporta os endereços como KML para uso em Google Earth,
   Google Maps ou QGIS, com camadas separadas para domicílios
   selecionados e não selecionados (cores seguras para daltonismo).
-• Agenda-pro — anota cada domicílio com a data da entrevista agendada e
-  a situação do último movimento, e mostra quantos slots ainda livres
-  existem em cada zona da tabela, obtendo os dados do próprio servidor do
-  SIGC mediante clique e confirmação.
+• Agenda-pro — anota cada domicílio com a data e hora da entrevista
+  agendada, a situação e o tipo de entrevista do último movimento, e
+  mostra os slots livres de cada zona por turno (Manhã/Tarde) nas
+  próximas 2 semanas, com os horários abertos listados dia a dia; os
+  endereços viram links para o Google Maps quando há coordenadas.
+  Tudo obtido do próprio servidor do SIGC mediante clique e confirmação.
 
 Em qualquer relatório com tabela:
 • CSV-pro — exporta a tabela como CSV (todas as páginas, pronto para o
@@ -65,9 +67,12 @@ download do Chrome. As únicas chamadas de rede são as consultas
 opcionais do Guia do Dia, da anotação da Lista de Endereços e da
 exportação avançada do Último Movimento, todas ao próprio servidor do
 SIGC (mesma sessão do usuário), acionadas
-por clique e confirmação — nada é enviado a terceiros nem ao
-desenvolvedor. Isso é verificado automaticamente a cada alteração no
-código-fonte (veja o repositório).
+por clique e confirmação. Os arquivos gerados contêm links para o
+Google Maps nos endereços (quando há coordenadas), que são links, não
+recursos carregados — nada é buscado ao abrir o arquivo, e a navegação
+só ocorre ao clicar. Nada é enviado a terceiros nem ao desenvolvedor.
+Isso é verificado automaticamente a cada alteração no código-fonte
+(veja o repositório).
 
 AVISO: projeto independente, sem vínculo oficial com o IBGE. Protótipo
 para uso e demonstração à equipe de desenvolvimento do SIGC. Use por sua
@@ -107,8 +112,9 @@ session): the "Guia do Dia" feature; the Lista de Endereços annotation,
 which fetches the UF's agenda slots and the último movimento report for
 the displayed Controle; and — only when the advanced flag above is
 enabled — a bulk "Último Movimento" report export that loops one
-request per agência in the current UF. Nothing is ever sent to third
-parties or the developer.
+request per agência in the current UF. The exported files may include
+Google Maps links (not loaded resources — nothing is fetched until
+clicked). Nothing is ever sent to third parties or the developer.
 ```
 
 ## Category

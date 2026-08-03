@@ -21,7 +21,7 @@
 <body>
 <header><h1>SIGC-PRO — Política de Privacidade</h1></header>
 <main>
-  <p><em>Última atualização: 31 de julho de 2026.</em></p>
+  <p><em>Última atualização: 3 de agosto de 2026.</em></p>
 
   <div class="destaque"><strong>Resumo: o SIGC-PRO NÃO coleta, NÃO transmite e NÃO armazena nenhum dado para o desenvolvedor ou para terceiros. As únicas comunicações de rede são consultas opcionais, acionadas por clique e confirmadas pelo usuário, ao próprio servidor do SIGC — dentro da sessão já autenticada. O único armazenamento é um flag local (ligado/desligado) para uma dessas funcionalidades opcionais. Nenhuma informação sai do circuito usuário–IBGE.</strong></div>
 
@@ -31,9 +31,13 @@
   localmente pelo mecanismo padrão de download do navegador:</p>
   <p>Na Lista de Endereços: reexporta o PDF em formato listagem e converte a
   tabela de endereços em um arquivo KML (Google Earth/Maps), ambos com
-  camadas/colunas reorganizadas; e anota cada domicílio com a data da
-  entrevista agendada e a situação do último movimento (opcionalmente,
-  mediante clique e confirmação, veja item 2). Em qualquer relatório com
+  camadas/colunas reorganizadas; e anota cada domicílio com a data e hora
+  da entrevista agendada, a situação e o tipo de entrevista do último
+  movimento, e os slots livres da zona por turno nas próximas duas semanas
+  (opcionalmente, mediante clique e confirmação, veja item 2). O arquivo
+  gerado contém links para o Google Maps nos endereços (quando há
+  coordenadas), que são links, não recursos carregados — nada é buscado
+  ao abrir o arquivo. Em qualquer relatório com
   tabela: exporta os
   dados como CSV. No relatório Último Movimento, com um flag avançado
   ativado nas Opções da extensão (veja item 2): exporta o relatório de
@@ -55,9 +59,11 @@
   em SVG da rota, que não carrega nenhuma imagem ou serviço externo;
   e a anotação da Lista de Endereços, que consulta a agenda da UF e o
   último movimento do controle exibido, mediante clique e confirmação,
-  para mostrar em cada domicílio se há entrevista agendada e sua situação
-  de coleta — a resposta é processada localmente, reduzida aos campos
-  exibidos e mantida apenas em memória; e a
+  para mostrar em cada domicílio se há entrevista agendada, sua situação
+  de coleta e o tipo de entrevista, além dos slots livres da zona por
+  turno — a resposta é processada localmente, reduzida aos campos
+  exibidos e mantida apenas em memória, e o arquivo gerado inclui links
+  para o Google Maps nos endereços (links, não recursos carregados); e a
   exportação avançada do relatório Último Movimento (multi-agência), que
   só aparece quando o usuário ativa esse flag nas Opções da extensão e,
   quando usada, faz uma requisição por agência da UF atual (com 2 segundos
