@@ -73,6 +73,15 @@
     return (rows || []).filter((r) => /^sim$/i.test(String(r[iSelecionado] ?? '').trim()));
   }
 
+  // Domicílios/setores/controles without a zona have no agendamentos at
+  // all — pure predicate over a column's worth of values (whatever shape
+  // the caller already has: a DataTables column dump or a rows[][] slice),
+  // so the AGENDA PRO button's enable/disable check can be unit-tested
+  // with no DOM/DataTables harness at all.
+  function algumaLinhaTemZona(valores) {
+    return (valores || []).some((v) => String(v ?? '').trim() !== '');
+  }
+
   function indexByControle(slots) {
     const map = new Map();
     slots.forEach((s) => {
@@ -107,18 +116,42 @@
     return map;
   }
 
+  // HH:MM out of a full ISO timestamp, or '' if unparsable — a household
+  // scheduled at 09:00 vs 15:30 matters when planning a day, so the time
+  // is shown alongside the date wherever it renders.
+  function horaDoStart(start) {
+    const m = /^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})/.exec(String(start || ''));
+    return m ? `${m[1]}:${m[2]}` : '';
+  }
+
   // Only one schedule is live at a time, so a future date wins outright;
   // otherwise show the most recent past one, flagged so a completed
-  // interview does not read as an upcoming appointment.
+  // interview does not read as an upcoming appointment. Sorted by the
+  // full `start` timestamp, not just isoDate: two slots on the same day
+  // would otherwise order arbitrarily (whichever the response listed
+  // first), so the earliest appointment of a day was not deterministically
+  // chosen.
   function pickAgendado(slots, todayIso) {
     if (!slots || slots.length === 0) return null;
-    const ordenado = [...slots].sort((a, b) => a.isoDate.localeCompare(b.isoDate));
+    const ordenado = [...slots].sort((a, b) => a.start.localeCompare(b.start));
     const futura = ordenado.find((s) => s.isoDate >= todayIso);
     const escolhido = futura || ordenado[ordenado.length - 1];
     return {
       data: window.__sigcPro.isoToBr(escolhido.isoDate),
+      hora: horaDoStart(escolhido.start),
+      // Raw ISO timestamp, kept alongside the pt-BR display string as the
+      // exported table's sort key: it sorts correctly as a plain string,
+      // sparing the inline sort script from parsing "dd/mm/yyyy HH:MM".
+      ordenavel: escolhido.start,
       futura: !!futura,
     };
+  }
+
+  // "dd/mm/yyyy HH:MM", degrading to date-only when the time can't be
+  // parsed — never "dd/mm/yyyy undefined" or a stray trailing separator.
+  function fmtAgendado(data, hora) {
+    if (!data) return '';
+    return hora ? `${data} ${hora}` : data;
   }
 
   // Header labels vary in accent/case between SIGC screens, so match
@@ -246,7 +279,7 @@
       return '<tr>' +
         `<td>${enderecoCell}</td>` +
         `<td>${e(String(d.nDomicilio ?? '').trim() || '—')}</td>` +
-        `<td data-sort="${e(d.agendado || '')}">${agendadoCell}</td>` +
+        `<td data-sort="${e(d.agendadoOrdenavel || '')}">${agendadoCell}</td>` +
         `<td>${e(d.situacao || '—')}</td>` +
         `<td data-sort="${e(d.transmissao || '')}">${e(d.transmissao || '—')}</td>` +
         '</tr>';
@@ -257,7 +290,11 @@
       '<thead><tr>',
       '<th data-tipo="texto">Endereço</th>',
       '<th data-tipo="texto">Domicílio</th>',
-      '<th data-tipo="data">Agendado</th>',
+      // Agendado's data-sort is the raw ISO timestamp (see annotateRow),
+      // which sorts correctly with plain string comparison — data-tipo
+      // "texto" here, NOT "data" (that parser expects dd/mm/yyyy, the
+      // display format, not the sort key).
+      '<th data-tipo="texto">Agendado</th>',
       '<th data-tipo="texto">Situação</th>',
       '<th data-tipo="data">Data</th>',
       '</tr></thead>',
@@ -385,7 +422,8 @@ ${buildDomiciliosTable(domicilios)}
     const ag = pickAgendado((ctx.agendaIdx && ctx.agendaIdx.get(k)) || [], ctx.todayIso);
     const mv = (ctx.movimentoIdx && ctx.movimentoIdx.get(k)) || null;
     return {
-      agendado: ag ? ag.data : '',
+      agendado: ag ? fmtAgendado(ag.data, ag.hora) : '',
+      agendadoOrdenavel: ag ? ag.ordenavel : '',
       futura: ag ? ag.futura : false,
       situacao: mv ? mv.situacao : '',
       transmissao: mv ? mv.transmissao : '',
@@ -484,6 +522,7 @@ ${buildDomiciliosTable(domicilios)}
   window.__sigcPro.listaAgenda = {
     parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml, annotateRow,
     buildDomiciliosTable, buildDomiciliosDocHtml, enderecoDomicilio, fetchLabel, nomeArquivoDomicilios, linhasSelecionadas,
+    algumaLinhaTemZona,
   };
 
   // --- caches ---------------------------------------------------------
@@ -521,6 +560,9 @@ ${buildDomiciliosTable(domicilios)}
     'SIGC-PRO: isto fará duas consultas ao próprio servidor do SIGC — a ' +
     'agenda da UF e o último movimento deste controle. Nenhum dado sai do ' +
     'IBGE. Continuar?';
+  const SEM_ZONA_MSG =
+    'SIGC-PRO: nenhum domicílio deste Controle tem uma zona (ID Zona) ' +
+    'atribuída, portanto não há agendamentos para consultar.';
 
   async function anotar(btn) {
     const pesquisa = window.__sigcPro.detectPesquisa();
@@ -530,6 +572,13 @@ ${buildDomiciliosTable(domicilios)}
       return;
     }
     const cols = pesquisa.columns;
+    // Guard again at click time (in case the button's disabled state,
+    // refreshed only per shared-observer tick, is stale) rather than
+    // fetching only to show an empty result.
+    if (!algumaLinhaTemZona(tabela.rows.map((r) => r[cols.idZona.index]))) {
+      alert(SEM_ZONA_MSG);
+      return;
+    }
     // Filtered here, once, and used everywhere below instead of
     // tabela.rows: zona columns are only populated for selecionado
     // households (see linhasSelecionadas), so a mixed table's non-Sim rows
@@ -692,21 +741,60 @@ ${buildDomiciliosTable(domicilios)}
   }
 
   const BUTTON_ID = 'sigc-pro-lista-agenda-button';
+  const TITLE_ATIVO = 'Consulta a agenda e o último movimento dos domicílios selecionados ' +
+    'deste Controle (mediante confirmação) e baixa uma tabela por domicílio (SIGC-PRO)';
+  const TITLE_SEM_ZONA = SEM_ZONA_MSG;
+
+  // Cheap, column-scoped read for the per-tick gate: table.column(i).data()
+  // reads ONE column across every page without DOMParser touching the rest
+  // of the table (unlike getTableRows/readDataTable, which parse every
+  // cell of every column on every page — too costly to run on EVERY shared-
+  // observer tick, which is what `when` is). Short-circuits on the first
+  // non-empty zona instead of building the whole column array.
+  function tabelaTemZona() {
+    const pesquisa = window.__sigcPro.detectPesquisa();
+    const table = window.__sigcPro.getDataTable();
+    if (!pesquisa || !table) return false;
+    let achou = false;
+    table.column(pesquisa.columns.idZona.index).data().each((v) => {
+      if (!achou && String(v ?? '').trim() !== '') achou = true;
+    });
+    return achou;
+  }
+
+  // Button stays VISIBLE either way — an absent button is indistinguishable
+  // from a broken extension, a mistake already made once in this project.
+  // Disabled + a Portuguese tooltip explains itself instead.
+  function atualizarEstadoBotao() {
+    const btn = document.getElementById(BUTTON_ID);
+    if (!btn) return;
+    const temZona = tabelaTemZona();
+    btn.disabled = !temZona;
+    btn.title = temZona ? TITLE_ATIVO : TITLE_SEM_ZONA;
+  }
 
   window.__sigcPro.mountWidget({
     id: BUTTON_ID,
     // dtToolbar() is the ".dt-buttons" bar, the same anchor csv-export
     // uses. onListaEnderecos is a direct __sigcPro export, NOT on ctx.
     anchor: (ctx) => ctx.dtToolbar(),
-    when: (ctx) => window.__sigcPro.onListaEnderecos() && !!ctx.dtToolbar(),
+    // when is re-evaluated on EVERY shared-observer tick (tickMount in
+    // sigc-common.js) — this module owns no MutationObserver of its own.
+    // That makes it the right place to also refresh the button's
+    // disabled/title state, as a side effect, since tickMount only calls
+    // build() once (on insert) and never again while the button exists.
+    when: (ctx) => {
+      const ok = window.__sigcPro.onListaEnderecos() && !!ctx.dtToolbar();
+      if (ok) atualizarEstadoBotao();
+      return ok;
+    },
     build: () => {
       ensureStyle();
       console.log(`${TAG} Agenda button added.`);
       const btn = window.__sigcPro.makeDtProButton({
         id: BUTTON_ID,
         lines: ['AGENDA', 'PRO'],
-        title: 'Consulta a agenda e o último movimento dos domicílios selecionados ' +
-          'deste Controle (mediante confirmação) e baixa uma tabela por domicílio (SIGC-PRO)',
+        title: TITLE_ATIVO,
         onClick: (e) => anotar(e.currentTarget),
       });
       return btn;

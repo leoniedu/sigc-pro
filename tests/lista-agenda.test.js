@@ -7,7 +7,7 @@ await import('../extension/features/lista-agenda/lista-agenda.js');
 const {
   parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml,
   buildDomiciliosTable, buildDomiciliosDocHtml, enderecoDomicilio, fetchLabel, nomeArquivoDomicilios,
-  linhasSelecionadas,
+  linhasSelecionadas, algumaLinhaTemZona,
 } = window.__sigcPro.listaAgenda;
 
 // A reserved slot's title carries every field; an open slot's title is
@@ -115,6 +115,23 @@ describe('linhasSelecionadas', () => {
   });
 });
 
+describe('algumaLinhaTemZona', () => {
+  // Domicílios/setores/controles without a zona have no agendamentos at
+  // all — this predicate gates the AGENDA PRO button's enabled state.
+  test('true when some rows have a zona', () => {
+    expect(algumaLinhaTemZona(['29JDM8 - x', '', ''])).toBe(true);
+  });
+
+  test('false when no row has a zona', () => {
+    expect(algumaLinhaTemZona(['', '  ', null, undefined])).toBe(false);
+  });
+
+  test('false for an empty table', () => {
+    expect(algumaLinhaTemZona([])).toBe(false);
+    expect(algumaLinhaTemZona(null)).toBe(false);
+  });
+});
+
 describe('indexByControle', () => {
   test('keys on controle|domicilio', () => {
     const idx = indexByControle(parseSlots([slotJson()]));
@@ -195,17 +212,22 @@ describe('indexZonaLivres', () => {
 });
 
 describe('pickAgendado', () => {
-  const em = (isoDate) => parseSlots([slotJson({ start: `${isoDate}T09:00:00` })])[0];
+  const em = (isoDate, hhmm = '09:00') =>
+    parseSlots([slotJson({ start: `${isoDate}T${hhmm}:00` })])[0];
 
   // Only one schedule is live at a time, so a future date wins outright.
   test('prefers the live (future) date', () => {
     const r = pickAgendado([em('2026-06-01'), em('2026-09-01')], '2026-07-31');
-    expect(r).toEqual({ data: '01/09/2026', futura: true });
+    expect(r).toEqual({
+      data: '01/09/2026', hora: '09:00', ordenavel: '2026-09-01T09:00:00', futura: true,
+    });
   });
 
   test('falls back to the most recent past date', () => {
     const r = pickAgendado([em('2026-05-01'), em('2026-06-01')], '2026-07-31');
-    expect(r).toEqual({ data: '01/06/2026', futura: false });
+    expect(r).toEqual({
+      data: '01/06/2026', hora: '09:00', ordenavel: '2026-06-01T09:00:00', futura: false,
+    });
   });
 
   test('today counts as live', () => {
@@ -214,6 +236,24 @@ describe('pickAgendado', () => {
 
   test('returns null with no slots', () => {
     expect(pickAgendado([], '2026-07-31')).toBeNull();
+  });
+
+  // The user wants the appointment TIME too — 09:00 vs 15:30 matters when
+  // planning a day. Extracted from `start`, which parseSlots already keeps.
+  test('carries the time alongside the date', () => {
+    const r = pickAgendado([em('2026-08-10', '15:30')], '2026-07-31');
+    expect(r.hora).toBe('15:30');
+  });
+
+  // Regression: pickAgendado used to sort by isoDate ALONE, so two slots on
+  // the SAME day ordered arbitrarily (whichever the response listed first).
+  // Sorting by the full `start` timestamp makes the earliest of a day win
+  // deterministically, regardless of input order.
+  test('two same-day slots: the earliest by time wins, deterministically', () => {
+    const tarde = em('2026-08-10', '15:30');
+    const manha = em('2026-08-10', '09:00');
+    expect(pickAgendado([tarde, manha], '2026-08-01').hora).toBe('09:00');
+    expect(pickAgendado([manha, tarde], '2026-08-01').hora).toBe('09:00');
   });
 });
 
@@ -383,7 +423,7 @@ describe('annotateRow', () => {
 
   test('combines both sources onto one row', () => {
     expect(annotateRow('292740805060337', '1', ctx)).toEqual({
-      agendado: '01/09/2026', futura: true,
+      agendado: '01/09/2026 09:00', agendadoOrdenavel: '2026-09-01T09:00:00', futura: true,
       situacao: 'TRANSMITIDO', transmissao: '28/07/2026',
     });
   });
@@ -392,7 +432,7 @@ describe('annotateRow', () => {
   test('annotates from the agenda alone when movimento is empty', () => {
     const r = annotateRow('292740805060337', '1',
       { ...ctx, movimentoIdx: new Map() });
-    expect(r.agendado).toBe('01/09/2026');
+    expect(r.agendado).toBe('01/09/2026 09:00');
     expect(r.situacao).toBe('');
   });
 
@@ -404,8 +444,18 @@ describe('annotateRow', () => {
 
   test('an unmatched household yields empty strings, never undefined', () => {
     expect(annotateRow('999', '9', ctx)).toEqual({
-      agendado: '', futura: false, situacao: '', transmissao: '',
+      agendado: '', agendadoOrdenavel: '', futura: false, situacao: '', transmissao: '',
     });
+  });
+
+  // A slot whose start carries no parseable HH:MM (e.g. a bare date) must
+  // still render its date — never "01/09/2026 undefined" or a stray
+  // trailing separator.
+  test('a slot with no parseable time degrades to date-only', () => {
+    const semHoraIdx = indexByControle(parseSlots([slotJson({ start: '2026-09-01' })]));
+    const r = annotateRow('292740805060337', '1', { ...ctx, agendaIdx: semHoraIdx });
+    expect(r.agendado).toBe('01/09/2026');
+    expect(r.agendado).not.toContain('undefined');
   });
 });
 
@@ -423,19 +473,43 @@ describe('enderecoDomicilio', () => {
 describe('buildDomiciliosTable', () => {
   const comDados = {
     endereco: 'RUA X, Nº 237', nDomicilio: '1',
-    agendado: '01/09/2026', futura: true, situacao: 'TRANSMITIDO', transmissao: '28/07/2026',
+    agendado: '01/09/2026 09:00', agendadoOrdenavel: '2026-09-01T09:00:00',
+    futura: true, situacao: 'TRANSMITIDO', transmissao: '28/07/2026',
   };
   const semDados = {
     endereco: 'RUA Y, Nº 10', nDomicilio: '2',
-    agendado: '', futura: false, situacao: '', transmissao: '',
+    agendado: '', agendadoOrdenavel: '', futura: false, situacao: '', transmissao: '',
   };
 
-  test('a household with data appears with every field', () => {
+  test('a household with data appears with every field, date AND time', () => {
     const html = buildDomiciliosTable([comDados]);
     expect(html).toContain('RUA X, Nº 237');
-    expect(html).toContain('01/09/2026');
+    expect(html).toContain('01/09/2026 09:00');
     expect(html).toContain('TRANSMITIDO');
     expect(html).toContain('28/07/2026');
+  });
+
+  // The exported table's Agendado column sorts on the raw ISO timestamp
+  // (data-sort), not the pt-BR display string — it sorts correctly as a
+  // plain string and spares the inline sort script from parsing
+  // "dd/mm/yyyy HH:MM".
+  test('sorts the Agendado column on the raw ISO timestamp, not the display string', () => {
+    const html = buildDomiciliosTable([comDados]);
+    expect(html).toContain('data-sort="2026-09-01T09:00:00"');
+  });
+
+  // A slot with no parseable time must still render its date — never
+  // "01/09/2026 undefined" or a stray trailing separator.
+  test('a slot with no parseable time degrades to date-only, no stray separator', () => {
+    const semHora = {
+      endereco: 'RUA V, Nº 9', nDomicilio: '5',
+      agendado: '01/09/2026', agendadoOrdenavel: '2026-09-01',
+      futura: true, situacao: '', transmissao: '',
+    };
+    const html = buildDomiciliosTable([semHora]);
+    expect(html).toContain('01/09/2026');
+    expect(html).not.toContain('undefined');
+    expect(html).not.toMatch(/01\/09\/2026 <\/(span|td)>/);
   });
 
   // THE reversal from the old buildDomiciliosHtml: nothing is omitted, and
