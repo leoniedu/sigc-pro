@@ -277,7 +277,7 @@ describe('indexMovimento', () => {
   test('keys on controle|domicilio', () => {
     const { index } = indexMovimento(header, rows);
     expect(index.get('292740805060337|1'))
-      .toEqual({ situacao: 'TRANSMITIDO', transmissao: '28/07/2026' });
+      .toEqual({ situacao: 'TRANSMITIDO', transmissao: '28/07/2026', tipo: 'Presencial' });
   });
 
   test('keeps an empty transmission date as empty', () => {
@@ -317,6 +317,53 @@ describe('indexMovimento', () => {
     expect(indexMovimento(header, []).index.size).toBe(0);
     expect(indexMovimento(null, null).index.size).toBe(0);
     expect(indexMovimento(null, null).colunasNaoEncontradas).toBe(true);
+  });
+});
+
+describe('indexMovimento — tipo de entrevista', () => {
+  const header = ['Controle', 'Domicilio', 'Entrevistador', 'Tipo de Entrevista',
+    'Última Posição', 'Data', 'Observação'];
+  const rows = [
+    ['292740805060337', '1', 'JOÃO', 'PRESENCIAL', 'TRANSMITIDO', '28/07/2026', ''],
+  ];
+
+  test('captures Tipo de Entrevista', () => {
+    const { index } = indexMovimento(header, rows);
+    expect(index.get('292740805060337|1').tipo).toBe('PRESENCIAL');
+  });
+
+  // A missing column must still surface via colunasNaoEncontradas, not
+  // silently empty the column.
+  test('a missing Tipo column flags colunasNaoEncontradas', () => {
+    const semTipo = ['Controle', 'Domicilio', 'Entrevistador',
+      'Última Posição', 'Data', 'Observação'];
+    const r = indexMovimento(semTipo, [['292740805060337', '1', 'JOÃO', 'X', '28/07/2026', '']]);
+    expect(r.colunasNaoEncontradas).toBe(true);
+  });
+});
+
+describe('annotateRow / table — tipo', () => {
+  test('annotateRow carries tipo through, empty when absent', () => {
+    const idx = new Map([['C1|1', { situacao: 'X', transmissao: '', tipo: 'PRESENCIAL' }]]);
+    const r = annotateRow('C1', '1', {
+      agendaIdx: new Map(), movimentoIdx: idx, todayIso: '2026-07-31',
+    });
+    expect(r.tipo).toBe('PRESENCIAL');
+    const vazio = annotateRow('C9', '9', {
+      agendaIdx: new Map(), movimentoIdx: idx, todayIso: '2026-07-31',
+    });
+    expect(vazio.tipo).toBe('');
+  });
+
+  test('the table renders tipo, and — when absent', () => {
+    const html = buildDomiciliosTable([
+      { endereco: 'R X, 1', nDomicilio: '1', lat: null, lon: null,
+        agendado: '', futura: false, situacao: 'EM COLETA', transmissao: '', tipo: 'PRESENCIAL' },
+      { endereco: 'R Y, 2', nDomicilio: '2', lat: null, lon: null,
+        agendado: '', futura: false, situacao: '', transmissao: '', tipo: '' },
+    ]);
+    expect(html).toContain('PRESENCIAL');
+    expect(html).toContain('Tipo');
   });
 });
 
@@ -444,7 +491,7 @@ describe('annotateRow', () => {
 
   test('an unmatched household yields empty strings, never undefined', () => {
     expect(annotateRow('999', '9', ctx)).toEqual({
-      agendado: '', agendadoOrdenavel: '', futura: false, situacao: '', transmissao: '',
+      agendado: '', agendadoOrdenavel: '', futura: false, situacao: '', transmissao: '', tipo: '',
     });
   });
 
@@ -518,9 +565,9 @@ describe('buildDomiciliosTable', () => {
     const html = buildDomiciliosTable([comDados, semDados]);
     expect(html).toContain('RUA Y, Nº 10');
     expect(html).not.toMatch(/omitid/);
-    // Domicílio 2's row has three "—" cells: Agendado, Situação, Data.
+    // Domicílio 2's row has four "—" cells: Agendado, Situação, Tipo, Data.
     const row2 = html.split('RUA Y, Nº 10')[1].split('</tr>')[0];
-    expect((row2.match(/—/g) || []).length).toBe(3);
+    expect((row2.match(/—/g) || []).length).toBe(4);
   });
 
   test('no households at all renders an empty table body, not an error', () => {
@@ -596,7 +643,7 @@ describe('buildDomiciliosDocHtml', () => {
   test('missing values render as —', () => {
     const html = buildDomiciliosDocHtml(meta, resumoHtml, domicilios);
     const row2 = html.split('Domicílio 2')[1].split('</tr>')[0];
-    expect((row2.match(/—/g) || []).length).toBe(3);
+    expect((row2.match(/—/g) || []).length).toBe(4);
   });
 
   test('future/past scheduled dates render distinctly', () => {

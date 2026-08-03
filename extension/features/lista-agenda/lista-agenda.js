@@ -178,8 +178,9 @@
     const iControle = acharColuna(header, 'Controle');
     const iDomicilio = acharColuna(header, 'Domicílio');
     const iPosicao = acharColuna(header, 'Última Posição');
+    const iTipo = acharColuna(header, 'Tipo de Entrevista');
     const iTransmissao = acharColuna(header, 'Data');
-    if (iControle === -1 || iDomicilio === -1 || iPosicao === -1 || iTransmissao === -1) {
+    if (iControle === -1 || iDomicilio === -1 || iPosicao === -1 || iTipo === -1 || iTransmissao === -1) {
       console.warn(`${TAG} Último Movimento: colunas esperadas não encontradas`,
         JSON.stringify(header));
       return { index: map, colunasNaoEncontradas: true };
@@ -191,6 +192,7 @@
       map.set(chaveDomicilio(controle, domicilio), {
         situacao: String(r[iPosicao] ?? '').trim(),
         transmissao: String(r[iTransmissao] ?? '').trim(),
+        tipo: String(r[iTipo] ?? '').trim(),
       });
     });
     return { index: map, colunasNaoEncontradas: false };
@@ -281,6 +283,7 @@
         `<td>${e(String(d.nDomicilio ?? '').trim() || '—')}</td>` +
         `<td data-sort="${e(d.agendadoOrdenavel || '')}">${agendadoCell}</td>` +
         `<td>${e(d.situacao || '—')}</td>` +
+        `<td>${e(d.tipo || '—')}</td>` +
         `<td data-sort="${e(d.transmissao || '')}">${e(d.transmissao || '—')}</td>` +
         '</tr>';
     }).join('\n');
@@ -296,6 +299,7 @@
       // display format, not the sort key).
       '<th data-tipo="texto">Agendado</th>',
       '<th data-tipo="texto">Situação</th>',
+      '<th data-tipo="texto">Tipo</th>',
       '<th data-tipo="data">Data</th>',
       '</tr></thead>',
       `<tbody>${linhas}</tbody>`,
@@ -427,6 +431,7 @@ ${buildDomiciliosTable(domicilios)}
       futura: ag ? ag.futura : false,
       situacao: mv ? mv.situacao : '',
       transmissao: mv ? mv.transmissao : '',
+      tipo: mv ? mv.tipo : '',
     };
   }
 
@@ -652,6 +657,7 @@ ${buildDomiciliosTable(domicilios)}
         nDomicilio: String(r[cols.nDomicilio.index] ?? '').trim(),
         lat: window.__sigcPro.parseCoord(r[cols.latitude.index]),
         lon: window.__sigcPro.parseCoord(r[cols.longitude.index]),
+        tipo: a.tipo,
       };
     });
 
