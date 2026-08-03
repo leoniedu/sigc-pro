@@ -117,6 +117,21 @@ Google Maps links (not loaded resources — nothing is fetched until
 clicked). Nothing is ever sent to third parties or the developer.
 ```
 
+## Storage permission justification (dashboard field)
+
+```
+The extension uses chrome.storage.local to persist a single
+on/off flag: the "CSV TODAS" advanced export feature on the
+Último Movimento report. The flag is off by default and can only
+be toggled on the extension's own Options page
+(chrome://extensions → Opções). No other data is stored — no
+user preferences, no credentials, no cached responses, no
+analytics. The flag exists because the feature loops one
+same-origin request per agência in the current UF, which is
+deliberately noisy; requiring an explicit opt-in prevents
+accidental activation.
+```
+
 ## Category
 
 Productivity (or "Tools" if available for the target region)
