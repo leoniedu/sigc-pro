@@ -7,7 +7,7 @@ await import('../extension/features/lista-agenda/lista-agenda.js');
 const {
   parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml,
   buildDomiciliosTable, buildDomiciliosDocHtml, enderecoDomicilio, fetchLabel, nomeArquivoDomicilios,
-  linhasSelecionadas, algumaLinhaTemZona,
+  linhasSelecionadas, algumaLinhaTemZona, slotsLivresDaJanela, agruparPorDia, buildSlotsLivresHtml,
 } = window.__sigcPro.listaAgenda;
 
 // A reserved slot's title carries every field; an open slot's title is
@@ -840,5 +840,88 @@ describe('buildDomiciliosTable — maps link', () => {
     }]);
     expect(html).not.toContain('<b>X</b>');
     expect(html).toContain('&lt;b&gt;');
+  });
+});
+
+describe('slotsLivresDaJanela', () => {
+  const LIMITE = '2026-08-04';
+  const FIM = '2026-08-15';
+  const Z = '29JDM8 - 29.2.01.02 29_Linus_Lauro';
+  const slot = (isoDate, hora, aberto) => parseSlots([slotJson({
+    start: `${isoDate}T${hora}:00`,
+    title: aberto ? `Zonas: ${Z}` : `Zonas: ${Z}\nControle: C1\nDomicílio: 1`,
+  })])[0];
+  const run = (arr) => slotsLivresDaJanela(arr, '29JDM8', LIMITE, FIM);
+
+  // Filled slots live in the household table; repeating them here is the
+  // duplication that sank the calendar.
+  test('includes only open slots', () => {
+    expect(run([slot('2026-08-05', '09:00', false)])).toHaveLength(0);
+    expect(run([slot('2026-08-05', '09:00', true)])).toHaveLength(1);
+  });
+
+  test('respects the prazo and the window end', () => {
+    expect(run([slot('2026-08-02', '09:00', true)])).toHaveLength(0);
+    expect(run([slot('2026-08-20', '09:00', true)])).toHaveLength(0);
+    expect(run([slot(LIMITE, '09:00', true)])).toHaveLength(1);
+  });
+
+  test('excludes other zonas', () => {
+    const outra = parseSlots([slotJson({
+      start: '2026-08-05T09:00:00',
+      title: 'Zonas: 29ZZZZ - 29.9.09.09 29_Linus_Outra',
+    })])[0];
+    expect(run([outra])).toHaveLength(0);
+  });
+
+  test('sorted by date then time', () => {
+    const r = run([
+      slot('2026-08-05', '14:00', true),
+      slot('2026-08-04', '09:30', true),
+      slot('2026-08-05', '09:00', true),
+    ]);
+    expect(r.map((s) => `${s.isoDate} ${s.hora}`)).toEqual([
+      '2026-08-04 09:30', '2026-08-05 09:00', '2026-08-05 14:00',
+    ]);
+  });
+});
+
+describe('agruparPorDia', () => {
+  test('groups times under their date, in order', () => {
+    const g = agruparPorDia([
+      { isoDate: '2026-08-04', hora: '09:30' },
+      { isoDate: '2026-08-05', hora: '09:00' },
+      { isoDate: '2026-08-05', hora: '14:00' },
+    ]);
+    expect(g.map((d) => d.isoDate)).toEqual(['2026-08-04', '2026-08-05']);
+    expect(g[1].horas).toEqual(['09:00', '14:00']);
+  });
+
+  // Two equipes free at the same time: two real slots, not a duplicate.
+  test('keeps repeated times as separate entries', () => {
+    const g = agruparPorDia([
+      { isoDate: '2026-08-05', hora: '09:00' },
+      { isoDate: '2026-08-05', hora: '09:00' },
+    ]);
+    expect(g[0].horas).toEqual(['09:00', '09:00']);
+  });
+
+  test('empty input yields no groups', () => {
+    expect(agruparPorDia([])).toEqual([]);
+  });
+});
+
+describe('buildSlotsLivresHtml', () => {
+  test('renders a line per day with its times', () => {
+    const html = buildSlotsLivresHtml([
+      { isoDate: '2026-08-04', horas: ['09:00', '14:00'] },
+    ]);
+    expect(html).toContain('04/08');
+    expect(html).toContain('09:00');
+    expect(html).toContain('14:00');
+  });
+
+  test('says so when there is nothing free', () => {
+    expect(buildSlotsLivresHtml([])).toMatch(/Nenhum slot livre/);
   });
 });

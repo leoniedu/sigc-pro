@@ -129,6 +129,45 @@
     return map;
   }
 
+  // The ONE selection behind both the turno counts and the list below
+  // them. Deriving them separately is how a summary ends up disagreeing
+  // with the detail it summarises.
+  function slotsLivresDaJanela(slots, zonaId, minDateIso, fimIso) {
+    return (slots || [])
+      .filter((s) => {
+        if (!s.aberto) return false;
+        if (!s.isoDate || s.isoDate < minDateIso || s.isoDate > fimIso) return false;
+        if (window.__sigcPro.toMin(horaDeIso(s.start)) == null) return false;
+        return window.__sigcPro.parseZonaEntries(s.zonas).map(zonaIdOf).includes(zonaId);
+      })
+      .map((s) => ({ isoDate: s.isoDate, hora: horaDeIso(s.start) }))
+      .sort((a, b) => a.isoDate.localeCompare(b.isoDate) || a.hora.localeCompare(b.hora));
+  }
+
+  function agruparPorDia(livres) {
+    const dias = new Map();
+    (livres || []).forEach((s) => {
+      if (!dias.has(s.isoDate)) dias.set(s.isoDate, []);
+      dias.get(s.isoDate).push(s.hora);
+    });
+    return [...dias.entries()].map(([isoDate, horas]) => ({ isoDate, horas }));
+  }
+
+  // Grouped by day rather than a flat list: a fortnight of slots stays a
+  // short block you can scan for "when this week?".
+  function buildSlotsLivresHtml(grupos) {
+    const e = window.__sigcPro.escapeHtml;
+    if (!grupos || grupos.length === 0) {
+      return '<p class="sp-livres-vazio">Nenhum slot livre no período.</p>';
+    }
+    const linhas = grupos.map((g) => {
+      const dia = `${g.isoDate.slice(8, 10)}/${g.isoDate.slice(5, 7)}`;
+      const horas = g.horas.map((h) => `<span class="sp-hora">${e(h)}</span>`).join(' ');
+      return `<div class="sp-dia"><strong>${e(dia)}</strong> ${horas}</div>`;
+    }).join('\n');
+    return `<div class="sp-livres">${linhas}</div>`;
+  }
+
   // HH:MM out of a full ISO timestamp, or '' if unparsable — a household
   // scheduled at 09:00 vs 15:30 matters when planning a day, so the time
   // is shown alongside the date wherever it renders.
@@ -235,7 +274,7 @@
   // wall of 15-40 households made this on-page panel unwieldy. `arquivo`,
   // when given, names that download so the panel points at where the
   // detail went rather than just dropping it silently.
-  function buildResumoHtml(zonaIdsDaTabela, livresIdx, meta, arquivo) {
+  function buildResumoHtml(zonaIdsDaTabela, livresIdx, meta, arquivo, livres) {
     const e = window.__sigcPro.escapeHtml;
     const ids = [...new Set((zonaIdsDaTabela || []).filter(Boolean))].sort();
     const celulas = ids.map((id) => {
@@ -266,6 +305,7 @@
       '<div id="sigc-pro-lista-agenda-resumo">',
       `<div class="sp-titulo">Slots livres (a partir de ${e(meta.minDateBr)}, próximas 2 semanas) · ${quando}</div>`,
       `<div class="sp-zonas">${celulas || '<em>Nenhuma zona nesta tabela.</em>'}</div>`,
+      livresIdx !== null ? buildSlotsLivresHtml(livres || []) : '',
       falhas,
       download,
       '</div>',
@@ -352,6 +392,10 @@ main { padding: 0 1.2rem 2rem; }
 #sigc-pro-lista-agenda-resumo .sp-titulo { color: #555; margin-bottom: .2rem; }
 #sigc-pro-lista-agenda-resumo .sp-zona-livre { display: inline-block; margin-right: .9rem; }
 #sigc-pro-lista-agenda-resumo .sp-falha { color: #a11; margin-top: .2rem; }
+#sigc-pro-lista-agenda-resumo .sp-livres { margin-top: .4rem; border-top: 1px solid #d0d7de; padding-top: .3rem; }
+#sigc-pro-lista-agenda-resumo .sp-dia { margin-bottom: .15rem; }
+#sigc-pro-lista-agenda-resumo .sp-hora { display: inline-block; margin-right: .35rem; color: #333; }
+#sigc-pro-lista-agenda-resumo .sp-livres-vazio { color: #888; margin-top: .3rem; }
 table.sp-tabela { border-collapse: collapse; width: 100%; margin-top: .4rem; }
 table.sp-tabela th, table.sp-tabela td { border: 1px solid #d0d7de; padding: .3rem .6rem; text-align: left; font-size: .92rem; }
 table.sp-tabela th { background: #f6f8fa; cursor: pointer; user-select: none; white-space: nowrap; }
@@ -545,7 +589,7 @@ ${buildDomiciliosTable(domicilios)}
   window.__sigcPro.listaAgenda = {
     parseSlots, zonaIdOf, indexByControle, indexZonaLivres, pickAgendado, indexMovimento, buildResumoHtml, annotateRow,
     buildDomiciliosTable, buildDomiciliosDocHtml, enderecoDomicilio, fetchLabel, nomeArquivoDomicilios, linhasSelecionadas,
-    algumaLinhaTemZona,
+    algumaLinhaTemZona, slotsLivresDaJanela, agruparPorDia, buildSlotsLivresHtml,
   };
 
   // --- caches ---------------------------------------------------------
@@ -661,6 +705,11 @@ ${buildDomiciliosTable(domicilios)}
     fim.setDate(fim.getDate() + 14);
     const fimIso = window.__sigcPro.dateToIso(fim);
     const livresIdx = ag ? indexZonaLivres(slots, minDateIso, fimIso) : null;
+    const zonaIds = linhas.map((r) => String(r[cols.idZona.index] || '').trim()).filter(Boolean);
+    const zonaId = zonaIds[0] || '';
+    const livres = ag && zonaId
+      ? agruparPorDia(slotsLivresDaJanela(slots, zonaId, minDateIso, fimIso))
+      : [];
     const todayIso = window.__sigcPro.dateToIso(new Date());
 
     // Keyed by household, NOT positional: linhas is the selecionado subset
@@ -694,7 +743,8 @@ ${buildDomiciliosTable(domicilios)}
       linhas.map((r) => String(r[cols.idZona.index] || '').trim()),
       livresIdx,
       meta,
-      arquivo);
+      arquivo,
+      livres);
     console.log(`${TAG} ${domicilios.length} domicílio(s) anotados e exportados para ${arquivo}; ` +
       `${livresIdx ? livresIdx.size : '?'} zona(s) com slots livres.`);
   }
@@ -728,7 +778,7 @@ ${buildDomiciliosTable(domicilios)}
     // at this very file, not inside the file itself.
     const resumoHtml = buildResumoHtml(
       rows.map((r) => String(r[pesquisa.columns.idZona.index] || '').trim()),
-      livresIdx, meta, null);
+      livresIdx, meta, null, livres);
     const docHtml = buildDomiciliosDocHtml(
       { controle, quando, geradoEm: `${data} ${hora.slice(0, 2)}:${hora.slice(2, 4)}:${hora.slice(4, 6)}` },
       resumoHtml, domicilios);
@@ -736,7 +786,7 @@ ${buildDomiciliosTable(domicilios)}
     return arquivo;
   }
 
-  function escreverResumo(zonaIds, livresIdx, meta, arquivo) {
+  function escreverResumo(zonaIds, livresIdx, meta, arquivo, livres) {
     const antigo = document.getElementById('sigc-pro-lista-agenda-resumo');
     if (antigo) antigo.remove();
     const alvo = document.querySelector('.dataTables_wrapper') ||
@@ -744,7 +794,7 @@ ${buildDomiciliosTable(domicilios)}
     const div = document.createElement('div');
     // Built from escaped strings only (escapeHtml on every interpolated
     // value, including the filename — see buildResumoHtml).
-    div.innerHTML = buildResumoHtml(zonaIds, livresIdx, meta, arquivo);
+    div.innerHTML = buildResumoHtml(zonaIds, livresIdx, meta, arquivo, livres);
     alvo.parentNode.insertBefore(div.firstElementChild, alvo);
   }
 
@@ -757,6 +807,10 @@ ${buildDomiciliosTable(domicilios)}
 #sigc-pro-lista-agenda-resumo .sp-zona-livre { display: inline-block; margin-right: .9rem; }
 #sigc-pro-lista-agenda-resumo .sp-falha { color: #a11; margin-top: .2rem; }
 #sigc-pro-lista-agenda-resumo .sp-download { margin-top: .3rem; border-top: 1px solid #d0d7de; padding-top: .3rem; color: #333; }
+#sigc-pro-lista-agenda-resumo .sp-livres { margin-top: .4rem; border-top: 1px solid #d0d7de; padding-top: .3rem; }
+#sigc-pro-lista-agenda-resumo .sp-dia { margin-bottom: .15rem; }
+#sigc-pro-lista-agenda-resumo .sp-hora { display: inline-block; margin-right: .35rem; color: #333; }
+#sigc-pro-lista-agenda-resumo .sp-livres-vazio { color: #888; margin-top: .3rem; }
 `;
 
   function ensureStyle() {
