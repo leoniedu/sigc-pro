@@ -737,7 +737,7 @@ ${buildDomiciliosTable(domicilios)}
       movimentoEm: mv ? fetchLabel(mv.em, mv.cache) : '—',
       falhas,
     };
-    const arquivo = baixarTabelaDomicilios(controle, meta, pesquisa, linhas, domicilios, livresIdx);
+    const arquivo = baixarTabelaDomicilios(controle, meta, pesquisa, linhas, domicilios, livresIdx, livres);
 
     escreverResumo(
       linhas.map((r) => String(r[cols.idZona.index] || '').trim()),
@@ -765,7 +765,7 @@ ${buildDomiciliosTable(domicilios)}
     return `${base}_agenda_${hora}.html`;
   }
 
-  function baixarTabelaDomicilios(controle, meta, pesquisa, rows, domicilios, livresIdx) {
+  function baixarTabelaDomicilios(controle, meta, pesquisa, rows, domicilios, livresIdx, livres) {
     const base = window.__sigcPro.exportFileBase(pesquisa, rows);
     const { data, hora } = window.__sigcPro.timestampSlug();
     const arquivo = nomeArquivoDomicilios(base, hora);
