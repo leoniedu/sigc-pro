@@ -498,40 +498,6 @@ ${buildDomiciliosTable(domicilios)}
   }
 
   // --- acquire --------------------------------------------------------
-  // F5 BIG-IP rewrites every path to "/f5-w-<hex>$$/<path>" off-VPN.
-  // Duplicated from ultimo-movimento-export.js rather than shared: moving
-  // fetch-adjacent code into sigc-common.js would put it outside the
-  // privacy gate's sanctioned directories.
-  function f5Prefix(pathname) {
-    const m = /^\/f5-w-([0-9a-f]+)\$\$/.exec(String(pathname || ''));
-    return m ? { prefix: m[0], hex: m[1] } : null;
-  }
-
-  function gatewayUrl(origin, pathname, path, simple) {
-    const f5 = f5Prefix(pathname);
-    if (!f5) return `${origin}${path}`;
-    return simple
-      ? `${origin}${f5.prefix}${path}`
-      : `${origin}${f5.prefix}/f5-h-$$${path};F5_origin=${f5.hex}&F5CH=I`;
-  }
-
-  async function fetchViaGateway(path, options) {
-    const urls = [...new Set([
-      gatewayUrl(location.origin, location.pathname, path, true),
-      gatewayUrl(location.origin, location.pathname, path, false),
-    ])];
-    let lastErr = new Error('sem resposta');
-    for (const url of urls) {
-      try {
-        const res = await fetch(url, options);
-        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
-        return res;
-      } catch (err) {
-        lastErr = err;
-      }
-    }
-    throw lastErr;
-  }
 
   // Query built by hand: percent-encoding the "$$" in the F5 path turns
   // the URL into a 404 (learned in pns.zonas/R/sigc_agendamentos.R).
@@ -540,7 +506,7 @@ ${buildDomiciliosTable(domicilios)}
       `&start=${encodeURIComponent(startIso)}` +
       `&end=${encodeURIComponent(endIso)}` +
       '&semana=true&idEquipe=';
-    const res = await fetchViaGateway(`/AdministracaoAgenda/ObterSlots?${query}`, {
+    const res = await window.__sigcPro.fetchViaGateway(`/AdministracaoAgenda/ObterSlots?${query}`, {
       credentials: 'same-origin',
       headers: {
         'X-Requested-With': 'XMLHttpRequest',
@@ -562,7 +528,7 @@ ${buildDomiciliosTable(domicilios)}
       IdEntrevistadores: '*',
       IdTipoAcompanhamento: '*',
     };
-    const res = await fetchViaGateway('/UltimoMovimento/Filtrar', {
+    const res = await window.__sigcPro.fetchViaGateway('/UltimoMovimento/Filtrar', {
       method: 'POST',
       credentials: 'same-origin',
       headers: {
