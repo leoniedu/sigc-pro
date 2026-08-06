@@ -103,6 +103,35 @@
     return tableToEnderecosMap(headers, rows);
   }
 
+  // Último Movimento's own results table (#tb_ultimo_movimento), resolved
+  // by header label the same way tableToEnderecosMap resolves Lista de
+  // Endereços — a live column reorder can never silently join the wrong
+  // fields. Unlike Lista de Endereços this table isn't pesquisa-scoped
+  // (Último Movimento has no per-pesquisa registry entry), so the three
+  // labels are matched directly rather than via LISTA_COMMON_LABELS.
+  const ULTIMO_MOVIMENTO_LABELS = { controle: 'Controle', agencia: 'Agência', entrevistador: 'Entrevistador' };
+
+  function parseUltimoMovimentoTable(headers, rows) {
+    const P = window.__sigcPro;
+    const idx = {};
+    for (const key of Object.keys(ULTIMO_MOVIMENTO_LABELS)) {
+      const i = headers.findIndex(
+        (h) => P.normalizeLabel(h) === P.normalizeLabel(ULTIMO_MOVIMENTO_LABELS[key]));
+      if (i === -1) return null;
+      idx[key] = i;
+    }
+    const map = new Map();
+    rows.forEach((cells) => {
+      const controle = String(cells[idx.controle] || '').trim();
+      if (!controle) return;
+      map.set(controle, {
+        agencia: String(cells[idx.agencia] || '').trim(),
+        entrevistador: String(cells[idx.entrevistador] || '').trim(),
+      });
+    });
+    return map;
+  }
+
   // --- network (the sanctioned exception) -----------------------------
 
   // Tries the simple prefixed URL first, then the full captured F5 form
@@ -225,4 +254,7 @@
       });
     },
   });
+
+  // Exposed only for tests — not part of the runtime public surface.
+  window.__sigcProAgendaMapInternals = { parseUltimoMovimentoTable };
 })();
