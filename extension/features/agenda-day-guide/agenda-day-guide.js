@@ -60,7 +60,7 @@
   function zonasUnion(rows, enderecos) {
     const set = new Set();
     rows.forEach((r) => {
-      const real = zonaLabel(slotInfo(r, enderecos));
+      const real = zonaFullLabel(slotInfo(r, enderecos));
       if (real) {
         set.add(real);
         return;
@@ -103,6 +103,18 @@
   // (see agenda-map.js — coordinates alone are enough for an entry).
   function zonaLabel(info) {
     return info ? (info.idZona || '') : '';
+  }
+
+  // Card-facing variant of zonaLabel: ID plus nome when both are present,
+  // same no-nome-only-fallback rule (a row with no idZona renders blank
+  // even if it somehow carries a nome). Used by buildSlotCard,
+  // routeCheckboxHtml and the team Zonas: line — never by buildDayGrid,
+  // which stays ID-only (grid cells are space-constrained).
+  function zonaFullLabel(info) {
+    const id = zonaLabel(info);
+    if (!id) return '';
+    const nome = info && info.zona ? String(info.zona).trim() : '';
+    return nome ? `${id} ${nome}` : id;
   }
 
   function fmtCoord(p) {
@@ -152,7 +164,7 @@
     // Displayed label adds the same Controle/Dom/Zona detail buildSlotCard
     // shows on the card itself, so a checked-off stop is identifiable
     // without cross-referencing the card above/below it.
-    const zona = zonaLabel(info);
+    const zona = zonaFullLabel(info);
     const detail = [
       r.controle && `Controle: ${e(r.controle)}`,
       r.domicilio && `Dom: ${e(r.domicilio)}`,
@@ -484,7 +496,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       ? `<div class="morador">${partes.join(' — ')}</div>`
       : '';
     const info = slotInfo(r, enderecos);
-    const zona = zonaLabel(info);
+    const zona = zonaFullLabel(info);
     const ids = [
       r.telefone && `Tel: ${e(r.telefone)}`,
       r.controle && `Controle: ${e(r.controle)}`,
@@ -936,6 +948,9 @@ ${sections}
     window.__sigcPro.downloadFile(fileName(meta), html, 'text/html;charset=utf-8');
     console.log(`${TAG} guide exported: ${groups.length} equipe(s), ${rows.length} slot(s).`);
   }
+
+  // Exposed only for tests — not part of the runtime public surface.
+  window.__sigcProAgendaDayGuideInternals = { zonaFullLabel };
 
   // Consumed by agenda-map, which owns the only guide button: it calls
   // generate(enderecos) after its fetch, or generate(null) when there is
