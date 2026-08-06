@@ -132,6 +132,27 @@
     return map;
   }
 
+  // enderecoKey is "controle|domicilio" (see agenda-day-guide.js's own
+  // enderecoKey) — split on the FIRST "|" only, since a domicilio value
+  // can theoretically contain no "|" itself (matches how the key was
+  // built, string concatenation with a literal "|" separator).
+  function controleFromKey(key) {
+    return key.slice(0, key.indexOf('|'));
+  }
+
+  // New Map: every enderecos entry sharing a Controle present in umMap
+  // gets agencia/entrevistador added; entries for controles with no
+  // Último Movimento match pass through unchanged (never blocks the
+  // guide — see buildSlotCard's existing present-only rendering).
+  function mergeUltimoMovimento(enderecos, umMap) {
+    const merged = new Map();
+    enderecos.forEach((v, k) => {
+      const um = umMap.get(controleFromKey(k));
+      merged.set(k, um ? { ...v, agencia: um.agencia, entrevistador: um.entrevistador } : v);
+    });
+    return merged;
+  }
+
   // --- network (the sanctioned exception) -----------------------------
 
   // Tries the simple prefixed URL first, then the full captured F5 form
@@ -182,6 +203,61 @@
     return all;
   }
 
+  function filtroBodyUltimoMovimento(uf, controle) {
+    return 'filtro=' + encodeURIComponent(JSON.stringify({
+      IdFiltro: '',
+      IdUf: String(uf),
+      IdAgencia: '*',
+      IdMunicipio: '*',
+      Controle: String(controle),
+      IdEntrevistadores: '*',
+      IdTipoAcompanhamento: '*',
+    }));
+  }
+
+  async function postUltimoMovimento(uf, controle) {
+    const res = await window.__sigcPro.fetchViaGateway('/UltimoMovimento/Filtrar', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: filtroBodyUltimoMovimento(uf, controle),
+    });
+    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+    const table = doc.getElementById('tb_ultimo_movimento');
+    if (!table) return null;
+    const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+    const rows = [...table.querySelectorAll('tbody tr')].map((tr) =>
+      [...tr.querySelectorAll('td')].map((td) => td.textContent.trim()));
+    return parseUltimoMovimentoTable(headers, rows);
+  }
+
+  // In-memory only, mirrors enderecosCache: controle -> Map(controle ->
+  // {agencia, entrevistador}) | null (null = fetched, no usable table).
+  const ultimoMovimentoCache = new Map();
+
+  // One sequential POST per distinct Controle not already cached. A
+  // failed or empty-table Controle is logged and skipped — never fatal
+  // to the run, matching fetchEnderecos/postFiltrar's own failure mode.
+  async function fetchUltimoMovimento(uf, controles) {
+    const all = new Map();
+    for (const c of controles) {
+      if (!ultimoMovimentoCache.has(c)) {
+        try {
+          ultimoMovimentoCache.set(c, await postUltimoMovimento(uf, c));
+        } catch (err) {
+          console.warn(`${TAG} Último Movimento lookup for Controle ${c} failed:`, err);
+          ultimoMovimentoCache.set(c, null);
+        }
+      }
+      const result = ultimoMovimentoCache.get(c);
+      if (result) result.forEach((v, k) => all.set(k, v));
+    }
+    return all;
+  }
+
   // --- UI --------------------------------------------------------------
 
   const BUTTON_ID = 'sigc-pro-agenda-mapa-button';
@@ -190,7 +266,8 @@
   let consentGiven = false;
   const CONSENT_MSG =
     'SIGC-PRO: isto fará uma consulta ao próprio servidor do SIGC para ' +
-    'obter as coordenadas dos endereços. Nenhum dado sai do IBGE. Continuar?';
+    'obter as coordenadas, zona, agência e entrevistador dos endereços. ' +
+    'Nenhum dado sai do IBGE. Continuar?';
 
   // Declining is not a cancel: this is the only guide button, so a "não"
   // still produces the guide, just without the fetched coordinates and
@@ -220,6 +297,9 @@
       try {
         enderecos = await fetchEnderecos(uf, controles);
         console.log(`${TAG} ${enderecos.size} endereço(s) de ${controles.length} controle(s).`);
+        const umMap = await fetchUltimoMovimento(uf, controles);
+        enderecos = mergeUltimoMovimento(enderecos, umMap);
+        console.log(`${TAG} ${umMap.size} controle(s) com agência/entrevistador.`);
       } catch (err) {
         alert(`SIGC-PRO: não foi possível obter coordenadas (${err && err.message}); ` +
           'o guia será gerado sem mapa.');
@@ -256,5 +336,5 @@
   });
 
   // Exposed only for tests — not part of the runtime public surface.
-  window.__sigcProAgendaMapInternals = { parseUltimoMovimentoTable };
+  window.__sigcProAgendaMapInternals = { parseUltimoMovimentoTable, mergeUltimoMovimento };
 })();

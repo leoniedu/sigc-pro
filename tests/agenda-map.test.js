@@ -45,3 +45,34 @@ describe('parseUltimoMovimentoTable', () => {
     expect(map.get('C1')).toEqual({ agencia: 'A1', entrevistador: 'Fulano de Tal' });
   });
 });
+
+describe('mergeUltimoMovimento', () => {
+  test('adds agencia/entrevistador to every entry sharing that Controle', () => {
+    const enderecos = new Map([
+      ['C1|D1', { lat: -12.9, lon: -38.5, zona: 'Centro', idZona: 'Z1' }],
+      ['C1|D2', { lat: -12.8, lon: -38.4, zona: 'Centro', idZona: 'Z1' }],
+      ['C2|D1', { lat: -13.0, lon: -38.6, zona: 'Norte', idZona: 'Z2' }],
+    ]);
+    const umMap = new Map([
+      ['C1', { agencia: 'A1', entrevistador: 'Fulano' }],
+    ]);
+    const merged = AM.mergeUltimoMovimento(enderecos, umMap);
+    expect(merged.get('C1|D1')).toEqual({ lat: -12.9, lon: -38.5, zona: 'Centro', idZona: 'Z1', agencia: 'A1', entrevistador: 'Fulano' });
+    expect(merged.get('C1|D2')).toEqual({ lat: -12.8, lon: -38.4, zona: 'Centro', idZona: 'Z1', agencia: 'A1', entrevistador: 'Fulano' });
+    // C2 has no Último Movimento match: passes through untouched.
+    expect(merged.get('C2|D1')).toEqual({ lat: -13.0, lon: -38.6, zona: 'Norte', idZona: 'Z2' });
+  });
+
+  test('returns the original map unchanged when umMap is empty', () => {
+    const enderecos = new Map([['C1|D1', { lat: -12.9, lon: -38.5 }]]);
+    const merged = AM.mergeUltimoMovimento(enderecos, new Map());
+    expect(merged.get('C1|D1')).toEqual({ lat: -12.9, lon: -38.5 });
+  });
+
+  test('does not mutate the input enderecos map', () => {
+    const original = { lat: -12.9, lon: -38.5 };
+    const enderecos = new Map([['C1|D1', original]]);
+    AM.mergeUltimoMovimento(enderecos, new Map([['C1', { agencia: 'A1', entrevistador: 'Fulano' }]]));
+    expect(original).toEqual({ lat: -12.9, lon: -38.5 });
+  });
+});
