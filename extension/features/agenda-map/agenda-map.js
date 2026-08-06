@@ -314,6 +314,58 @@
     return all;
   }
 
+  function filtroBodyDistribuicao(uf, controle) {
+    return 'filtro=' + encodeURIComponent(JSON.stringify({
+      IdFiltro: '',
+      IdUf: String(uf),
+      IdMunicipio: '*',
+      Controle: String(controle),
+    }));
+  }
+
+  async function postDistribuicao(uf, controle) {
+    const res = await window.__sigcPro.fetchViaGateway('/RelatorioDistribuicao/Filtrar', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: filtroBodyDistribuicao(uf, controle),
+    });
+    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+    const table = doc.getElementById('tb_distribuir');
+    if (!table) return null;
+    const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+    const rows = [...table.querySelectorAll('tbody tr')].map((tr) =>
+      [...tr.querySelectorAll('td')].map((td) => td.textContent.trim()));
+    return parseDistribuicaoTable(headers, rows);
+  }
+
+  // In-memory only, mirrors ultimoMovimentoCache: controle ->
+  // Map(controle -> {agencia}) | null.
+  const distribuicaoCache = new Map();
+
+  // One sequential POST per distinct Controle not already cached. Same
+  // per-Controle failure isolation as fetchUltimoMovimento: one bad
+  // Controle is logged and skipped, never fatal to the run.
+  async function fetchDistribuicao(uf, controles) {
+    const all = new Map();
+    for (const c of controles) {
+      if (!distribuicaoCache.has(c)) {
+        try {
+          distribuicaoCache.set(c, await postDistribuicao(uf, c));
+        } catch (err) {
+          console.warn(`${TAG} Distribuição lookup for Controle ${c} failed:`, err);
+          distribuicaoCache.set(c, null);
+        }
+      }
+      const result = distribuicaoCache.get(c);
+      if (result) result.forEach((v, k) => all.set(k, v));
+    }
+    return all;
+  }
+
   // --- UI --------------------------------------------------------------
 
   const BUTTON_ID = 'sigc-pro-agenda-mapa-button';
@@ -322,7 +374,7 @@
   let consentGiven = false;
   const CONSENT_MSG =
     'SIGC-PRO: isto fará uma consulta ao próprio servidor do SIGC para ' +
-    'obter as coordenadas, zona e entrevistador dos endereços. ' +
+    'obter as coordenadas, zona, agência e entrevistador dos endereços. ' +
     'Nenhum dado sai do IBGE. Continuar?';
 
   // Declining is not a cancel: this is the only guide button, so a "não"
@@ -356,6 +408,9 @@
         const umMap = await fetchUltimoMovimento(uf, controles);
         enderecos = mergeUltimoMovimento(enderecos, umMap);
         console.log(`${TAG} ${umMap.size} controle(s) com entrevistador.`);
+        const distMap = await fetchDistribuicao(uf, controles);
+        enderecos = mergeDistribuicao(enderecos, distMap);
+        console.log(`${TAG} ${distMap.size} controle(s) com agência.`);
       } catch (err) {
         alert(`SIGC-PRO: não foi possível obter coordenadas (${err && err.message}); ` +
           'o guia será gerado sem mapa.');
