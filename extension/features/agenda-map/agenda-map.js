@@ -140,6 +140,39 @@
     return map;
   }
 
+  // Relatório Distribuição's own results table (#tb_distribuir),
+  // resolved by header label the same way parseUltimoMovimentoTable
+  // resolves Último Movimento. Real live headers (2026-08-06): Controle,
+  // Município, Agência Sugerida, Agência Distribuida, Data Distribuição,
+  // Usuário da Distribuição. Only "Agência Distribuida" (no accent on
+  // "Distribuida" in the live markup — matched verbatim) is read — it
+  // is the agência the household was actually assigned to, distinct
+  // from "Agência Sugerida" (the system's suggestion, which the coord
+  // may have overridden). Confusing the two would silently show the
+  // wrong agência, so this table requires "Agência Distribuida"
+  // specifically and never falls back to "Sugerida".
+  const DISTRIBUICAO_LABELS = { controle: 'Controle', agencia: 'Agência Distribuida' };
+
+  function parseDistribuicaoTable(headers, rows) {
+    const P = window.__sigcPro;
+    const idx = {};
+    for (const key of Object.keys(DISTRIBUICAO_LABELS)) {
+      const i = headers.findIndex(
+        (h) => P.normalizeLabel(h) === P.normalizeLabel(DISTRIBUICAO_LABELS[key]));
+      if (i === -1) return null;
+      idx[key] = i;
+    }
+    const map = new Map();
+    rows.forEach((cells) => {
+      const controle = String(cells[idx.controle] || '').trim();
+      if (!controle) return;
+      map.set(controle, {
+        agencia: String(cells[idx.agencia] || '').trim(),
+      });
+    });
+    return map;
+  }
+
   // enderecoKey is "controle|domicilio" (see agenda-day-guide.js's own
   // enderecoKey) — split on the FIRST "|" only, since a domicilio value
   // can theoretically contain no "|" itself (matches how the key was
@@ -344,5 +377,5 @@
   });
 
   // Exposed only for tests — not part of the runtime public surface.
-  window.__sigcProAgendaMapInternals = { parseUltimoMovimentoTable, mergeUltimoMovimento };
+  window.__sigcProAgendaMapInternals = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable };
 })();

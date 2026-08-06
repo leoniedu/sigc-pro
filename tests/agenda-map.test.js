@@ -90,3 +90,48 @@ describe('mergeUltimoMovimento', () => {
     expect(original).toEqual({ lat: -12.9, lon: -38.5 });
   });
 });
+
+describe('parseDistribuicaoTable', () => {
+  test('maps Controle to {agencia} using Agência Distribuida (not Sugerida)', () => {
+    const headers = ['Controle', 'Município', 'Agência Sugerida', 'Agência Distribuida', 'Data Distribuição', 'Usuário da Distribuição'];
+    const rows = [
+      ['292370405000008', 'PARATINGA', 'BOM JESUS DA LAPA (sugerida)', 'BOM JESUS DA LAPA', '07/07/2026 00:00:00', 'EDUARDO LACRETA LEONI'],
+    ];
+    const map = AM.parseDistribuicaoTable(headers, rows);
+    expect(map.get('292370405000008')).toEqual({ agencia: 'BOM JESUS DA LAPA' });
+  });
+
+  test('is tolerant of header order and extra columns', () => {
+    const headers = ['Usuário da Distribuição', 'Agência Distribuida', 'Controle', 'Agência Sugerida'];
+    const rows = [['Fulano', 'A1', 'C1', 'A0 (sugerida)']];
+    const map = AM.parseDistribuicaoTable(headers, rows);
+    expect(map.get('C1')).toEqual({ agencia: 'A1' });
+  });
+
+  test('returns null when Agência Distribuida is missing (Sugerida alone does not satisfy it)', () => {
+    const headers = ['Controle', 'Agência Sugerida'];
+    const rows = [['C1', 'A0']];
+    expect(AM.parseDistribuicaoTable(headers, rows)).toBeNull();
+  });
+
+  test('returns null when Controle is missing', () => {
+    const headers = ['Agência Distribuida'];
+    const rows = [['A1']];
+    expect(AM.parseDistribuicaoTable(headers, rows)).toBeNull();
+  });
+
+  test('skips rows with a blank Controle', () => {
+    const headers = ['Controle', 'Agência Distribuida'];
+    const rows = [['', 'A1'], ['C1', 'A1']];
+    const map = AM.parseDistribuicaoTable(headers, rows);
+    expect(map.size).toBe(1);
+    expect(map.has('C1')).toBe(true);
+  });
+
+  test('trims whitespace from cell values', () => {
+    const headers = ['Controle', 'Agência Distribuida'];
+    const rows = [[' C1 ', ' BOM JESUS DA LAPA ']];
+    const map = AM.parseDistribuicaoTable(headers, rows);
+    expect(map.get('C1')).toEqual({ agencia: 'BOM JESUS DA LAPA' });
+  });
+});
