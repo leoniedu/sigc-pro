@@ -499,9 +499,11 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     const zona = zonaFullLabel(info);
     const ids = [
       r.telefone && `Tel: ${e(r.telefone)}`,
+      info && info.agencia && `Agência: ${e(info.agencia)}`,
       r.controle && `Controle: ${e(r.controle)}`,
       r.domicilio && `Dom: ${e(r.domicilio)}`,
       zona && `Zona: ${e(zona)}`,
+      info && info.entrevistador && `Entrevistador: ${e(info.entrevistador)}`,
     ].filter(Boolean).join(' &nbsp;·&nbsp; ');
     // Matches the number and color of the visit's dot in the map below
     // (same per-set sequence, computed by stopSequenceMap) — absent when
