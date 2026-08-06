@@ -243,7 +243,7 @@
   }
 
   // In-memory only, mirrors enderecosCache: controle -> Map(controle ->
-  // {agencia, entrevistador}) | null (null = fetched, no usable table).
+  // {entrevistador}) | null (null = fetched, no usable table).
   const ultimoMovimentoCache = new Map();
 
   // One sequential POST per distinct Controle not already cached. A
