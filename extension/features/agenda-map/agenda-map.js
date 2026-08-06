@@ -107,9 +107,18 @@
   // by header label the same way tableToEnderecosMap resolves Lista de
   // Endereços — a live column reorder can never silently join the wrong
   // fields. Unlike Lista de Endereços this table isn't pesquisa-scoped
-  // (Último Movimento has no per-pesquisa registry entry), so the three
-  // labels are matched directly rather than via LISTA_COMMON_LABELS.
-  const ULTIMO_MOVIMENTO_LABELS = { controle: 'Controle', agencia: 'Agência', entrevistador: 'Entrevistador' };
+  // (Último Movimento has no per-pesquisa registry entry), so the labels
+  // are matched directly rather than via LISTA_COMMON_LABELS.
+  //
+  // NO Agência column: confirmed against the live table (2026-08-06) —
+  // its real headers are Controle/Domicilio/Entrevistador/Tipo de
+  // Entrevista/Última Posição/Data/Observação. An earlier version of
+  // this parser wrongly required Agência here, which made every
+  // required-header check fail and silently zeroed out Entrevistador
+  // too (fail-closed, no error, no warning). Agência is now sourced
+  // separately from Relatório Distribuição — see
+  // parseDistribuicaoTable below.
+  const ULTIMO_MOVIMENTO_LABELS = { controle: 'Controle', entrevistador: 'Entrevistador' };
 
   function parseUltimoMovimentoTable(headers, rows) {
     const P = window.__sigcPro;
@@ -125,7 +134,6 @@
       const controle = String(cells[idx.controle] || '').trim();
       if (!controle) return;
       map.set(controle, {
-        agencia: String(cells[idx.agencia] || '').trim(),
         entrevistador: String(cells[idx.entrevistador] || '').trim(),
       });
     });
@@ -141,14 +149,14 @@
   }
 
   // New Map: every enderecos entry sharing a Controle present in umMap
-  // gets agencia/entrevistador added; entries for controles with no
+  // gets entrevistador added; entries for controles with no
   // Último Movimento match pass through unchanged (never blocks the
   // guide — see buildSlotCard's existing present-only rendering).
   function mergeUltimoMovimento(enderecos, umMap) {
     const merged = new Map();
     enderecos.forEach((v, k) => {
       const um = umMap.get(controleFromKey(k));
-      merged.set(k, um ? { ...v, agencia: um.agencia, entrevistador: um.entrevistador } : v);
+      merged.set(k, um ? { ...v, entrevistador: um.entrevistador } : v);
     });
     return merged;
   }
@@ -266,7 +274,7 @@
   let consentGiven = false;
   const CONSENT_MSG =
     'SIGC-PRO: isto fará uma consulta ao próprio servidor do SIGC para ' +
-    'obter as coordenadas, zona, agência e entrevistador dos endereços. ' +
+    'obter as coordenadas, zona e entrevistador dos endereços. ' +
     'Nenhum dado sai do IBGE. Continuar?';
 
   // Declining is not a cancel: this is the only guide button, so a "não"
@@ -299,7 +307,7 @@
         console.log(`${TAG} ${enderecos.size} endereço(s) de ${controles.length} controle(s).`);
         const umMap = await fetchUltimoMovimento(uf, controles);
         enderecos = mergeUltimoMovimento(enderecos, umMap);
-        console.log(`${TAG} ${umMap.size} controle(s) com agência/entrevistador.`);
+        console.log(`${TAG} ${umMap.size} controle(s) com entrevistador.`);
       } catch (err) {
         alert(`SIGC-PRO: não foi possível obter coordenadas (${err && err.message}); ` +
           'o guia será gerado sem mapa.');
