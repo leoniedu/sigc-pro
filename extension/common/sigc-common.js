@@ -265,6 +265,49 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  // F5 BIG-IP URL-rewriting prefix ("/f5-w-<hex>$$"); the hex decodes to
+  // the real backend origin. null on the direct host (e.g. via VPN).
+  // Shared by every feature that talks to portalweb behind the gateway
+  // (agenda-map, ultimo-movimento-export) — each hitting a different
+  // path, hence the parametrized gatewayUrl/fetchViaGateway below rather
+  // than a single hardcoded endpoint.
+  function f5Prefix(pathname) {
+    const m = /^\/f5-w-([0-9a-f]+)\$\$/.exec(String(pathname || ''));
+    return m ? { prefix: m[0], hex: m[1] } : null;
+  }
+
+  // simple=true: plain prefixed path. simple=false: replicate the fuller
+  // shape captured from the live gateway (f5-h-$$ segment + F5_origin/
+  // F5CH params). On the direct host (f5Prefix returns null), both modes
+  // collapse to the plain origin+path.
+  function gatewayUrl(origin, pathname, path, simple) {
+    const f5 = f5Prefix(pathname);
+    if (!f5) return `${origin}${path}`;
+    return simple
+      ? `${origin}${f5.prefix}${path}`
+      : `${origin}${f5.prefix}/f5-h-$$${path};F5_origin=${f5.hex}&F5CH=I`;
+  }
+
+  // Tries the simple prefixed URL first, then the full captured F5 form —
+  // which form the live gateway actually needs isn't knowable in advance.
+  async function fetchViaGateway(path, options) {
+    const urls = [...new Set([
+      gatewayUrl(location.origin, location.pathname, path, true),
+      gatewayUrl(location.origin, location.pathname, path, false),
+    ])];
+    let lastErr = new Error('sem resposta');
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, options);
+        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
+        return res;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
+  }
+
   // Single-destination Google Maps link, '' when either coordinate is
   // missing so callers render plain text — a dead link looks actionable
   // and goes nowhere.
@@ -682,6 +725,9 @@
     getTableRows,
     exportFileBase,
     parseCoord,
+    f5Prefix,
+    gatewayUrl,
+    fetchViaGateway,
     gmapsDestinoUrl,
     escapeHtml,
     buildCsv,

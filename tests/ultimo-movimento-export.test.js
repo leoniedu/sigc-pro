@@ -3,6 +3,7 @@ import { describe, test, expect } from 'bun:test';
 await import('../extension/common/sigc-common.js');
 await import('../extension/features/ultimo-movimento-export/ultimo-movimento-export.js');
 const UME = window.__sigcProUltimoMovimentoExportInternals;
+const { f5Prefix, gatewayUrl } = window.__sigcPro;
 
 // Real F5-rewritten hex prefix confirmed against the live portal — hex-
 // decodes to https://w3sigcpns2025.ibge.gov.br. Same fixture value used
@@ -12,14 +13,14 @@ const F5_PATHNAME = `/f5-w-${F5_HEX}$$/UltimoMovimento`;
 
 describe('f5Prefix', () => {
   test('extracts prefix and hex from an F5-rewritten pathname', () => {
-    expect(UME.f5Prefix(F5_PATHNAME)).toEqual({ prefix: `/f5-w-${F5_HEX}$$`, hex: F5_HEX });
+    expect(f5Prefix(F5_PATHNAME)).toEqual({ prefix: `/f5-w-${F5_HEX}$$`, hex: F5_HEX });
   });
   test('null on a plain (non-gateway) pathname', () => {
-    expect(UME.f5Prefix('/UltimoMovimento')).toBeNull();
+    expect(f5Prefix('/UltimoMovimento')).toBeNull();
   });
   test('null on empty/undefined input', () => {
-    expect(UME.f5Prefix('')).toBeNull();
-    expect(UME.f5Prefix(undefined)).toBeNull();
+    expect(f5Prefix('')).toBeNull();
+    expect(f5Prefix(undefined)).toBeNull();
   });
 });
 
@@ -27,17 +28,17 @@ describe('gatewayUrl', () => {
   const origin = 'https://portalweb.ibge.gov.br';
 
   test('plain origin+path when not behind the F5 gateway', () => {
-    expect(UME.gatewayUrl(origin, '/UltimoMovimento', '/Filtro/CarregarAgencias', true))
+    expect(gatewayUrl(origin, '/UltimoMovimento', '/Filtro/CarregarAgencias', true))
       .toBe(`${origin}/Filtro/CarregarAgencias`);
   });
 
   test('simple mode: prepends the captured F5 prefix to the path', () => {
-    expect(UME.gatewayUrl(origin, F5_PATHNAME, '/Filtro/CarregarAgencias', true))
+    expect(gatewayUrl(origin, F5_PATHNAME, '/Filtro/CarregarAgencias', true))
       .toBe(`${origin}/f5-w-${F5_HEX}$$/Filtro/CarregarAgencias`);
   });
 
   test('fallback mode: full f5-h-$$ form with F5_origin/F5CH params', () => {
-    expect(UME.gatewayUrl(origin, F5_PATHNAME, '/Filtro/CarregarAgencias', false))
+    expect(gatewayUrl(origin, F5_PATHNAME, '/Filtro/CarregarAgencias', false))
       .toBe(`${origin}/f5-w-${F5_HEX}$$/f5-h-$$/Filtro/CarregarAgencias;F5_origin=${F5_HEX}&F5CH=I`);
   });
 });

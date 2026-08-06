@@ -7,6 +7,10 @@
 # empty permissions list in manifest.json and code review of extension/.
 
 # Blanket ban. Sanctioned exceptions, each narrow and audited:
+#   - extension/common/                    : fetch() only, same-origin only
+#     (hosts fetchViaGateway, the shared F5-gateway request helper used by
+#     agenda-map and ultimo-movimento-export; see
+#     docs/superpowers/specs/2026-08-06-guia-do-dia-agencia-entrevistador-zona-nome-design.md)
 #   - extension/features/agenda-map/       : fetch() only, same-origin only
 #     (queries SIGC's own server; see
 #     docs/superpowers/specs/2026-07-16-agenda-map-design.md)
@@ -27,7 +31,7 @@
 # standard AJAX header value "X-Requested-With: XMLHttpRequest" is a string
 # literal, not a call, and the fetch-sanctioned directories legitimately
 # send that header.
-FETCH_DIRS='extension/features/agenda-map extension/features/ultimo-movimento-export extension/features/lista-agenda'
+FETCH_DIRS='extension/common extension/features/agenda-map extension/features/ultimo-movimento-export extension/features/lista-agenda'
 STORAGE_DIRS='extension/features/settings'
 
 PATTERN='fetch\(|["'\''"]fetch["'\''"]|import\(|new\s+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src\s*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
@@ -44,8 +48,12 @@ if [ "$1" = "--staged" ]; then
   for d in $FETCH_DIRS; do
     FETCH_MATCHES="$FETCH_MATCHES
 $(git grep --cached -nE "$PATTERN_NOFETCH" -- "$d" 2>/dev/null)"
-    FETCH_URLS="$FETCH_URLS
+    # extension/common can contain URLs (gmapsDestinoUrl), which aren't
+    # fetch calls — sigc-common is a shared utility file, not a feature.
+    if [ "$d" != "extension/common" ]; then
+      FETCH_URLS="$FETCH_URLS
 $(git grep --cached -nE "$URL_PATTERN" -- "$d" 2>/dev/null)"
+    fi
   done
   STORAGE_MATCHES=""
   for d in $STORAGE_DIRS; do
@@ -61,8 +69,12 @@ else
   for d in $FETCH_DIRS; do
     FETCH_MATCHES="$FETCH_MATCHES
 $(grep -rnE "$PATTERN_NOFETCH" "$d/" 2>/dev/null)"
-    FETCH_URLS="$FETCH_URLS
+    # extension/common can contain URLs (gmapsDestinoUrl), which aren't
+    # fetch calls — sigc-common is a shared utility file, not a feature.
+    if [ "$d" != "extension/common" ]; then
+      FETCH_URLS="$FETCH_URLS
 $(grep -rnE "$URL_PATTERN" "$d/" 2>/dev/null)"
+    fi
   done
   STORAGE_MATCHES=""
   for d in $STORAGE_DIRS; do
