@@ -194,6 +194,21 @@
     return merged;
   }
 
+  // Same non-mutating, per-Controle merge contract as
+  // mergeUltimoMovimento, adding agencia instead of entrevistador — kept
+  // as a separate function rather than folding into
+  // mergeUltimoMovimento since the two sources are independently
+  // fallible with different key sets; one small function per source is
+  // clearer than one juggling both.
+  function mergeDistribuicao(enderecos, distMap) {
+    const merged = new Map();
+    enderecos.forEach((v, k) => {
+      const dist = distMap.get(controleFromKey(k));
+      merged.set(k, dist ? { ...v, agencia: dist.agencia } : v);
+    });
+    return merged;
+  }
+
   // --- network (the sanctioned exception) -----------------------------
 
   // Tries the simple prefixed URL first, then the full captured F5 form
@@ -377,5 +392,5 @@
   });
 
   // Exposed only for tests — not part of the runtime public surface.
-  window.__sigcProAgendaMapInternals = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable };
+  window.__sigcProAgendaMapInternals = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao };
 })();

@@ -135,3 +135,33 @@ describe('parseDistribuicaoTable', () => {
     expect(map.get('C1')).toEqual({ agencia: 'BOM JESUS DA LAPA' });
   });
 });
+
+describe('mergeDistribuicao', () => {
+  test('adds agencia to every entry sharing that Controle', () => {
+    const enderecos = new Map([
+      ['C1|D1', { lat: -12.9, lon: -38.5, entrevistador: 'Fulano' }],
+      ['C1|D2', { lat: -12.8, lon: -38.4, entrevistador: 'Fulano' }],
+      ['C2|D1', { lat: -13.0, lon: -38.6 }],
+    ]);
+    const distMap = new Map([
+      ['C1', { agencia: 'BOM JESUS DA LAPA' }],
+    ]);
+    const merged = AM.mergeDistribuicao(enderecos, distMap);
+    expect(merged.get('C1|D1')).toEqual({ lat: -12.9, lon: -38.5, entrevistador: 'Fulano', agencia: 'BOM JESUS DA LAPA' });
+    expect(merged.get('C1|D2')).toEqual({ lat: -12.8, lon: -38.4, entrevistador: 'Fulano', agencia: 'BOM JESUS DA LAPA' });
+    expect(merged.get('C2|D1')).toEqual({ lat: -13.0, lon: -38.6 });
+  });
+
+  test('returns entries unchanged when distMap is empty', () => {
+    const enderecos = new Map([['C1|D1', { lat: -12.9, lon: -38.5 }]]);
+    const merged = AM.mergeDistribuicao(enderecos, new Map());
+    expect(merged.get('C1|D1')).toEqual({ lat: -12.9, lon: -38.5 });
+  });
+
+  test('does not mutate the input enderecos map', () => {
+    const original = { lat: -12.9, lon: -38.5 };
+    const enderecos = new Map([['C1|D1', original]]);
+    AM.mergeDistribuicao(enderecos, new Map([['C1', { agencia: 'A1' }]]));
+    expect(original).toEqual({ lat: -12.9, lon: -38.5 });
+  });
+});
