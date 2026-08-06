@@ -194,6 +194,11 @@ Working checklist; move items up/down freely. Specs live in
       the parse boundary; the rest (name, address, telephone) is never
       held. Columns are appended so indexes 0-19 stay intact
       (`2026-07-31-lista-agenda-design.md`)
+- [x] Guia + Mapa: visit cards show the zona's nome alongside its ID, and
+      Agência/Entrevistador fetched from Último Movimento per Controle
+      (IdAgencia: '*') — rides the same opt-in consulta as coordinates/
+      zona, no new consent prompt; grid cells stay ID-only
+      (`2026-08-06-guia-do-dia-agencia-entrevistador-zona-nome-design.md`)
 
 ## Next
 
