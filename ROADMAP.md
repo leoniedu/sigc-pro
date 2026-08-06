@@ -199,6 +199,17 @@ Working checklist; move items up/down freely. Specs live in
       (IdAgencia: '*') — rides the same opt-in consulta as coordinates/
       zona, no new consent prompt; grid cells stay ID-only
       (`2026-08-06-guia-do-dia-agencia-entrevistador-zona-nome-design.md`)
+- [x] Fix: the Agência lookup above was broken from the start — Último
+      Movimento's live table has no Agência column at all (only
+      Controle/Domicilio/Entrevistador/Tipo de Entrevista/Última
+      Posição/Data/Observação), so the fail-closed column matcher
+      silently returned null for every request, zeroing out
+      Entrevistador too. Entrevistador now resolves correctly again;
+      Agência is sourced from a separate Relatório Distribuição query
+      (`/RelatorioDistribuicao/Filtrar`, table `#tb_distribuir`,
+      column "Agência Distribuida" — not "Agência Sugerida", a
+      different column), same opt-in consulta, same fail-open handling
+      (`2026-08-06-fix-agencia-distribuicao-design.md`)
 
 ## Next
 
