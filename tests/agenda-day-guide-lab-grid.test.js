@@ -151,11 +151,25 @@ describe('buildDayGrid — Lab variant', () => {
     expect(html).toContain('&lt;script&gt;');
   });
 
-  test('open slots still render LIVRE, not a name row', () => {
+  test('open slots render as a blank sem-slot cell, not LIVRE', () => {
     const g = [{ equipe: 'Equipe A', rows: [row({ reservado: false })] }];
     const html = buildDayGrid(g, true);
-    expect(html).toContain('LIVRE');
+    expect(html).not.toContain('LIVRE');
     expect(html).not.toContain('grid-nome');
+    expect(html).toContain('class="sem-slot"');
+  });
+
+  test('a mark mixing one reserved and one open slot for the same team shows only the reserved content', () => {
+    const g = [{
+      equipe: 'Equipe A',
+      rows: [
+        row({ reservado: true, horaInicio: '09:05', controle: '2927408000123', domicilio: 'D1' }),
+        row({ reservado: false, horaInicio: '09:20' }),
+      ],
+    }];
+    const html = buildDayGrid(g, true);
+    expect(html).not.toContain('LIVRE');
+    expect(html).toContain('SALVADOR - BA');
   });
 });
 

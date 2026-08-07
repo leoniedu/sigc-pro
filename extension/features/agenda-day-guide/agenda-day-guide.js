@@ -52,24 +52,6 @@
     };
   }
 
-  // Distinct zona entries across rows, first-seen order. Reserved slots
-  // take their real zona from the endereços fetch when available — the
-  // slot text lists every zona from slot creation, even though a filled
-  // slot belongs to exactly one. Open slots keep the slot-text list
-  // (they can still be filled from any of those zonas).
-  function zonasUnion(rows, enderecos) {
-    const set = new Set();
-    rows.forEach((r) => {
-      const real = zonaFullLabel(slotInfo(r, enderecos));
-      if (real) {
-        set.add(real);
-        return;
-      }
-      window.__sigcPro.parseZonaEntries(r.zonas).forEach((z) => set.add(z));
-    });
-    return [...set];
-  }
-
   // One-decimal pt-BR average ("1,5"), or null when the denominator is 0.
   function media1(num, den) {
     return den > 0 ? (num / den).toFixed(1).replace('.', ',') : null;
@@ -455,16 +437,6 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       `gerado em ${e(meta.geradoEm)}`].filter(Boolean).join(' · ');
   }
 
-  // Leading/trailing open slots: real information (the day could start
-  // earlier / run later) but not route gaps — kept low-key as a slim
-  // row, zonas inline since that's what matters while the slot can
-  // still be filled.
-  function buildLivreEdgeRow(r) {
-    const e = escapeHtml;
-    const zonas = r.zonas ? ` — Zonas: ${e(r.zonas)}` : '';
-    return `<div class="livre-edge">${e(r.horaInicio)}–${e(r.horaFim)} — LIVRE${zonas}</div>`;
-  }
-
   // One card per slot at full visual weight: reserved visits, and open
   // slots BETWEEN visits — a mid-day gap is route information (where a
   // callback or re-visit fits) and must not be overlooked. Open cards
@@ -533,7 +505,6 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
   function buildTeamPanel(group, enderecos, colorIndex) {
     const e = escapeHtml;
     const s = computeStats(group.rows);
-    const zonas = zonasUnion(group.rows, enderecos);
     const statBits = [
       `${s.reservados} reservado(s) × ${s.livres} livre(s)`,
       s.ocupacaoPct != null ? `ocupação ${s.ocupacaoPct}%` : null,
@@ -552,22 +523,14 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     }).length;
     const routeGroupId = `team-${colorIndex}`;
     const defaultChecked = routableCount <= 9;
-    // Open slots outside the reserved span (before the first visit,
-    // after the last, or the whole day when nothing is reserved) render
-    // as slim livre-edge rows; open slots between visits get full card
-    // weight via buildSlotCard.
-    const first = group.rows.findIndex((r) => r.reservado);
-    const last = group.rows.length - 1 -
-      [...group.rows].reverse().findIndex((r) => r.reservado);
     const seqMap = stopSequenceMap(group.rows, enderecos);
     const idxMap = routeIdxMap([{ rows: group.rows }], enderecos);
     const color = teamColor(colorIndex);
-    const cards = group.rows.map((r, i) => {
-      const edge = first === -1 || i < first || i > last;
-      return !r.reservado && edge
-        ? buildLivreEdgeRow(r)
-        : buildSlotCard(r, enderecos, seqMap, color, routeGroupId, defaultChecked, idxMap.get(enderecoKey(r)));
-    });
+    // Only reserved visits render as cards — open (LIVRE) slots are not
+    // shown at all, per design decision 2026-08-06.
+    const cards = group.rows.filter((r) => r.reservado).map((r) =>
+      buildSlotCard(r, enderecos, seqMap, color, routeGroupId, defaultChecked, idxMap.get(enderecoKey(r)))
+    );
     const teamMap = enderecos
       ? buildRouteMapSvg(
           [{ rows: group.rows.filter((r) => r.reservado), color: teamColor(colorIndex) }],
@@ -581,7 +544,6 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     return [
       `<h2>${e(group.equipe)}</h2>`,
       `<div class="teamstats">${statBits}</div>`,
-      zonas.length ? `<div class="zonas">Zonas: ${zonas.map(e).join(', ')}</div>` : '',
       ...cards,
       rotaLink,
       teamMap,
@@ -662,14 +624,18 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     const head = `<tr><th>Hora</th>${groups.map((g) => `<th>${e(g.equipe)}</th>`).join('')}</tr>`;
     const body = marks.map((t) => {
       const cells = groups.map((g) => {
+        // Open (non-reservado) slots are dropped from the grid entirely —
+        // a mark whose only matches are open renders identically to a
+        // mark with no slot at all for this team. A mark mixing reserved
+        // and open slots (two starts rounding into the same half-hour)
+        // shows only the reserved content.
         const slots = g.rows.filter((r) => {
           const s = window.__sigcPro.toMin(r.horaInicio);
-          return s != null && s - (s % 30) === t;
+          return s != null && s - (s % 30) === t && r.reservado;
         });
         if (!slots.length) return '<td class="sem-slot"></td>';
         const conteudo = slots.map((r) => {
           const hora = `<span class="grid-hora">${e(r.horaInicio)}</span>`;
-          if (!r.reservado) return `${hora} <span class="grid-livre">LIVRE</span>`;
           // Lab cells name the visit the way the laboratory's own system
           // lists it. SANCTIONED FIELDS — hora, nome, município, zona —
           // and nothing else; no Controle, no Domicílio, no birth date,
