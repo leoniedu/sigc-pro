@@ -2,7 +2,7 @@
 // guide from the Agenda's Dia view: a Resumo tab (day stats + a time ×
 // equipe slot grid with per-team totals) plus one tab
 // per equipe with a card per slot (reserved: endereço/morador/telefone/
-// Controle/observação; open: LIVRE row). A "Lab" tab repeats the Resumo
+// Controle/observação; open slots are no longer shown). A "Lab" tab repeats the Resumo
 // in the form the laboratory's own system lists collections: nome +
 // município per slot, no Controle, no Domicílio, no birth date — print
 // it to share. Data comes exclusively from
@@ -437,14 +437,14 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       `gerado em ${e(meta.geradoEm)}`].filter(Boolean).join(' · ');
   }
 
-  // One card per slot at full visual weight: reserved visits, and open
-  // slots BETWEEN visits — a mid-day gap is route information (where a
-  // callback or re-visit fits) and must not be overlooked. Open cards
-  // show their slot-text zonas (useful while the slot can still be
-  // filled); reserved cards show only the real zona from the endereços
-  // fetch, when available — never the inflated slot-text list. Missing
-  // fields (already normalized to '' by readAgendaSlots) are omitted
-  // line by line — a sparse card never breaks.
+  // One card per slot: reserved visits only (buildTeamPanel filters to
+  // reservado rows before calling this). The !r.reservado (LIVRE) branch
+  // is retained for generality — buildSlotCard can still render open
+  // slots standalone if called directly — but is not exercised by
+  // buildTeamPanel's current usage. Reserved cards show only the real zona
+  // from the endereços fetch, when available — never the inflated slot-text
+  // list. Missing fields (already normalized to '' by readAgendaSlots) are
+  // omitted line by line — a sparse card never breaks.
   function buildSlotCard(r, enderecos, seqMap, color, routeGroupId, checked, idx) {
     const e = escapeHtml;
     const hora = `${e(r.horaInicio)}–${e(r.horaFim)}`;
@@ -607,7 +607,8 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
   // Full day at a glance: rows = fixed half-hour marks (slot starts
   // don't necessarily align to :00/:30, so each slot lands in the mark
   // containing its start and the cell shows the actual start time),
-  // columns = equipes; cells show LIVRE or Controle/Domicílio. The
+  // columns = equipes; cells show blank (sem-slot) for open slots or
+  // Controle/Domicílio for reserved ones. The
   // per-equipe stats live in the grid's footer rows, so this table
   // replaces the old separate "Por equipe" one. lab = the shareable
   // variant: nome + município per slot, no Controle, no Domicílio.
