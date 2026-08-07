@@ -51,12 +51,13 @@
   <h2>2. Coleta e transmissão de dados</h2>
   <p>Quase nenhuma. Três recursos opcionais fazem requisições ao próprio
   servidor do SIGC (mesma origem da página), sempre dentro da sessão já
-  autenticada do usuário: o "Guia do Dia", que consulta as coordenadas e a
-  zona dos endereços do dia mediante clique e confirmação — recusar a
-  consulta ainda gera o guia, apenas sem mapa; a resposta é
-  processada localmente e usada para incluir, no guia gerado, links de
-  navegação para o Google Maps (por visita e por equipe) e um mapa-esquema
-  em SVG da rota, que não carrega nenhuma imagem ou serviço externo;
+  autenticada do usuário: o "Guia do Dia", que consulta as coordenadas, a
+  zona, a agência e o entrevistador dos endereços do dia mediante clique
+  e confirmação — recusar a consulta ainda gera o guia, apenas sem esses
+  dados; a resposta é processada localmente e usada para incluir, no
+  guia gerado, esses dados por visita, links de navegação para o Google
+  Maps (por visita e por equipe) e um mapa-esquema em SVG da rota, que
+  não carrega nenhuma imagem ou serviço externo;
   e a anotação da Lista de Endereços, que consulta a agenda da UF e o
   último movimento do controle exibido, mediante clique e confirmação,
   para mostrar em cada domicílio se há entrevista agendada, sua situação
@@ -112,7 +113,12 @@
   requisições de rede (item 2), ambas opcionais e descritas acima. Em 31
   de julho de 2026, esta política foi atualizada para refletir a
   terceira funcionalidade a fazer requisições de rede (a anotação da
-  Lista de Endereços, item 2), também opcional e descrita acima.</p>
+  Lista de Endereços, item 2), também opcional e descrita acima. Em 6
+  de agosto de 2026, esta política foi atualizada para refletir que o
+  "Guia do Dia" (item 2) passou a consultar também a agência e o
+  entrevistador de cada visita, além das coordenadas e zona já
+  descritas — mesma consulta opcional já existente, sem novo clique de
+  confirmação.</p>
 
   <h2>8. Contato</h2>
   <p>Dúvidas e reportes: abra uma <em>issue</em> no repositório do projeto no
