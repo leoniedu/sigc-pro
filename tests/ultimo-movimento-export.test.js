@@ -80,7 +80,7 @@ describe('relatorioFiltrarUrl', () => {
 });
 
 describe('parseUltimoMovimentoHtml', () => {
-  test('parses header and rows from the tb_ultimo_movimento table', () => {
+  test('parses header and rows from the tableRelatorio table', () => {
     const html = `
       <table id="tableRelatorio">
         <thead><tr><th>Controle</th><th>Situação</th></tr></thead>

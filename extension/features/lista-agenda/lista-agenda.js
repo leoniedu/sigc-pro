@@ -609,6 +609,9 @@ ${buildDomiciliosTable(domicilios)}
     algumaLinhaTemZona, slotsLivresDaJanela, agruparPorDia, buildSlotsLivresHtml,
   };
 
+  // Exposed only for tests — not part of the runtime public surface.
+  window.__sigcProListaAgendaInternals = { filtrarUrlMovimento };
+
   // --- caches ---------------------------------------------------------
   // In-memory only, never persisted (zero-storage guarantee). A TTL is
   // needed where agenda-map's coordinate cache has none: someone else

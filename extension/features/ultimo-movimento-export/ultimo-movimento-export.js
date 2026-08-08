@@ -23,7 +23,7 @@
   // SIGC ever rendering the title without the accent). Must be true
   // BEFORE the user clicks Filtrar (the button needs to appear right
   // away, next to Filtrar itself), so it can't depend on the results
-  // table (#tb_ultimo_movimento), which only renders after a filter is
+  // table (#tableRelatorio), which only renders after a filter is
   // applied — confirmed against the live page.
   function onUltimoMovimento() {
     return [...document.querySelectorAll('h6')].some(

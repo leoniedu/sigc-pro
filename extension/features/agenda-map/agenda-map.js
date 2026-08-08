@@ -107,8 +107,11 @@
     return tableToEnderecosMap(headers, rows);
   }
 
-  // Último Movimento's own results table (#tb_ultimo_movimento), resolved
-  // by header label the same way tableToEnderecosMap resolves Lista de
+  // Último Movimento's own results table (#tableRelatorio, same generic
+  // report-table id Lista de Endereços' own response uses — see
+  // parseEnderecosHtml above; the two responses are parsed independently
+  // and never share a live DOM, so there's no collision), resolved by
+  // header label the same way tableToEnderecosMap resolves Lista de
   // Endereços — a live column reorder can never silently join the wrong
   // fields. Unlike Lista de Endereços this table isn't pesquisa-scoped
   // (Último Movimento has no per-pesquisa registry entry), so the labels
