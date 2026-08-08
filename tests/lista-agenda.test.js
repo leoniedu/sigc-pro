@@ -336,10 +336,10 @@ describe('indexMovimento', () => {
   //
   // Verbatim live header (browser console, real Último Movimento report):
   // the four columns we read sit at indexes 0, 1, 4, 5 — non-adjacent —
-  // with Entrevistador/Tipo de Entrevista/Observação in between and
+  // with Entrevistador/Tipo Entrevista/Observação in between and
   // around them, so a tidy 4-column fixture would not have caught the
   // 'Data Transmissão' vs 'Data' mismatch this test guards against.
-  const header = ['Controle', 'Domicilio', 'Entrevistador', 'Tipo de Entrevista',
+  const header = ['Controle', 'Domicilio', 'Entrevistador', 'Tipo Entrevista',
     'Última Posição', 'Data', 'Observação'];
   const rows = [
     ['292740805060337', '1', 'João', 'Presencial', 'TRANSMITIDO', '28/07/2026', ''],
@@ -357,9 +357,31 @@ describe('indexMovimento', () => {
   });
 
   test('tolerates accent and case differences in headers', () => {
-    const alt = ['CONTROLE', 'DOMICILIO', 'ENTREVISTADOR', 'TIPO DE ENTREVISTA',
+    const alt = ['CONTROLE', 'DOMICILIO', 'ENTREVISTADOR', 'TIPO ENTREVISTA',
       'ULTIMA POSICAO', 'DATA', 'OBSERVACAO'];
     expect(indexMovimento(alt, rows).index.get('292740805060337|1').situacao).toBe('TRANSMITIDO');
+  });
+
+  // Backward tolerance: the OLD unmarked/accented forms ('Controle',
+  // 'Domicílio', no leading #!/!) must still resolve too — same pattern
+  // agenda-map.js's stripHeaderMarker tests establish.
+  test('tolerates the old unmarked/accented Controle/Domicílio forms', () => {
+    const semMarcador = ['Controle', 'Domicílio', 'Entrevistador', 'Tipo Entrevista',
+      'Última Posição', 'Data', 'Observação'];
+    const r = indexMovimento(semMarcador, rows);
+    expect(r.colunasNaoEncontradas).toBe(false);
+    expect(r.index.get('292740805060337|1').situacao).toBe('TRANSMITIDO');
+  });
+
+  // Confirmed live 2026-08-07: some header cells carry a leading "#!"/"!"
+  // marker (a UI decoration on sortable/filterable columns), which
+  // normalizar's uppercase+diacritic-strip does not remove on its own.
+  test('strips a leading #!/! marker from Controle/Domicílio headers', () => {
+    const marcado = ['#!Controle', '!Domicílio', 'Entrevistador', 'Tipo Entrevista',
+      'Última Posição', 'Data', 'Observação'];
+    const r = indexMovimento(marcado, rows);
+    expect(r.colunasNaoEncontradas).toBe(false);
+    expect(r.index.get('292740805060337|1').situacao).toBe('TRANSMITIDO');
   });
 
   test('returns an empty index when a required column is missing', () => {
@@ -390,16 +412,34 @@ describe('indexMovimento', () => {
     expect(indexMovimento(null, null).index.size).toBe(0);
     expect(indexMovimento(null, null).colunasNaoEncontradas).toBe(true);
   });
+
+  // Regression guard: the EXACT live header row (captured 2026-08-07) that
+  // was previously silently failing — #!/! markers on Controle/Domicílio
+  // AND 'Tipo Entrevista' (no "de"). This is the single most important
+  // test in this fix: it is the exact input that used to make
+  // colunasNaoEncontradas true for every real response.
+  test('resolves the exact live header row verbatim', () => {
+    const liveHeader = ['#!Controle', '!Domicílio', 'Entrevistador', 'Tipo Entrevista',
+      'Última Posição', 'Data', 'Observação'];
+    const liveRows = [
+      ['292740805060337', '1', 'João', 'Presencial', 'TRANSMITIDO', '28/07/2026', ''],
+    ];
+    const r = indexMovimento(liveHeader, liveRows);
+    expect(r.colunasNaoEncontradas).toBe(false);
+    expect(r.index.get('292740805060337|1')).toEqual({
+      situacao: 'TRANSMITIDO', transmissao: '28/07/2026', tipo: 'Presencial',
+    });
+  });
 });
 
 describe('indexMovimento — tipo de entrevista', () => {
-  const header = ['Controle', 'Domicilio', 'Entrevistador', 'Tipo de Entrevista',
+  const header = ['Controle', 'Domicilio', 'Entrevistador', 'Tipo Entrevista',
     'Última Posição', 'Data', 'Observação'];
   const rows = [
     ['292740805060337', '1', 'JOÃO', 'PRESENCIAL', 'TRANSMITIDO', '28/07/2026', ''],
   ];
 
-  test('captures Tipo de Entrevista', () => {
+  test('captures Tipo Entrevista', () => {
     const { index } = indexMovimento(header, rows);
     expect(index.get('292740805060337|1').tipo).toBe('PRESENCIAL');
   });

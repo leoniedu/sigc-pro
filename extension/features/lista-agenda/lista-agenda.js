@@ -7,8 +7,12 @@
 // portal's own table.
 //
 // Two sources, both same-origin and behind one click+confirm:
-//   Agenda          GET  AdministracaoAgenda/ObterSlots  (JSON)
-//   Último Movimento POST /UltimoMovimento/Filtrar       (HTML fragment)
+//   Agenda          GET  AdministracaoAgenda/ObterSlots            (JSON)
+//   Último Movimento POST /relatorio/filtrar?slug=relatorio-ultimo-movimento
+//                                                                   (HTML fragment)
+// As of 2026-08-07, Último Movimento moved onto the same generic
+// /relatorio/filtrar?slug=... mechanism Lista de Endereços already used —
+// see fetchMovimento/filtrarUrlMovimento below.
 // Both key on (Controle, Domicílio), the table's own key.
 //
 // Three seams — acquire / index / render — so the fetches stay
@@ -218,9 +222,19 @@
       .normalize('NFD').replace(/[̀-ͯ]/g, '');
   }
 
+  // Strips a leading run of "#"/"!" characters some SIGC report grids
+  // prepend to a sortable/filterable column's header text (confirmed
+  // live 2026-08-07: "#!Controle", "!Domicílio") — a UI decoration, not
+  // part of the label's identity, so it must not be baked into any label
+  // constant (that would break the day this decoration is toggled off
+  // again). Same targeted fix as agenda-map.js's stripHeaderMarker.
+  function stripHeaderMarker(h) {
+    return String(h ?? '').replace(/^[#!]+/, '');
+  }
+
   function acharColuna(header, alvo) {
     const want = normalizar(alvo);
-    return (header || []).findIndex((h) => normalizar(h) === want);
+    return (header || []).findIndex((h) => normalizar(stripHeaderMarker(h)) === want);
   }
 
   // The Último Movimento report is a different table from the Lista de
@@ -235,7 +249,7 @@
     const iControle = acharColuna(header, 'Controle');
     const iDomicilio = acharColuna(header, 'Domicílio');
     const iPosicao = acharColuna(header, 'Última Posição');
-    const iTipo = acharColuna(header, 'Tipo de Entrevista');
+    const iTipo = acharColuna(header, 'Tipo Entrevista');
     const iTransmissao = acharColuna(header, 'Data');
     if (iControle === -1 || iDomicilio === -1 || iPosicao === -1 || iTipo === -1 || iTransmissao === -1) {
       console.warn(`${TAG} Último Movimento: colunas esperadas não encontradas`,
@@ -515,12 +529,34 @@ ${buildDomiciliosTable(domicilios)}
     return parseSlots(await res.json());
   }
 
+  // As of 2026-08-07, Último Movimento is served through the same generic
+  // /relatorio/filtrar?slug=... mechanism Lista de Endereços already
+  // used, not a dedicated endpoint — so this file, like agenda-map.js and
+  // ultimo-movimento-export.js, needs its own local URL builder (each
+  // network file owns its URL logic; this file has no dependency on
+  // either of those two). simple=true: plain prefixed path. simple=false:
+  // replicate the fuller shape captured from the live gateway (f5-h-$$
+  // segment + F5_origin/F5CH params).
+  const ULTIMO_MOVIMENTO_SLUG = 'relatorio-ultimo-movimento';
+
+  function filtrarUrlMovimento(origin, pathname, simple) {
+    const f5 = window.__sigcPro.f5Prefix(pathname);
+    if (!f5) return `${origin}/relatorio/filtrar?slug=${ULTIMO_MOVIMENTO_SLUG}`;
+    return simple
+      ? `${origin}${f5.prefix}/relatorio/filtrar?slug=${ULTIMO_MOVIMENTO_SLUG}`
+      : `${origin}${f5.prefix}/relatorio/f5-h-$$/relatorio/filtrar?slug=${ULTIMO_MOVIMENTO_SLUG};F5_origin=${f5.hex}&F5CH=I`;
+  }
+
   // One request for the whole Controle: buildAgenciaFilterBody's payload
   // with Controle set to the real value instead of "*" returns every
-  // domicílio at once. NOT the multi-agência loop.
+  // domicílio at once. NOT the multi-agência loop. Tries the simple
+  // prefixed URL first, then the full captured F5 form (identical on the
+  // direct host, where the Set collapses them) — same two-mode retry
+  // shape as agenda-map.js's postUltimoMovimento and
+  // ultimo-movimento-export.js's fetchAgenciaReport.
   async function fetchMovimento(uf, controle) {
     const filtro = {
-      IdFiltro: '',
+      IdFiltro: ULTIMO_MOVIMENTO_SLUG,
       IdUf: String(uf),
       IdAgencia: '*',
       IdMunicipio: '*',
@@ -528,23 +564,38 @@ ${buildDomiciliosTable(domicilios)}
       IdEntrevistadores: '*',
       IdTipoAcompanhamento: '*',
     };
-    const res = await window.__sigcPro.fetchViaGateway('/UltimoMovimento/Filtrar', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      body: 'filtro=' + encodeURIComponent(JSON.stringify(filtro)),
-    });
-    return parseMovimentoHtml(await res.text());
+    const urls = [...new Set([
+      filtrarUrlMovimento(location.origin, location.pathname, true),
+      filtrarUrlMovimento(location.origin, location.pathname, false),
+    ])];
+    let lastErr = new Error('sem resposta');
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: 'filtro=' + encodeURIComponent(JSON.stringify(filtro)),
+        });
+        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
+        const parsed = parseMovimentoHtml(await res.text());
+        if (parsed) return parsed;
+        lastErr = new Error('tabela não reconhecida');
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
   }
 
   // DOMParser is inert — nothing in the fetched markup can load resources
   // or run handlers. Same guarantee ultimo-movimento-export relies on.
   function parseMovimentoHtml(html) {
     const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
-    const table = doc.getElementById('tb_ultimo_movimento');
+    const table = doc.querySelector('#tableRelatorio');
     if (!table) return null;
     const header = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
     const rows = [...table.querySelectorAll('tbody tr')].map((tr) =>
