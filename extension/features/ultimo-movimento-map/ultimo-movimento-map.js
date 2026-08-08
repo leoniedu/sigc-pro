@@ -110,9 +110,48 @@
     return Array.from(byZona.values());
   }
 
+  const SEM_ZONA_COLOR = '#888888';
+  // Categorical palette (Okabe-Ito, colorblind-safe — same family used
+  // by the day-route SVG maps elsewhere in this extension), cycled by a
+  // deterministic hash so the same idZona always gets the same color
+  // within one render and across re-renders.
+  const ZONA_PALETTE = [
+    '#0072B2', '#D55E00', '#009E73', '#CC79A7',
+    '#E69F00', '#56B4E9', '#F0E442', '#000000',
+  ];
+
+  function zonaColor(idZona) {
+    if (!idZona) return SEM_ZONA_COLOR;
+    let hash = 0;
+    for (let i = 0; i < idZona.length; i += 1) {
+      hash = (hash * 31 + idZona.charCodeAt(i)) | 0;
+    }
+    return ZONA_PALETTE[Math.abs(hash) % ZONA_PALETTE.length];
+  }
+
+  function buildZonasTableHtml(zonaRows) {
+    const esc = window.__sigcPro.escapeHtml;
+    const head =
+      '<tr><th>Zona</th><th>Nome</th><th>Realizada</th><th>Não Iniciada</th>' +
+      '<th>Dom. Fechado</th><th>Recusa</th><th>Outros</th><th>Total</th>' +
+      '<th>Sem coordenadas</th></tr>';
+    const body = zonaRows.map((r) => (
+      '<tr>' +
+      `<td>${esc(r.idZona || '—')}</td>` +
+      `<td>${esc(r.nomeZona)}</td>` +
+      `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
+      `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
+      `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>` +
+      '</tr>'
+    )).join('');
+    return `<table class="sigc-pro-zonas-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  }
+
   window.__sigcProUltimoMovimentoMapInternals = {
     parseUltimoMovimentoRows,
     joinEnderecos,
     aggregateZonas,
+    zonaColor,
+    buildZonasTableHtml,
   };
 })();

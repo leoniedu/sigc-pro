@@ -111,3 +111,43 @@ describe('aggregateZonas', () => {
     expect(UM.aggregateZonas([])).toEqual([]);
   });
 });
+
+describe('zonaColor', () => {
+  test('returns the fixed gray for null/empty idZona ("Sem zona")', () => {
+    expect(UM.zonaColor(null)).toBe('#888888');
+    expect(UM.zonaColor('')).toBe('#888888');
+  });
+
+  test('returns a stable, non-gray color for a real idZona', () => {
+    const c1 = UM.zonaColor('11.1.01.08');
+    const c2 = UM.zonaColor('11.1.01.08');
+    expect(c1).toBe(c2);
+    expect(c1).not.toBe('#888888');
+    expect(c1).toMatch(/^#[0-9a-f]{6}$/i);
+  });
+
+  test('different zonas get different colors (not guaranteed unique, but not all equal for a small set)', () => {
+    const colors = new Set(['Z1', 'Z2', 'Z3', 'Z4', 'Z5'].map(UM.zonaColor));
+    expect(colors.size).toBeGreaterThan(1);
+  });
+});
+
+describe('buildZonasTableHtml', () => {
+  test('renders a header row and one row per zona, HTML-escaped', () => {
+    const rows = [
+      { idZona: 'Z1', nomeZona: 'Bairro <X>', realizada: 3, naoIniciada: 1, domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 4, semCoordenadas: 1 },
+      { idZona: null, nomeZona: 'Sem zona', realizada: 0, naoIniciada: 0, domicilioFechado: 0, recusa: 2, outros: 0, totalDomicilios: 2, semCoordenadas: 0 },
+    ];
+    const html = UM.buildZonasTableHtml(rows);
+    expect(html).toContain('<table');
+    expect(html).toContain('Bairro &lt;X&gt;');
+    expect(html).toContain('Sem zona');
+    expect(html).toContain('Z1');
+  });
+
+  test('empty input still renders a valid table with no data rows', () => {
+    const html = UM.buildZonasTableHtml([]);
+    expect(html).toContain('<table');
+    expect(html).not.toMatch(/<td/);
+  });
+});
