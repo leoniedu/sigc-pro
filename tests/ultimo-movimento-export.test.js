@@ -49,7 +49,7 @@ describe('buildAgenciaFilterBody', () => {
     expect(body.startsWith('filtro=')).toBe(true);
     const decoded = JSON.parse(decodeURIComponent(body.slice('filtro='.length)));
     expect(decoded).toEqual({
-      IdFiltro: '',
+      IdFiltro: 'relatorio-ultimo-movimento',
       IdUf: '29',
       IdAgencia: '290570100',
       IdMunicipio: '*',
@@ -60,10 +60,29 @@ describe('buildAgenciaFilterBody', () => {
   });
 });
 
+describe('relatorioFiltrarUrl', () => {
+  const origin = 'https://portalweb.ibge.gov.br';
+
+  test('plain origin+path when not behind the F5 gateway', () => {
+    expect(UME.relatorioFiltrarUrl(origin, '/UltimoMovimento', true))
+      .toBe(`${origin}/relatorio/filtrar?slug=relatorio-ultimo-movimento`);
+  });
+
+  test('simple mode: prepends the captured F5 prefix', () => {
+    expect(UME.relatorioFiltrarUrl(origin, F5_PATHNAME, true))
+      .toBe(`${origin}/f5-w-${F5_HEX}$$/relatorio/filtrar?slug=relatorio-ultimo-movimento`);
+  });
+
+  test('fallback mode: full f5-h-$$ form with the doubled /relatorio segment', () => {
+    expect(UME.relatorioFiltrarUrl(origin, F5_PATHNAME, false))
+      .toBe(`${origin}/f5-w-${F5_HEX}$$/relatorio/f5-h-$$/relatorio/filtrar?slug=relatorio-ultimo-movimento;F5_origin=${F5_HEX}&F5CH=I`);
+  });
+});
+
 describe('parseUltimoMovimentoHtml', () => {
   test('parses header and rows from the tb_ultimo_movimento table', () => {
     const html = `
-      <table id="tb_ultimo_movimento">
+      <table id="tableRelatorio">
         <thead><tr><th>Controle</th><th>Situação</th></tr></thead>
         <tbody>
           <tr><td>1234567890123</td><td>Entrevistado</td></tr>
@@ -84,7 +103,7 @@ describe('parseUltimoMovimentoHtml', () => {
 
   test('trims cell whitespace', () => {
     const html = `
-      <table id="tb_ultimo_movimento">
+      <table id="tableRelatorio">
         <thead><tr><th> Controle </th></tr></thead>
         <tbody><tr><td>  1234  </td></tr></tbody>
       </table>`;
@@ -123,7 +142,7 @@ describe('getCurrentUf', () => {
 describe('collectAllAgencias', () => {
   test('tags each row with IdUf/IdAgencia/AgenciaDescricao, in that order', async () => {
     const html = `
-      <table id="tb_ultimo_movimento">
+      <table id="tableRelatorio">
         <thead><tr><th>Controle</th><th>Situação</th></tr></thead>
         <tbody><tr><td>111</td><td>Entrevistado</td></tr></tbody>
       </table>`;
@@ -145,7 +164,7 @@ describe('collectAllAgencias', () => {
 
   test('records a failed agência and continues, without aborting the run', async () => {
     const html = `
-      <table id="tb_ultimo_movimento">
+      <table id="tableRelatorio">
         <thead><tr><th>Controle</th></tr></thead>
         <tbody><tr><td>222</td></tr></tbody>
       </table>`;

@@ -2,16 +2,17 @@
 // files in this extension allowed to make network requests (the other is
 // agenda-map/) — see scripts/check-privacy.sh. Gated behind the
 // "ultimoMovimentoExport" advanced flag (off by default): loops every
-// agência in the current UF, fetching /UltimoMovimento/Filtrar per
-// agência (same payload shape as the standalone ultimo_movimento.py
-// script this feature replaces), and downloads one combined CSV.
+// agência in the current UF, fetching /relatorio/filtrar?slug=relatorio-
+// ultimo-movimento per agência (same report SIGC's own UI hits; the
+// standalone ultimo_movimento.py script this feature replaces predates
+// this endpoint's 2026-08-07 migration), and downloads one combined CSV.
 // Spec: docs/superpowers/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md
 (function () {
   'use strict';
 
   const TAG = '[sigc-ultimo-movimento-export]';
   const BUTTON_ID = 'sigc-pro-ultimo-movimento-export-button';
-  const TABLE_ID = 'tb_ultimo_movimento';
+  const TABLE_ID = 'tableRelatorio';
   const REQUEST_DELAY_MS = 2000;
 
   // --- pure helpers ----------------------------------------------------
@@ -31,12 +32,14 @@
     );
   }
 
-  // Mirrors ultimo_movimento.py's fetch_report_html filtro payload
-  // exactly (IdFiltro left blank there too — confirmed against the
-  // working script, not a placeholder).
+  // Mirrors ultimo_movimento.py's fetch_report_html filtro payload,
+  // updated 2026-08-07 to match SIGC's move of this report onto the
+  // generic /relatorio/filtrar?slug=relatorio-ultimo-movimento endpoint
+  // (IdFiltro used to be blank when this hit its own dedicated
+  // endpoint — confirmed against a live capture of the new shape).
   function buildAgenciaFilterBody(uf, agencia) {
     const filtro = {
-      IdFiltro: '',
+      IdFiltro: 'relatorio-ultimo-movimento',
       IdUf: String(uf),
       IdAgencia: String(agencia),
       IdMunicipio: '*',
@@ -45,6 +48,23 @@
       IdTipoAcompanhamento: '*',
     };
     return 'filtro=' + encodeURIComponent(JSON.stringify(filtro));
+  }
+
+  // As of 2026-08-07, Último Movimento moved onto the same generic
+  // /relatorio/filtrar?slug=... mechanism Lista de Endereços already
+  // used (agenda-map.js has its own equivalent, filtrarUrl — this is a
+  // deliberate small local duplicate, not shared: these two files have
+  // no cross-file dependency by design, see this file's header
+  // comment). simple=true: plain prefixed path. simple=false: the
+  // fuller captured shape with a doubled /relatorio segment before
+  // /f5-h-$$.
+  function relatorioFiltrarUrl(origin, pathname, simple) {
+    const f5 = window.__sigcPro.f5Prefix(pathname);
+    const slug = 'relatorio-ultimo-movimento';
+    if (!f5) return `${origin}/relatorio/filtrar?slug=${slug}`;
+    return simple
+      ? `${origin}${f5.prefix}/relatorio/filtrar?slug=${slug}`
+      : `${origin}${f5.prefix}/relatorio/f5-h-$$/relatorio/filtrar?slug=${slug};F5_origin=${f5.hex}&F5CH=I`;
   }
 
   // HTML fragment -> {header, rows} | null. DOMParser is inert — nothing
@@ -86,16 +106,29 @@
   }
 
   async function fetchAgenciaReport(uf, agencia) {
-    const res = await window.__sigcPro.fetchViaGateway('/UltimoMovimento/Filtrar', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      body: buildAgenciaFilterBody(uf, agencia),
-    });
-    return parseUltimoMovimentoHtml(await res.text());
+    const urls = [...new Set([
+      relatorioFiltrarUrl(location.origin, location.pathname, true),
+      relatorioFiltrarUrl(location.origin, location.pathname, false),
+    ])];
+    let lastErr = new Error('sem resposta');
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: buildAgenciaFilterBody(uf, agencia),
+        });
+        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
+        return parseUltimoMovimentoHtml(await res.text());
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
   }
 
   function sleep(ms) {
@@ -216,6 +249,7 @@
     buildAgenciaFilterBody,
     parseUltimoMovimentoHtml,
     getCurrentUf,
+    relatorioFiltrarUrl,
   };
 
   // Exposed only for tests — collectAllAgencias is the row-tagging logic
