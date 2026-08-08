@@ -507,5 +507,10 @@
   });
 
   // Exposed only for tests — not part of the runtime public surface.
-  window.__sigcProAgendaMapInternals = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl };
+  // fetchEnderecos is the one exception: it's the real network call
+  // (cached, multi-Controle, same-origin), reused as-is by
+  // ultimo-movimento-map.js's own consent-gated fetch rather than
+  // duplicating postFiltrar/parseEnderecosHtml in a second file — this
+  // directory is where check-privacy.sh sanctions the fetch.
+  window.__sigcProAgendaMapInternals = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl, fetchEnderecos };
 })();
