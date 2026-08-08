@@ -40,9 +40,9 @@ FETCH_DIRS='extension/common extension/features/agenda-map extension/features/ul
 STORAGE_DIRS='extension/features/settings'
 VENDOR_DIRS='extension/vendor'
 
-PATTERN='fetch\(|["'\''"]fetch["'\''"]|import\(|new\s+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src\s*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
-PATTERN_NOFETCH='import\(|new\s+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src\s*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
-PATTERN_NOSTORAGE='fetch\(|["'\''"]fetch["'\''"]|import\(|new\s+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src\s*=|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
+PATTERN='fetch\(|["'\''"]fetch["'\''"]|import\(|new[[:space:]]+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src[[:space:]]*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
+PATTERN_NOFETCH='import\(|new[[:space:]]+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src[[:space:]]*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
+PATTERN_NOSTORAGE='fetch\(|["'\''"]fetch["'\''"]|import\(|new[[:space:]]+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src[[:space:]]*=|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
 URL_PATTERN='https?://'
 
 if [ "$1" = "--staged" ]; then

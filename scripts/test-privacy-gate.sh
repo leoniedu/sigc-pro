@@ -33,6 +33,21 @@ if scripts/check-privacy.sh >/dev/null 2>&1; then
 fi
 rm -f "$PLANT_OUT"
 
+# 2b. The same, in --staged mode (what the pre-commit hook actually
+#     runs) — git grep and plain grep use different regex engines under
+#     -E (git grep's doesn't support \s; POSIX [[:space:]] works in
+#     both), so a pattern that passes working-tree mode can still
+#     silently under-match --staged. Plant WITH internal whitespace,
+#     since that's exactly the shape that exposed the gap before.
+echo 'var x = new   XMLHttpRequest();' > "$PLANT_OUT"
+git add "$PLANT_OUT"
+if scripts/check-privacy.sh --staged >/dev/null 2>&1; then
+  git reset -- "$PLANT_OUT" >/dev/null 2>&1
+  fail "gate --staged missed 'new   XMLHttpRequest' (multi-space) outside agenda-map"
+fi
+git reset -- "$PLANT_OUT" >/dev/null 2>&1
+rm -f "$PLANT_OUT"
+
 # 3. Non-fetch request API inside agenda-map must fail (only fetch is
 #    sanctioned there).
 echo 'var x = new XMLHttpRequest();' > "$PLANT_MAP_XHR"
