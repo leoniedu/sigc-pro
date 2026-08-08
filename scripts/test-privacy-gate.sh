@@ -14,9 +14,11 @@ PLANT_SETTINGS_FETCH="extension/features/settings/__privacy_tripwire_fetch__.js"
 PLANT_UME_XHR="extension/features/ultimo-movimento-export/__privacy_tripwire_xhr__.js"
 PLANT_UME_URL="extension/features/ultimo-movimento-export/__privacy_tripwire_url__.js"
 PLANT_UME_STORAGE="extension/features/ultimo-movimento-export/__privacy_tripwire_storage__.js"
-cleanup() { rm -f "$PLANT_OUT" "$PLANT_MAP_XHR" "$PLANT_MAP_URL" "$PLANT_SETTINGS_FETCH" "$PLANT_UME_XHR" "$PLANT_UME_URL" "$PLANT_UME_STORAGE"; }
+PLANT_VENDOR_OK="extension/vendor/__privacy_tripwire_ok__.js"
+PLANT_VENDOR_LOOKALIKE="extension/vendor-evil/__privacy_tripwire_lookalike__.js"
+cleanup() { rm -f "$PLANT_OUT" "$PLANT_MAP_XHR" "$PLANT_MAP_URL" "$PLANT_SETTINGS_FETCH" "$PLANT_UME_XHR" "$PLANT_UME_URL" "$PLANT_UME_STORAGE" "$PLANT_VENDOR_OK" "$PLANT_VENDOR_LOOKALIKE"; rmdir extension/vendor extension/vendor-evil 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
-mkdir -p extension/features/settings extension/features/ultimo-movimento-export
+mkdir -p extension/features/settings extension/features/ultimo-movimento-export extension/vendor extension/vendor-evil
 
 fail() { echo "privacy gate SELF-TEST FAILED: $1" >&2; exit 1; }
 
@@ -84,5 +86,24 @@ if scripts/check-privacy.sh >/dev/null 2>&1; then
   fail "gate missed chrome.storage inside ultimo-movimento-export/"
 fi
 rm -f "$PLANT_UME_STORAGE"
+
+# 10. Any banned API inside extension/vendor/ must PASS — vendored
+#     third-party code is excluded from the blanket-ban scan (audited
+#     once at vendor time, not per-commit).
+echo 'fetch("/x"); new XMLHttpRequest(); document.cookie;' > "$PLANT_VENDOR_OK"
+if ! scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate rejected vendored code inside extension/vendor/"
+fi
+rm -f "$PLANT_VENDOR_OK"
+
+# 11. A similarly-named but non-vendor directory (extension/vendor-evil/)
+#     must still be caught — proves the exclusion is a real directory
+#     boundary, not a naive string-prefix match that could be gamed by
+#     naming a first-party file to look like it's under extension/vendor/.
+echo 'fetch("/x");' > "$PLANT_VENDOR_LOOKALIKE"
+if scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate missed fetch( inside extension/vendor-evil/ (lookalike directory)"
+fi
+rm -f "$PLANT_VENDOR_LOOKALIKE"
 
 echo "privacy gate self-test: PASS"
