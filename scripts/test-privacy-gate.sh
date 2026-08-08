@@ -16,9 +16,14 @@ PLANT_UME_URL="extension/features/ultimo-movimento-export/__privacy_tripwire_url
 PLANT_UME_STORAGE="extension/features/ultimo-movimento-export/__privacy_tripwire_storage__.js"
 PLANT_VENDOR_OK="extension/vendor/__privacy_tripwire_ok__.js"
 PLANT_VENDOR_LOOKALIKE="extension/vendor-evil/__privacy_tripwire_lookalike__.js"
-cleanup() { rm -f "$PLANT_OUT" "$PLANT_MAP_XHR" "$PLANT_MAP_URL" "$PLANT_SETTINGS_FETCH" "$PLANT_UME_XHR" "$PLANT_UME_URL" "$PLANT_UME_STORAGE" "$PLANT_VENDOR_OK" "$PLANT_VENDOR_LOOKALIKE"; rmdir extension/vendor extension/vendor-evil 2>/dev/null || true; }
+PLANT_UMM_XHR="extension/features/ultimo-movimento-map/__privacy_tripwire_xhr__.js"
+PLANT_UMM_SRC_BAD="extension/features/ultimo-movimento-map/__privacy_tripwire_src_bad__.js"
+PLANT_UMM_SRC_VAR_BAD="extension/features/ultimo-movimento-map/__privacy_tripwire_src_var_bad__.js"
+PLANT_UMM_SRC_OK="extension/features/ultimo-movimento-map/__privacy_tripwire_src_ok__.js"
+PLANT_UMM_SRC_VAR_OK="extension/features/ultimo-movimento-map/__privacy_tripwire_src_var_ok__.js"
+cleanup() { rm -f "$PLANT_OUT" "$PLANT_MAP_XHR" "$PLANT_MAP_URL" "$PLANT_SETTINGS_FETCH" "$PLANT_UME_XHR" "$PLANT_UME_URL" "$PLANT_UME_STORAGE" "$PLANT_VENDOR_OK" "$PLANT_VENDOR_LOOKALIKE" "$PLANT_UMM_XHR" "$PLANT_UMM_SRC_BAD" "$PLANT_UMM_SRC_VAR_BAD" "$PLANT_UMM_SRC_OK" "$PLANT_UMM_SRC_VAR_OK"; rmdir extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
-mkdir -p extension/features/settings extension/features/ultimo-movimento-export extension/vendor extension/vendor-evil
+mkdir -p extension/features/settings extension/features/ultimo-movimento-export extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map
 
 fail() { echo "privacy gate SELF-TEST FAILED: $1" >&2; exit 1; }
 
@@ -120,5 +125,54 @@ if scripts/check-privacy.sh >/dev/null 2>&1; then
   fail "gate missed fetch( inside extension/vendor-evil/ (lookalike directory)"
 fi
 rm -f "$PLANT_VENDOR_LOOKALIKE"
+
+# 12. Non-.src/.href banned API inside ultimo-movimento-map/ must fail —
+#     that directory is sanctioned for .src=/.href= only, nothing else
+#     (not even fetch, unlike the FETCH_DIRS).
+echo 'var x = new XMLHttpRequest();' > "$PLANT_UMM_XHR"
+if scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate missed new XMLHttpRequest inside ultimo-movimento-map/"
+fi
+rm -f "$PLANT_UMM_XHR"
+
+# 13. .src= assigned directly from a non-vendor URL inside
+#     ultimo-movimento-map/ must fail.
+echo "img.src = 'https://evil.example/beacon.gif';" > "$PLANT_UMM_SRC_BAD"
+if scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate missed .src= from a non-vendor URL inside ultimo-movimento-map/"
+fi
+rm -f "$PLANT_UMM_SRC_BAD"
+
+# 14. .src= assigned from a variable that was NOT itself sourced from
+#     chrome.runtime.getURL('vendor/...') must fail — proves the
+#     variable carve-out can't be used to smuggle an arbitrary URL
+#     through an intermediate variable.
+printf '%s\n' \
+  "const evilUrl = 'https://evil.example/x';" \
+  "link.href = evilUrl;" \
+  > "$PLANT_UMM_SRC_VAR_BAD"
+if scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate missed .src=/.href= from a variable not sourced from chrome.runtime.getURL('vendor/...')"
+fi
+rm -f "$PLANT_UMM_SRC_VAR_BAD"
+
+# 15. .src= assigned inline from chrome.runtime.getURL('vendor/...'), and
+#     the same via a two-step variable, must both PASS — the real shape
+#     ultimo-movimento-map.js uses to load the vendored Leaflet bundle
+#     (loadLeafletAssets: cssHref is assigned, then used two lines later).
+echo "script.src = chrome.runtime.getURL('vendor/leaflet/leaflet.js');" > "$PLANT_UMM_SRC_OK"
+if ! scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate rejected inline .src= from chrome.runtime.getURL('vendor/...')"
+fi
+rm -f "$PLANT_UMM_SRC_OK"
+
+printf '%s\n' \
+  "const jsHref = chrome.runtime.getURL('vendor/leaflet/leaflet.js');" \
+  "script.src = jsHref;" \
+  > "$PLANT_UMM_SRC_VAR_OK"
+if ! scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate rejected .src= from a variable sourced from chrome.runtime.getURL('vendor/...')"
+fi
+rm -f "$PLANT_UMM_SRC_VAR_OK"
 
 echo "privacy gate self-test: PASS"
