@@ -26,7 +26,9 @@ PLANT_UMM_SCOPE_LEAK="extension/features/ultimo-movimento-map/__privacy_tripwire
 PLANT_UMM_REASSIGN="extension/features/ultimo-movimento-map/__privacy_tripwire_reassign__.js"
 PLANT_UMM_EVENT_OK="extension/features/ultimo-movimento-map/__privacy_tripwire_event_ok__.js"
 PLANT_UMM_EVENT_REASSIGN_OK="extension/features/ultimo-movimento-map/__privacy_tripwire_event_reassign_ok__.js"
-cleanup() { rm -f "$PLANT_OUT" "$PLANT_MAP_XHR" "$PLANT_MAP_URL" "$PLANT_SETTINGS_FETCH" "$PLANT_UME_XHR" "$PLANT_UME_URL" "$PLANT_UME_STORAGE" "$PLANT_VENDOR_OK" "$PLANT_VENDOR_LOOKALIKE" "$PLANT_UMM_XHR" "$PLANT_UMM_SRC_BAD" "$PLANT_UMM_SRC_VAR_BAD" "$PLANT_UMM_SRC_OK" "$PLANT_UMM_SRC_VAR_OK" "$PLANT_UMM_SCOPE_DEF" "$PLANT_UMM_SCOPE_LEAK" "$PLANT_UMM_REASSIGN" "$PLANT_UMM_EVENT_OK" "$PLANT_UMM_EVENT_REASSIGN_OK"; rmdir extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map 2>/dev/null || true; }
+PLANT_UMM_TILE_URL_OK="extension/features/ultimo-movimento-map/__privacy_tripwire_tile_url_ok__.js"
+PLANT_UMM_URL_BAD="extension/features/ultimo-movimento-map/__privacy_tripwire_url_bad__.js"
+cleanup() { rm -f "$PLANT_OUT" "$PLANT_MAP_XHR" "$PLANT_MAP_URL" "$PLANT_SETTINGS_FETCH" "$PLANT_UME_XHR" "$PLANT_UME_URL" "$PLANT_UME_STORAGE" "$PLANT_VENDOR_OK" "$PLANT_VENDOR_LOOKALIKE" "$PLANT_UMM_XHR" "$PLANT_UMM_SRC_BAD" "$PLANT_UMM_SRC_VAR_BAD" "$PLANT_UMM_SRC_OK" "$PLANT_UMM_SRC_VAR_OK" "$PLANT_UMM_SCOPE_DEF" "$PLANT_UMM_SCOPE_LEAK" "$PLANT_UMM_REASSIGN" "$PLANT_UMM_EVENT_OK" "$PLANT_UMM_EVENT_REASSIGN_OK" "$PLANT_UMM_TILE_URL_OK" "$PLANT_UMM_URL_BAD"; rmdir extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 mkdir -p extension/features/settings extension/features/ultimo-movimento-export extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map
 
@@ -249,5 +251,26 @@ if scripts/check-privacy.sh >/dev/null 2>&1; then
   fail "gate missed a sigc-pro-leaflet-urls-derived variable reassigned to a non-.detail value before use"
 fi
 rm -f "$PLANT_UMM_EVENT_REASSIGN_OK"
+
+# 20. The allowlisted OpenStreetMap tile-host URL (the exact template
+#     ultimo-movimento-map.js's renderLeafletMap passes to
+#     L.tileLayer()) must PASS inside ultimo-movimento-map/ — proves the
+#     one legitimate absolute URL this directory needs isn't caught by
+#     its own allowlist check.
+echo "L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {});" > "$PLANT_UMM_TILE_URL_OK"
+if ! scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate rejected the allowlisted OpenStreetMap tile-host URL inside ultimo-movimento-map/"
+fi
+rm -f "$PLANT_UMM_TILE_URL_OK"
+
+# 21. Any OTHER absolute URL inside ultimo-movimento-map/ must FAIL —
+#     proves the tile-host allowlist doesn't degrade into a blanket
+#     pass for absolute URLs in this directory (the gap this check
+#     closes: a future unauthorized second external URL there).
+echo 'const u = "https://evil.example/x";' > "$PLANT_UMM_URL_BAD"
+if scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate missed a non-allowlisted absolute URL inside ultimo-movimento-map/"
+fi
+rm -f "$PLANT_UMM_URL_BAD"
 
 echo "privacy gate self-test: PASS"

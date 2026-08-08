@@ -42,7 +42,11 @@
 #     `.jsUrl`/`.cssUrl` property read off a variable populated by that
 #     event's `.detail` — same "provenance must be visible in this file's
 #     own text" principle as the direct-call carve-out, just one hop
-#     removed. See
+#     removed. This directory ALSO gets an absolute-URL allowlist check
+#     (LOCAL_RESOURCE_URL_ALLOWLIST, below): unlike FETCH_DIRS (which must
+#     contain zero absolute URLs), it legitimately needs exactly one — the
+#     OpenStreetMap tile-host template Leaflet's L.tileLayer() uses — so
+#     any OTHER absolute URL found there still fails the gate. See
 #     docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md.
 # Every other API stays banned everywhere, including inside these
 # directories except for the one API each is sanctioned for. Fetch-sanctioned
@@ -100,6 +104,20 @@ LOCAL_RESOURCE_VAR_DEF='(const|let|var)[[:space:]]+([A-Za-z_$][A-Za-z0-9_$]*)[[:
 # assigned here are treated as safe, and only for .src=/.href=).
 LOCAL_RESOURCE_EVENT_VAR_DEF='([A-Za-z_$][A-Za-z0-9_$]*)[[:space:]]*=[^;]*\.detail'
 URL_PATTERN='https?://'
+# extension/features/ultimo-movimento-map/ is not URL-free like FETCH_DIRS
+# (which must contain zero absolute URLs): it legitimately loads OSM map
+# tiles via Leaflet's L.tileLayer(), which needs one hardcoded tile-host
+# URL template (see ultimo-movimento-map.js's renderLeafletMap and
+# docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md). So
+# this is an ALLOWLIST, not a ban: any https?:// URL in this directory
+# must match the exact tile-host template below, or the gate fails —
+# catching a future unauthorized second external URL while still
+# permitting the one sanctioned tile host.
+# Substring match (not anchored to the whole line — the real call site
+# is `L.tileLayer('https://...png', { ... })`, so the URL is only part
+# of its line): a line is only exempted when it contains this exact
+# tile-host template somewhere in it.
+LOCAL_RESOURCE_URL_ALLOWLIST='https://\{s\}\.tile\.openstreetmap\.org/\{z\}/\{x\}/\{y\}\.png'
 
 # Prints the .src=/.href= lines in $1 (a directory) that are NOT covered
 # by the recognized safe patterns above, evaluated per file. $2 selects
@@ -207,11 +225,14 @@ $(git grep --cached -nE "$PATTERN_NOSTORAGE" -- "$d" 2>/dev/null)"
   done
   LOCAL_RESOURCE_MATCHES=""
   LOCAL_RESOURCE_BAD_SRC=""
+  LOCAL_RESOURCE_BAD_URLS=""
   for d in $LOCAL_RESOURCE_DIRS; do
     LOCAL_RESOURCE_MATCHES="$LOCAL_RESOURCE_MATCHES
 $(git grep --cached -nE "$PATTERN_NOLOCALRESOURCE" -- "$d" 2>/dev/null)"
     LOCAL_RESOURCE_BAD_SRC="$LOCAL_RESOURCE_BAD_SRC
 $(local_resource_bad_src "$d" staged)"
+    LOCAL_RESOURCE_BAD_URLS="$LOCAL_RESOURCE_BAD_URLS
+$(git grep --cached -nE "$URL_PATTERN" -- "$d" 2>/dev/null | grep -vE "$LOCAL_RESOURCE_URL_ALLOWLIST")"
   done
 else
   EXCLUDE_GREP=""
@@ -236,11 +257,14 @@ $(grep -rnE "$PATTERN_NOSTORAGE" "$d/" 2>/dev/null)"
   done
   LOCAL_RESOURCE_MATCHES=""
   LOCAL_RESOURCE_BAD_SRC=""
+  LOCAL_RESOURCE_BAD_URLS=""
   for d in $LOCAL_RESOURCE_DIRS; do
     LOCAL_RESOURCE_MATCHES="$LOCAL_RESOURCE_MATCHES
 $(grep -rnE "$PATTERN_NOLOCALRESOURCE" "$d/" 2>/dev/null)"
     LOCAL_RESOURCE_BAD_SRC="$LOCAL_RESOURCE_BAD_SRC
 $(local_resource_bad_src "$d" tree)"
+    LOCAL_RESOURCE_BAD_URLS="$LOCAL_RESOURCE_BAD_URLS
+$(grep -rnE "$URL_PATTERN" "$d/" 2>/dev/null | grep -vE "$LOCAL_RESOURCE_URL_ALLOWLIST")"
   done
 fi
 
@@ -272,6 +296,11 @@ fi
 if [ -n "$(echo "$LOCAL_RESOURCE_BAD_SRC" | tr -d '[:space:]')" ]; then
   echo "PRIVACY GATE FAILED — .src=/.href= in a local-resource-sanctioned directory not assigned from chrome.runtime.getURL('vendor/...'):" >&2
   echo "$LOCAL_RESOURCE_BAD_SRC" >&2
+  exit 1
+fi
+if [ -n "$(echo "$LOCAL_RESOURCE_BAD_URLS" | tr -d '[:space:]')" ]; then
+  echo "PRIVACY GATE FAILED — absolute URL in a local-resource-sanctioned directory not matching the allowlisted tile host ($LOCAL_RESOURCE_URL_ALLOWLIST):" >&2
+  echo "$LOCAL_RESOURCE_BAD_URLS" >&2
   exit 1
 fi
 

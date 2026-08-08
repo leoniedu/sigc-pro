@@ -399,7 +399,6 @@
     }
 
     btn.disabled = true;
-    const originalLabel = btn.textContent;
     try {
       const controles = [...new Set([...movimentoMap.keys()].map((k) => k.split('|')[0]))];
       let enderecosMap = new Map();
@@ -407,6 +406,8 @@
         enderecosMap = await AM.fetchEnderecos(uf, controles);
       } catch (err) {
         console.warn(`${TAG} Lista de Endereços fetch failed:`, err);
+        alert(`SIGC-PRO: não foi possível obter coordenadas (${err && err.message}); ` +
+          'o mapa e a tabela de zonas serão exibidos sem coordenadas/zona.');
       }
       const joined = joinEnderecos(movimentoMap, enderecosMap);
       pendingJoined = joined;
@@ -420,7 +421,6 @@
       maybeLoadTiles();
     } finally {
       btn.disabled = false;
-      btn.textContent = originalLabel;
     }
   }
 
