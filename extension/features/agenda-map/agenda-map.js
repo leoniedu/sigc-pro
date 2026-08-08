@@ -125,7 +125,16 @@
   // too (fail-closed, no error, no warning). Agência is now sourced
   // separately from Relatório Distribuição — see
   // parseDistribuicaoTable below.
-  const ULTIMO_MOVIMENTO_LABELS = { controle: 'Controle', entrevistador: 'Entrevistador' };
+  //
+  // Domicilio IS required (2026-08-08 fix): this table has one row PER
+  // Domicílio under a Controle, each with its own Entrevistador — an
+  // earlier version of this parser keyed its map by Controle alone, so
+  // every row for the same Controle silently overwrote the previous
+  // one and every household but the last in the table lost its real
+  // Entrevistador (no error, present-only rendering hid the loss
+  // entirely). Keying by controle|domicilio, the same convention
+  // agenda-day-guide.js's enderecoKey already uses, fixes this.
+  const ULTIMO_MOVIMENTO_LABELS = { controle: 'Controle', domicilio: 'Domicilio', entrevistador: 'Entrevistador' };
 
   // Strips a leading run of "#"/"!" characters some SIGC report grids
   // prepend to a sortable/filterable column's header text (confirmed
@@ -137,12 +146,22 @@
     return String(h ?? '').replace(/^[#!]+/, '');
   }
 
+  // Folds any accented character to its unaccented base (NFD decompose +
+  // strip combining marks) — same technique lista-agenda.js's normalizar
+  // already uses, generalized here since ULTIMO_MOVIMENTO_LABELS mixes
+  // accented live headers ("Domicílio") with an unaccented label
+  // constant ("Domicilio"); a hardcoded 5-character fold would silently
+  // miss any other accented character SIGC's next header variant uses.
+  function stripAccents(s) {
+    return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+
   function parseUltimoMovimentoTable(headers, rows) {
     const P = window.__sigcPro;
     const idx = {};
     for (const key of Object.keys(ULTIMO_MOVIMENTO_LABELS)) {
-      const i = headers.findIndex(
-        (h) => P.normalizeLabel(stripHeaderMarker(h)) === P.normalizeLabel(ULTIMO_MOVIMENTO_LABELS[key]));
+      const expected = P.normalizeLabel(stripAccents(ULTIMO_MOVIMENTO_LABELS[key]));
+      const i = headers.findIndex((h) => P.normalizeLabel(stripAccents(stripHeaderMarker(h))) === expected);
       if (i === -1) return null;
       idx[key] = i;
     }
@@ -150,7 +169,8 @@
     rows.forEach((cells) => {
       const controle = String(cells[idx.controle] || '').trim();
       if (!controle) return;
-      map.set(controle, {
+      const domicilio = String(cells[idx.domicilio] || '').trim();
+      map.set(`${controle}|${domicilio}`, {
         entrevistador: String(cells[idx.entrevistador] || '').trim(),
       });
     });
@@ -198,14 +218,17 @@
     return key.slice(0, key.indexOf('|'));
   }
 
-  // New Map: every enderecos entry sharing a Controle present in umMap
-  // gets entrevistador added; entries for controles with no
-  // Último Movimento match pass through unchanged (never blocks the
-  // guide — see buildSlotCard's existing present-only rendering).
+  // New Map: every enderecos entry whose full controle|domicilio key
+  // matches an entry in umMap gets entrevistador added (2026-08-08 fix:
+  // umMap is now keyed the same way enderecos already is — see
+  // parseUltimoMovimentoTable — since Último Movimento has one
+  // Entrevistador per Domicílio, not one per Controle); entries with no
+  // match pass through unchanged (never blocks the guide — see
+  // buildSlotCard's existing present-only rendering).
   function mergeUltimoMovimento(enderecos, umMap) {
     const merged = new Map();
     enderecos.forEach((v, k) => {
-      const um = umMap.get(controleFromKey(k));
+      const um = umMap.get(k);
       merged.set(k, um ? { ...v, entrevistador: um.entrevistador } : v);
     });
     return merged;
