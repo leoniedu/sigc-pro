@@ -150,6 +150,37 @@
   const BUTTON_ID = 'sigc-pro-ultimo-movimento-map-btn';
   const PANEL_ID = 'sigc-pro-ultimo-movimento-map-panel';
 
+  const PANEL_CSS = `
+    #${PANEL_ID} { position: fixed; inset: 0; z-index: 999999;
+      background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; }
+    #${PANEL_ID} .sigc-pro-panel-box { background: #fff; width: 90vw; height: 85vh;
+      border-radius: 6px; display: flex; flex-direction: column; overflow: hidden;
+      font-family: system-ui, sans-serif; font-size: 13px; }
+    #${PANEL_ID} .sigc-pro-panel-bar { display: flex; gap: 4px; background: #f4f4f4;
+      border-bottom: 1px solid #ccc; padding: 4px; align-items: center; }
+    #${PANEL_ID} .sigc-pro-tab-btn { padding: 8px 16px; border: 0; background: transparent;
+      cursor: pointer; border-bottom: 3px solid transparent; }
+    #${PANEL_ID} .sigc-pro-tab-active { background: #fff; border-bottom-color: #005a9c; font-weight: 600; }
+    #${PANEL_ID} .sigc-pro-panel-close { margin-left: auto; border: 0; background: transparent;
+      font-size: 20px; cursor: pointer; padding: 0 8px; }
+    #${PANEL_ID} .sigc-pro-tab-panel { display: none; flex: 1; overflow: auto; }
+    #${PANEL_ID} .sigc-pro-tab-panel-active { display: block; }
+    #sigc-pro-leaflet-map { width: 100%; height: 100%; }
+    .sigc-pro-zonas-table { border-collapse: collapse; width: 100%; }
+    .sigc-pro-zonas-table th, .sigc-pro-zonas-table td { border: 1px solid #ddd; padding: 4px 8px; text-align: right; }
+    .sigc-pro-zonas-table th:nth-child(-n+2), .sigc-pro-zonas-table td:nth-child(-n+2) { text-align: left; }
+    .sigc-pro-zonas-table th { background: #f4f4f4; }
+  `;
+
+  let cssInjected = false;
+  function ensureCss() {
+    if (cssInjected) return;
+    const style = document.createElement('style');
+    style.textContent = PANEL_CSS;
+    document.head.appendChild(style);
+    cssInjected = true;
+  }
+
   const FETCH_CONSENT_MSG =
     'SIGC-PRO: isto buscará a Lista de Endereços (coordenadas e zona) ' +
     'para cada Controle do relatório, ao próprio servidor do SIGC. Continuar?';
@@ -351,6 +382,7 @@
   // the network call stays inside agenda-map.js, the directory
   // check-privacy.sh's FETCH_DIRS already sanctions for it.
   async function onMapaClick(btn) {
+    ensureCss();
     const movimentoMap = readUltimoMovimentoTable();
     if (!movimentoMap || movimentoMap.size === 0) {
       alert('SIGC-PRO: nenhum dado encontrado no relatório — rode um Filtrar primeiro.');
