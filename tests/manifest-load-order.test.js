@@ -58,4 +58,24 @@ describe('manifest content_scripts load order', () => {
     expect(idx('features/lista-agenda/lista-agenda.js')).toBeGreaterThan(
       idx('common/sigc-common.js'));
   });
+
+  test('ultimo-movimento-map.js loads after sigc-common.js and after ultimo-movimento-export.js', () => {
+    const common = idx('common/sigc-common.js');
+    const exportJs = idx('features/ultimo-movimento-export/ultimo-movimento-export.js');
+    const mapJs = idx('features/ultimo-movimento-map/ultimo-movimento-map.js');
+    expect(mapJs).toBeGreaterThan(common);
+    expect(mapJs).toBeGreaterThan(exportJs);
+  });
+
+  test('web_accessible_resources exposes vendored Leaflet to SIGC origins only', () => {
+    expect(Array.isArray(manifest.web_accessible_resources)).toBe(true);
+    const leafletEntry = manifest.web_accessible_resources.find(
+      (e) => e.resources.some((r) => r.includes('leaflet')));
+    expect(leafletEntry).toBeDefined();
+    expect(leafletEntry.matches).toEqual([
+      'https://portalweb.ibge.gov.br/*',
+      'https://portalweb2.ibge.gov.br/*',
+      'https://w3sigcpns2025.ibge.gov.br/*',
+    ]);
+  });
 });

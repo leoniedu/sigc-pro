@@ -23,6 +23,11 @@
 #     docs/superpowers/specs/2026-07-31-lista-agenda-design.md)
 #   - extension/features/settings/         : chrome.storage only, no fetch
 #     (persists the advanced-flags toggle; same spec as above)
+#   - extension/vendor/                    : vendored third-party libraries,
+#     unmodified from upstream — not swept by this heuristic (which targets
+#     sigc-pro's own code), audited once at vendor time instead of per-commit.
+#     First vendored library: Leaflet (see
+#     docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md).
 # Every other API stays banned everywhere, including inside these
 # directories except for the one API each is sanctioned for. Fetch-sanctioned
 # directories may not contain absolute URLs, so their requests physically
@@ -33,6 +38,7 @@
 # send that header.
 FETCH_DIRS='extension/common extension/features/agenda-map extension/features/ultimo-movimento-export extension/features/lista-agenda'
 STORAGE_DIRS='extension/features/settings'
+VENDOR_DIRS='extension/vendor'
 
 PATTERN='fetch\(|["'\''"]fetch["'\''"]|import\(|new\s+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src\s*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
 PATTERN_NOFETCH='import\(|new\s+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src\s*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
@@ -41,7 +47,7 @@ URL_PATTERN='https?://'
 
 if [ "$1" = "--staged" ]; then
   EXCLUDES=""
-  for d in $FETCH_DIRS $STORAGE_DIRS; do EXCLUDES="$EXCLUDES ':!$d'"; done
+  for d in $FETCH_DIRS $STORAGE_DIRS $VENDOR_DIRS; do EXCLUDES="$EXCLUDES ':!$d'"; done
   MATCHES=$(eval git grep --cached -nE "\"$PATTERN\"" -- extension/ $EXCLUDES 2>/dev/null)
   FETCH_MATCHES=""
   FETCH_URLS=""
@@ -62,7 +68,7 @@ $(git grep --cached -nE "$PATTERN_NOSTORAGE" -- "$d" 2>/dev/null)"
   done
 else
   EXCLUDE_GREP=""
-  for d in $FETCH_DIRS $STORAGE_DIRS; do EXCLUDE_GREP="$EXCLUDE_GREP -e ^$d/"; done
+  for d in $FETCH_DIRS $STORAGE_DIRS $VENDOR_DIRS; do EXCLUDE_GREP="$EXCLUDE_GREP -e ^$d/"; done
   MATCHES=$(grep -rnE "$PATTERN" extension/ 2>/dev/null | grep -vE "$(echo $EXCLUDE_GREP | sed 's/-e //g' | tr ' ' '|')")
   FETCH_MATCHES=""
   FETCH_URLS=""
