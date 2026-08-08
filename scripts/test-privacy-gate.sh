@@ -21,7 +21,12 @@ PLANT_UMM_SRC_BAD="extension/features/ultimo-movimento-map/__privacy_tripwire_sr
 PLANT_UMM_SRC_VAR_BAD="extension/features/ultimo-movimento-map/__privacy_tripwire_src_var_bad__.js"
 PLANT_UMM_SRC_OK="extension/features/ultimo-movimento-map/__privacy_tripwire_src_ok__.js"
 PLANT_UMM_SRC_VAR_OK="extension/features/ultimo-movimento-map/__privacy_tripwire_src_var_ok__.js"
-cleanup() { rm -f "$PLANT_OUT" "$PLANT_MAP_XHR" "$PLANT_MAP_URL" "$PLANT_SETTINGS_FETCH" "$PLANT_UME_XHR" "$PLANT_UME_URL" "$PLANT_UME_STORAGE" "$PLANT_VENDOR_OK" "$PLANT_VENDOR_LOOKALIKE" "$PLANT_UMM_XHR" "$PLANT_UMM_SRC_BAD" "$PLANT_UMM_SRC_VAR_BAD" "$PLANT_UMM_SRC_OK" "$PLANT_UMM_SRC_VAR_OK"; rmdir extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map 2>/dev/null || true; }
+PLANT_UMM_SCOPE_DEF="extension/features/ultimo-movimento-map/__privacy_tripwire_scope_def__.js"
+PLANT_UMM_SCOPE_LEAK="extension/features/ultimo-movimento-map/__privacy_tripwire_scope_leak__.js"
+PLANT_UMM_REASSIGN="extension/features/ultimo-movimento-map/__privacy_tripwire_reassign__.js"
+PLANT_UMM_EVENT_OK="extension/features/ultimo-movimento-map/__privacy_tripwire_event_ok__.js"
+PLANT_UMM_EVENT_REASSIGN_OK="extension/features/ultimo-movimento-map/__privacy_tripwire_event_reassign_ok__.js"
+cleanup() { rm -f "$PLANT_OUT" "$PLANT_MAP_XHR" "$PLANT_MAP_URL" "$PLANT_SETTINGS_FETCH" "$PLANT_UME_XHR" "$PLANT_UME_URL" "$PLANT_UME_STORAGE" "$PLANT_VENDOR_OK" "$PLANT_VENDOR_LOOKALIKE" "$PLANT_UMM_XHR" "$PLANT_UMM_SRC_BAD" "$PLANT_UMM_SRC_VAR_BAD" "$PLANT_UMM_SRC_OK" "$PLANT_UMM_SRC_VAR_OK" "$PLANT_UMM_SCOPE_DEF" "$PLANT_UMM_SCOPE_LEAK" "$PLANT_UMM_REASSIGN" "$PLANT_UMM_EVENT_OK" "$PLANT_UMM_EVENT_REASSIGN_OK"; rmdir extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 mkdir -p extension/features/settings extension/features/ultimo-movimento-export extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map
 
@@ -174,5 +179,75 @@ if ! scripts/check-privacy.sh >/dev/null 2>&1; then
   fail "gate rejected .src= from a variable sourced from chrome.runtime.getURL('vendor/...')"
 fi
 rm -f "$PLANT_UMM_SRC_VAR_OK"
+
+# 16. Variable whitelist must be scoped PER FILE, not per directory: a
+#     name legitimately safe in one file (jsHref, defined here from
+#     getURL('vendor/...')) must not make the SAME name safe in a
+#     different file of the same directory that assigns it from an
+#     attacker URL instead. Both files are planted together so the
+#     directory-wide scan sees both; only the second (leak) file should
+#     be reported as bad.
+printf '%s\n' \
+  "const jsHref = chrome.runtime.getURL('vendor/leaflet/leaflet.js');" \
+  "script.src = jsHref;" \
+  > "$PLANT_UMM_SCOPE_DEF"
+printf '%s\n' \
+  "const jsHref = 'https://evil.example/x';" \
+  "script.src = jsHref;" \
+  > "$PLANT_UMM_SCOPE_LEAK"
+if scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate let a variable name whitelisted in one file leak safety to a same-named variable in a different file"
+fi
+rm -f "$PLANT_UMM_SCOPE_DEF" "$PLANT_UMM_SCOPE_LEAK"
+
+# 17. A variable whitelisted from chrome.runtime.getURL('vendor/...') but
+#     later reassigned to something else must still fail — proves
+#     reassignment isn't ignored (only the first assignment used to be
+#     checked).
+printf '%s\n' \
+  "let cssHref = chrome.runtime.getURL('vendor/leaflet/leaflet.css');" \
+  "cssHref = 'https://evil.example/x';" \
+  "link.href = cssHref;" \
+  > "$PLANT_UMM_REASSIGN"
+if scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate missed a whitelisted variable reassigned to a non-vendor value before use"
+fi
+rm -f "$PLANT_UMM_REASSIGN"
+
+# 18. .src=/.href= assigned from a `.jsUrl`/`.cssUrl` property read off a
+#     variable populated by the sigc-pro-leaflet-urls CustomEvent's
+#     .detail must PASS — the real MAIN/ISOLATED relay shape
+#     ultimo-movimento-map.js uses (chrome.* is unavailable in MAIN
+#     world, so the URLs arrive via ultimo-movimento-map-relay.js's
+#     broadcast instead of a direct getURL call in this file).
+printf '%s\n' \
+  "let leafletUrls = null;" \
+  "window.addEventListener('sigc-pro-leaflet-urls', (e) => {" \
+  "  leafletUrls = (e.detail && e.detail.jsUrl && e.detail.cssUrl) ? e.detail : null;" \
+  "});" \
+  "script.src = leafletUrls.jsUrl;" \
+  "link.href = leafletUrls.cssUrl;" \
+  > "$PLANT_UMM_EVENT_OK"
+if ! scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate rejected .src=/.href= from .jsUrl/.cssUrl off a sigc-pro-leaflet-urls event-detail variable"
+fi
+rm -f "$PLANT_UMM_EVENT_OK"
+
+# 19. Same event-detail shape, but the variable is reassigned to a
+#     non-.detail value after the event handler — must fail, same
+#     reassignment-revocation proof as #17 but for the event-derived
+#     whitelist path specifically.
+printf '%s\n' \
+  "let leafletUrls = null;" \
+  "window.addEventListener('sigc-pro-leaflet-urls', (e) => {" \
+  "  leafletUrls = e.detail;" \
+  "});" \
+  "leafletUrls = { jsUrl: 'https://evil.example/x', cssUrl: 'https://evil.example/y' };" \
+  "script.src = leafletUrls.jsUrl;" \
+  > "$PLANT_UMM_EVENT_REASSIGN_OK"
+if scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate missed a sigc-pro-leaflet-urls-derived variable reassigned to a non-.detail value before use"
+fi
+rm -f "$PLANT_UMM_EVENT_REASSIGN_OK"
 
 echo "privacy gate self-test: PASS"

@@ -179,6 +179,24 @@ describe('buildPanelHtml', () => {
     const html = UM.buildPanelHtml(joined, zonaRows);
     expect(html).toMatch(/fechar|close|×/i);
   });
+
+  test('the zonas tab count reflects the actual number of zona rows, not a static label', () => {
+    const html = UM.buildPanelHtml(joined, zonaRows);
+    expect(zonaRows).toHaveLength(1);
+    expect(html).toContain(`Zonas (${zonaRows.length})`);
+  });
+
+  test('the embedded Zonas table contains this fixture\'s actual zona data (Z1), not just headers', () => {
+    const html = UM.buildPanelHtml(joined, zonaRows);
+    expect(html).toContain('Z1');
+    expect(html).toContain('<td>1</td>'); // realizada count for the Z1 row
+  });
+
+  test('empty joined/zonaRows still renders the panel shell but with a "Zonas (0)" tab and no data rows', () => {
+    const html = UM.buildPanelHtml([], []);
+    expect(html).toContain('Zonas (0)');
+    expect(html).not.toMatch(/<td/);
+  });
 });
 
 describe('Mapa button mount', () => {
