@@ -76,8 +76,43 @@
     return out;
   }
 
+  const TIPO_COLUNA = {
+    'Realizada': 'realizada',
+    'Não Iniciada': 'naoIniciada',
+    'Domicílio Fechado': 'domicilioFechado',
+    'Recusa': 'recusa',
+  };
+
+  // joined: from joinEnderecos. One output row per distinct idZona, plus
+  // exactly one row with idZona===null aggregating every row whose
+  // temZona is false (non-biomarcador selecionados — see spec
+  // "Selecionados without zona"). Never silently drops a row: every
+  // input row lands in exactly one output row.
+  function aggregateZonas(joined) {
+    const byZona = new Map(); // key: idZona || special string
+    const SEM_ZONA_KEY = '__SEM_ZONA__';
+    joined.forEach((r) => {
+      const key = r.temZona ? r.idZona : SEM_ZONA_KEY;
+      if (!byZona.has(key)) {
+        byZona.set(key, {
+          idZona: r.temZona ? r.idZona : null,
+          nomeZona: r.temZona ? r.zona : 'Sem zona',
+          realizada: 0, naoIniciada: 0, domicilioFechado: 0, recusa: 0, outros: 0,
+          totalDomicilios: 0, semCoordenadas: 0,
+        });
+      }
+      const bucket = byZona.get(key);
+      const coluna = TIPO_COLUNA[r.tipoEntrevista] || 'outros';
+      bucket[coluna] += 1;
+      bucket.totalDomicilios += 1;
+      if (!r.temCoordenadas) bucket.semCoordenadas += 1;
+    });
+    return Array.from(byZona.values());
+  }
+
   window.__sigcProUltimoMovimentoMapInternals = {
     parseUltimoMovimentoRows,
     joinEnderecos,
+    aggregateZonas,
   };
 })();

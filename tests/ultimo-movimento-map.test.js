@@ -70,3 +70,44 @@ describe('joinEnderecos', () => {
     expect(d1.temCoordenadas).toBe(false);
   });
 });
+
+describe('aggregateZonas', () => {
+  const joined = [
+    { idZona: '11.1.01.08', zona: 'ESCOLA POLICIA', tipoEntrevista: 'Realizada', temCoordenadas: true, temZona: true },
+    { idZona: '11.1.01.08', zona: 'ESCOLA POLICIA', tipoEntrevista: 'Não Iniciada', temCoordenadas: false, temZona: true },
+    { idZona: '', zona: '', tipoEntrevista: 'Recusa', temCoordenadas: true, temZona: false },
+    { idZona: '', zona: '', tipoEntrevista: 'Realizada', temCoordenadas: true, temZona: false },
+  ];
+
+  test('groups by idZona, one row per distinct zona', () => {
+    const rows = UM.aggregateZonas(joined);
+    const zonaRow = rows.find((r) => r.idZona === '11.1.01.08');
+    expect(zonaRow).toMatchObject({
+      idZona: '11.1.01.08', nomeZona: 'ESCOLA POLICIA',
+      realizada: 1, naoIniciada: 1, domicilioFechado: 0, recusa: 0, outros: 0,
+      totalDomicilios: 2, semCoordenadas: 1,
+    });
+  });
+
+  test('households with temZona false land in a single "Sem zona" row (idZona null)', () => {
+    const rows = UM.aggregateZonas(joined);
+    const semZona = rows.find((r) => r.idZona === null);
+    expect(semZona).toBeDefined();
+    expect(semZona.totalDomicilios).toBe(2);
+    expect(semZona.recusa).toBe(1);
+    expect(semZona.realizada).toBe(1);
+    expect(semZona.semCoordenadas).toBe(0);
+  });
+
+  test('unrecognized tipoEntrevista values count under outros', () => {
+    const rows = UM.aggregateZonas([
+      { idZona: 'Z1', zona: 'Zona 1', tipoEntrevista: 'Endereço Não Localizado', temCoordenadas: true, temZona: true },
+    ]);
+    expect(rows[0].outros).toBe(1);
+    expect(rows[0].realizada).toBe(0);
+  });
+
+  test('empty input returns empty array, no Sem zona row', () => {
+    expect(UM.aggregateZonas([])).toEqual([]);
+  });
+});
