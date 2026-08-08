@@ -147,11 +147,231 @@
     return `<table class="sigc-pro-zonas-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
   }
 
+  const BUTTON_ID = 'sigc-pro-ultimo-movimento-map-btn';
+  const PANEL_ID = 'sigc-pro-ultimo-movimento-map-panel';
+
+  const FETCH_CONSENT_MSG =
+    'SIGC-PRO: isto buscará a Lista de Endereços (coordenadas e zona) ' +
+    'para cada Controle do relatório, ao próprio servidor do SIGC. Continuar?';
+
+  const TILE_CONSENT_MSG =
+    'SIGC-PRO: para desenhar o mapa, o navegador vai buscar imagens de ' +
+    'mapa (tiles) de um servidor externo (OpenStreetMap), fora do SIGC. ' +
+    'Continuar?';
+
+  // Detects the Último Movimento report page the same way
+  // ultimo-movimento-export.js does — reuse that detection rather than
+  // reimplementing it, since both rely on the same page title/table id.
+  function onUltimoMovimento() {
+    return window.__sigcProUltimoMovimentoExportInternals &&
+      window.__sigcProUltimoMovimentoExportInternals.onUltimoMovimento();
+  }
+
+  function buildPanelHtml(joined, zonaRows) {
+    const zonasTable = buildZonasTableHtml(zonaRows);
+    return [
+      `<div id="${PANEL_ID}" class="sigc-pro-panel-overlay">`,
+      '  <div class="sigc-pro-panel-box">',
+      '    <div class="sigc-pro-panel-bar">',
+      '      <button type="button" class="sigc-pro-tab-btn sigc-pro-tab-active" data-tab="mapa">Mapa</button>',
+      `      <button type="button" class="sigc-pro-tab-btn" data-tab="zonas">Zonas (${zonaRows.length})</button>`,
+      '      <button type="button" class="sigc-pro-panel-close" title="Fechar">×</button>',
+      '    </div>',
+      '    <div id="sigc-pro-mapa-panel" class="sigc-pro-tab-panel sigc-pro-tab-panel-active">',
+      '      <div id="sigc-pro-leaflet-map"></div>',
+      '    </div>',
+      '    <div id="sigc-pro-zonas-panel" class="sigc-pro-tab-panel">',
+      `      ${zonasTable}`,
+      '    </div>',
+      '  </div>',
+      '</div>',
+    ].join('\n');
+  }
+
+  function closePanel() {
+    const el = document.getElementById(PANEL_ID);
+    if (el) el.remove();
+  }
+
+  function wireTabs(panelEl) {
+    panelEl.querySelectorAll('.sigc-pro-tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        panelEl.querySelectorAll('.sigc-pro-tab-btn').forEach((b) => b.classList.remove('sigc-pro-tab-active'));
+        panelEl.querySelectorAll('.sigc-pro-tab-panel').forEach((p) => p.classList.remove('sigc-pro-tab-panel-active'));
+        btn.classList.add('sigc-pro-tab-active');
+        const target = document.getElementById(`sigc-pro-${btn.dataset.tab}-panel`);
+        if (target) target.classList.add('sigc-pro-tab-panel-active');
+        if (btn.dataset.tab === 'mapa') maybeLoadTiles();
+      });
+    });
+    panelEl.querySelector('.sigc-pro-panel-close').addEventListener('click', closePanel);
+  }
+
+  // Injects Leaflet's CSS/JS from the vendored, web-accessible files on
+  // first need (not at feature load) — avoids paying the load cost for
+  // users who never click Mapa. Idempotent: a second call is a no-op.
+  let leafletLoadPromise = null;
+  function loadLeafletAssets() {
+    if (leafletLoadPromise) return leafletLoadPromise;
+    leafletLoadPromise = new Promise((resolve, reject) => {
+      const cssHref = chrome.runtime.getURL('vendor/leaflet/leaflet.css');
+      if (!document.querySelector(`link[href="${cssHref}"]`)) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = cssHref;
+        document.head.appendChild(link);
+      }
+      if (window.L) { resolve(window.L); return; }
+      const script = document.createElement('script');
+      script.src = chrome.runtime.getURL('vendor/leaflet/leaflet.js');
+      script.onload = () => resolve(window.L);
+      script.onerror = () => reject(new Error('Falha ao carregar Leaflet.'));
+      document.head.appendChild(script);
+    });
+    return leafletLoadPromise;
+  }
+
+  // Tile-specific consent, separate from the Lista de Endereços consent
+  // — fires only once, on first attempt to actually paint the map (per
+  // spec §Consent gates). Declining leaves the Mapa tab showing an
+  // explanatory message with a retry button; the Zonas tab is
+  // unaffected.
+  let tilesConsented = false;
+  let mapInitialized = false;
+  let pendingJoined = null;
+
+  async function maybeLoadTiles() {
+    if (mapInitialized) return;
+    const container = document.getElementById('sigc-pro-leaflet-map');
+    if (!container) return;
+    if (!tilesConsented) {
+      if (!confirm(TILE_CONSENT_MSG)) {
+        container.innerHTML =
+          '<p class="sigc-pro-map-declined">Mapa não carregado (tiles ' +
+          'recusados). <button type="button" id="sigc-pro-retry-tiles">Tentar novamente</button></p>';
+        const retry = document.getElementById('sigc-pro-retry-tiles');
+        if (retry) retry.addEventListener('click', maybeLoadTiles);
+        return;
+      }
+      tilesConsented = true;
+    }
+    try {
+      const L = await loadLeafletAssets();
+      renderLeafletMap(L, container, pendingJoined || []);
+      mapInitialized = true;
+    } catch (err) {
+      container.innerHTML = `<p class="sigc-pro-map-declined">Falha ao carregar o mapa: ${window.__sigcPro.escapeHtml(String(err && err.message || err))}</p>`;
+    }
+  }
+
+  function renderLeafletMap(L, container, joined) {
+    const withCoords = joined.filter((r) => r.temCoordenadas);
+    const map = L.map(container);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map);
+    if (withCoords.length === 0) {
+      map.setView([-14, -51], 4); // Brazil-wide fallback view
+      return;
+    }
+    const bounds = [];
+    withCoords.forEach((r) => {
+      const color = zonaColor(r.idZona || null);
+      const marker = L.circleMarker([r.lat, r.lon], {
+        radius: 6, color, fillColor: color, fillOpacity: 0.8,
+      }).addTo(map);
+      marker.bindPopup(
+        `Controle: ${window.__sigcPro.escapeHtml(r.controle)}<br>` +
+        `Domicílio: ${window.__sigcPro.escapeHtml(r.domicilio)}<br>` +
+        `Entrevistador: ${window.__sigcPro.escapeHtml(r.entrevistador)}<br>` +
+        `Tipo: ${window.__sigcPro.escapeHtml(r.tipoEntrevista)}<br>` +
+        `Zona: ${window.__sigcPro.escapeHtml(r.idZona || 'Sem zona')}`
+      );
+      bounds.push([r.lat, r.lon]);
+    });
+    map.fitBounds(bounds, { padding: [20, 20] });
+  }
+
+  function readUltimoMovimentoTable() {
+    const table = document.getElementById('tableRelatorio');
+    if (!table) return null;
+    const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+    const rows = [...table.querySelectorAll('tbody tr')].map((tr) =>
+      [...tr.querySelectorAll('td')].map((td) => td.textContent.trim()));
+    return parseUltimoMovimentoRows(headers, rows);
+  }
+
+  // Lista de Endereços cross-fetch — delegates entirely to agenda-map.js's
+  // fetchEnderecos(uf, controles), a composed, cached, multi-Controle
+  // helper (loops its private postFiltrar per uncached Controle, merges
+  // results into one Map). This file never issues that request itself:
+  // the network call stays inside agenda-map.js, the directory
+  // check-privacy.sh's FETCH_DIRS already sanctions for it.
+  async function onMapaClick(btn) {
+    const movimentoMap = readUltimoMovimentoTable();
+    if (!movimentoMap || movimentoMap.size === 0) {
+      alert('SIGC-PRO: nenhum dado encontrado no relatório — rode um Filtrar primeiro.');
+      return;
+    }
+    if (!confirm(FETCH_CONSENT_MSG)) return;
+
+    const AM = window.__sigcProAgendaMapInternals;
+    const uf = window.__sigcProUltimoMovimentoExportInternals &&
+      window.__sigcProUltimoMovimentoExportInternals.getCurrentUf();
+    if (!uf) {
+      alert('SIGC-PRO: não foi possível identificar a UF atual.');
+      return;
+    }
+
+    btn.disabled = true;
+    const originalLabel = btn.textContent;
+    try {
+      const controles = [...new Set([...movimentoMap.keys()].map((k) => k.split('|')[0]))];
+      let enderecosMap = new Map();
+      try {
+        enderecosMap = await AM.fetchEnderecos(uf, controles);
+      } catch (err) {
+        console.warn(`${TAG} Lista de Endereços fetch failed:`, err);
+      }
+      const joined = joinEnderecos(movimentoMap, enderecosMap);
+      pendingJoined = joined;
+      const zonaRows = aggregateZonas(joined);
+
+      closePanel();
+      document.body.insertAdjacentHTML('beforeend', buildPanelHtml(joined, zonaRows));
+      const panelEl = document.getElementById(PANEL_ID);
+      wireTabs(panelEl);
+      mapInitialized = false;
+      maybeLoadTiles();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
+  }
+
+  window.__sigcPro.mountWidget({
+    id: BUTTON_ID,
+    anchor: (ctx) => ctx.ultimoMovimentoFiltrarBtn(),
+    insert: 'after',
+    when: () => onUltimoMovimento(),
+    build: () => {
+      const btn = window.__sigcPro.makeSigcFormButton({
+        id: BUTTON_ID,
+        text: 'Mapa',
+        title: 'Mapa de domicílios por zona (SIGC-PRO)',
+        onClick: () => onMapaClick(btn),
+      });
+      return btn;
+    },
+  });
+
   window.__sigcProUltimoMovimentoMapInternals = {
     parseUltimoMovimentoRows,
     joinEnderecos,
     aggregateZonas,
     zonaColor,
     buildZonasTableHtml,
+    buildPanelHtml,
   };
 })();

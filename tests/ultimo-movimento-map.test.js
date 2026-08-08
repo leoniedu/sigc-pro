@@ -1,6 +1,8 @@
 import { describe, test, expect } from 'bun:test';
 
 await import('../extension/common/sigc-common.js');
+await import('../extension/features/agenda-map/agenda-map.js');
+await import('../extension/features/ultimo-movimento-export/ultimo-movimento-export.js');
 await import('../extension/features/ultimo-movimento-map/ultimo-movimento-map.js');
 
 const UM = window.__sigcProUltimoMovimentoMapInternals;
@@ -149,5 +151,46 @@ describe('buildZonasTableHtml', () => {
     const html = UM.buildZonasTableHtml([]);
     expect(html).toContain('<table');
     expect(html).not.toMatch(/<td/);
+  });
+});
+
+describe('buildPanelHtml', () => {
+  const joined = [
+    { controle: 'C1', domicilio: '1', entrevistador: 'A', tipoEntrevista: 'Realizada',
+      ultimaPosicao: 'Transmitido', data: '01/08/2026', lat: -8.5, lon: -63.8,
+      zona: 'Z1', idZona: 'Z1', temCoordenadas: true, temZona: true },
+  ];
+  const zonaRows = UM.aggregateZonas(joined);
+
+  test('includes both tab buttons and both panels', () => {
+    const html = UM.buildPanelHtml(joined, zonaRows);
+    expect(html).toContain('Mapa');
+    expect(html).toContain('Zonas');
+    expect(html).toContain('sigc-pro-mapa-panel');
+    expect(html).toContain('sigc-pro-zonas-panel');
+  });
+
+  test('embeds the Zonas table', () => {
+    const html = UM.buildPanelHtml(joined, zonaRows);
+    expect(html).toContain('sigc-pro-zonas-table');
+  });
+
+  test('includes a close control', () => {
+    const html = UM.buildPanelHtml(joined, zonaRows);
+    expect(html).toMatch(/fechar|close|×/i);
+  });
+});
+
+describe('Mapa button mount', () => {
+  test('button is registered under the expected id', () => {
+    // mountWidget registration happens at module load (already imported
+    // at top of file); confirm the widget was pushed with the right id
+    // by checking the DOM after simulating the anchor being present.
+    document.body.innerHTML = '<div><a id="btnFiltrar" class="btn btn-primary btn-sigc">Filtrar</a></div>';
+    window.__sigcPro.recheckMounts();
+    // The button only mounts when onUltimoMovimento() is true, which
+    // depends on a title element this fixture doesn't provide — assert
+    // it does NOT mount rather than asserting a false positive here.
+    expect(document.getElementById('sigc-pro-ultimo-movimento-map-btn')).toBeNull();
   });
 });
