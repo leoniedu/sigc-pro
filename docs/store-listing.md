@@ -79,6 +79,16 @@ AVISO: projeto independente, sem vínculo oficial com o IBGE. Protótipo
 para uso e demonstração à equipe de desenvolvimento do SIGC. Use por sua
 conta e risco.
 
+O QUE HÁ DE NOVO (desde a v0.2.103, última versão publicada na Chrome
+Web Store, até a v0.2.126): cartões de visita do Guia do Dia passam a
+mostrar Agência e Entrevistador; Guia do Dia sem os cartões LIVRE nem
+a linha-resumo de Zonas; correção do relatório Último Movimento após
+mudança de endpoint no SIGC (afetava CSV TODAS, a anotação do
+Agenda-pro e o Guia do Dia); correção do Entrevistador no Agenda-pro,
+que podia se repetir entre domicílios de um mesmo Controle. Histórico
+completo:
+https://github.com/leoniedu/sigc-pro/blob/main/docs/CHANGELOG.md
+
 Código-fonte aberto: https://github.com/leoniedu/sigc-pro
 ```
 
@@ -94,28 +104,21 @@ without modifying the portal's native features.
 ## Host permission justification (dashboard field)
 
 ```
-The extension injects a content script only on pages of the SIGC portal
-(Sistema Integrado de Gestão da Coleta, IBGE) — matched by
-`portalweb.ibge.gov.br`, `portalweb2.ibge.gov.br`, and
-`w3sigcpns2025.ibge.gov.br`, the specific hosts SIGC is served from,
-not the whole ibge.gov.br domain — to add
-export buttons (PDF, KML, CSV) to report toolbars
-and Agenda helpers (CSV export, slot checks, open-slot capacity panel,
-printable day guide, date picker), reading data already rendered on the
-page. No access to any
-other site is requested. The only browser permission declared is
-`storage`, used solely to remember the on/off state of one advanced,
-off-by-default flag (set on the extension's own Options page) that
-gates a bulk export feature; no other data is stored. The extension
-makes no network calls except three optional, click-and-confirm requests
-to the SIGC server itself (same origin, within the user's existing
-session): the "Guia do Dia" feature; the Lista de Endereços annotation,
-which fetches the UF's agenda slots and the último movimento report for
-the displayed Controle; and — only when the advanced flag above is
-enabled — a bulk "Último Movimento" report export that loops one
-request per agência in the current UF. The exported files may include
-Google Maps links (not loaded resources — nothing is fetched until
-clicked). Nothing is ever sent to third parties or the developer.
+Injects a content script only on the SIGC portal (Sistema Integrado
+de Gestão da Coleta, IBGE) — matched by `portalweb.ibge.gov.br`,
+`portalweb2.ibge.gov.br`, and `w3sigcpns2025.ibge.gov.br`, the
+specific SIGC hosts, not all of ibge.gov.br — to add export buttons
+(PDF, KML, CSV) to report toolbars and Agenda helpers, reading data
+already rendered on the page. No other site is accessed. The only
+permission declared is `storage`, remembering the on/off state of one
+advanced, off-by-default flag (Options page) gating a bulk export; no
+other data is stored. No network calls except three optional,
+click-and-confirm, same-origin requests to the SIGC server: "Guia do
+Dia"; the Lista de Endereços annotation (agenda slots + último
+movimento for the shown Controle); and, with the flag on, a bulk
+"Último Movimento" export looping per agência in the UF. Exported
+files may link to Google Maps (not loaded, only fetched on click).
+Nothing is sent to third parties or the developer.
 ```
 
 ## Storage permission justification (dashboard field)
