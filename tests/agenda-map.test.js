@@ -5,6 +5,27 @@ await import('../extension/features/agenda-map/agenda-map.js');
 
 const AM = window.__sigcProAgendaMapInternals;
 
+describe('filtrarUrl', () => {
+  const origin = 'https://portalweb.ibge.gov.br';
+  const F5_HEX = '68747470733a2f2f773373696763706e73323032352e696267652e676f762e6272';
+  const F5_PATHNAME = `/f5-w-${F5_HEX}$$/UltimoMovimento`;
+
+  test('ListaEnderecos slug, simple mode, direct host', () => {
+    expect(AM.filtrarUrl(origin, '/Agenda', 'ListaEnderecos', true))
+      .toBe(`${origin}/relatorio/filtrar?slug=ListaEnderecos`);
+  });
+
+  test('relatorio-ultimo-movimento slug, simple mode, F5 gateway', () => {
+    expect(AM.filtrarUrl(origin, F5_PATHNAME, 'relatorio-ultimo-movimento', true))
+      .toBe(`${origin}/f5-w-${F5_HEX}$$/relatorio/filtrar?slug=relatorio-ultimo-movimento`);
+  });
+
+  test('relatorio-ultimo-movimento slug, fallback mode, F5 gateway', () => {
+    expect(AM.filtrarUrl(origin, F5_PATHNAME, 'relatorio-ultimo-movimento', false))
+      .toBe(`${origin}/f5-w-${F5_HEX}$$/relatorio/f5-h-$$/relatorio/filtrar?slug=relatorio-ultimo-movimento;F5_origin=${F5_HEX}&F5CH=I`);
+  });
+});
+
 describe('parseUltimoMovimentoTable', () => {
   test('maps Controle to {entrevistador} by header label', () => {
     const headers = ['Controle', 'Entrevistador', 'Situação'];
@@ -36,6 +57,20 @@ describe('parseUltimoMovimentoTable', () => {
     const map = AM.parseUltimoMovimentoTable(headers, rows);
     expect(map.size).toBe(1);
     expect(map.has('C1')).toBe(true);
+  });
+
+  test('tolerates the live #!/! header marker (real live header row, 2026-08-07)', () => {
+    const headers = ['#!Controle', '!Domicílio', 'Entrevistador', 'Tipo Entrevista', 'Última Posição', 'Data', 'Observação'];
+    const rows = [['292740805220571', '1', 'Fulano de Tal', 'Realizada', 'Descarregado', '07/08/2026 10:27:20', '']];
+    const map = AM.parseUltimoMovimentoTable(headers, rows);
+    expect(map.get('292740805220571')).toEqual({ entrevistador: 'Fulano de Tal' });
+  });
+
+  test('still resolves the old unmarked header form (no #!/! prefix)', () => {
+    const headers = ['Controle', 'Entrevistador'];
+    const rows = [['C1', 'Fulano']];
+    const map = AM.parseUltimoMovimentoTable(headers, rows);
+    expect(map.get('C1')).toEqual({ entrevistador: 'Fulano' });
   });
 
   test('trims whitespace from cell values', () => {

@@ -28,18 +28,22 @@
 
   // simple=true: plain prefixed path. simple=false: replicate the shape
   // captured from the live gateway (f5-h-$$ segment + F5_origin/F5CH
-  // params). postFiltrar tries simple first, then falls back.
-  function filtrarUrl(origin, pathname, simple) {
+  // params). postFiltrar tries simple first, then falls back. slug
+  // selects which /relatorio/filtrar report to hit — SIGC serves both
+  // Lista de Endereços (slug=ListaEnderecos) and, as of 2026-08-07,
+  // Último Movimento (slug=relatorio-ultimo-movimento) through this
+  // same generic endpoint.
+  function filtrarUrl(origin, pathname, slug, simple) {
     const f5 = f5Prefix(pathname);
-    if (!f5) return `${origin}/relatorio/filtrar?slug=ListaEnderecos`;
+    if (!f5) return `${origin}/relatorio/filtrar?slug=${slug}`;
     return simple
-      ? `${origin}${f5.prefix}/relatorio/filtrar?slug=ListaEnderecos`
-      : `${origin}${f5.prefix}/relatorio/f5-h-$$/relatorio/filtrar?slug=ListaEnderecos;F5_origin=${f5.hex}&F5CH=I`;
+      ? `${origin}${f5.prefix}/relatorio/filtrar?slug=${slug}`
+      : `${origin}${f5.prefix}/relatorio/f5-h-$$/relatorio/filtrar?slug=${slug};F5_origin=${f5.hex}&F5CH=I`;
   }
 
-  function filtroBody(uf, controle) {
+  function filtroBody(uf, controle, idFiltro) {
     return 'filtro=' + encodeURIComponent(JSON.stringify({
-      IdFiltro: 'ListaEnderecos',
+      IdFiltro: idFiltro,
       IdUf: String(uf),
       IdAgencia: '*',
       IdMunicipio: '*',
@@ -120,12 +124,22 @@
   // parseDistribuicaoTable below.
   const ULTIMO_MOVIMENTO_LABELS = { controle: 'Controle', entrevistador: 'Entrevistador' };
 
+  // Strips a leading run of "#"/"!" characters some SIGC report grids
+  // prepend to a sortable/filterable column's header text (confirmed
+  // live 2026-08-07: "#!Controle", "!Domicílio") — a UI decoration, not
+  // part of the label's identity, so it must not be baked into
+  // ULTIMO_MOVIMENTO_LABELS itself (that would break the day this
+  // decoration is toggled off again).
+  function stripHeaderMarker(h) {
+    return String(h ?? '').replace(/^[#!]+/, '');
+  }
+
   function parseUltimoMovimentoTable(headers, rows) {
     const P = window.__sigcPro;
     const idx = {};
     for (const key of Object.keys(ULTIMO_MOVIMENTO_LABELS)) {
       const i = headers.findIndex(
-        (h) => P.normalizeLabel(h) === P.normalizeLabel(ULTIMO_MOVIMENTO_LABELS[key]));
+        (h) => P.normalizeLabel(stripHeaderMarker(h)) === P.normalizeLabel(ULTIMO_MOVIMENTO_LABELS[key]));
       if (i === -1) return null;
       idx[key] = i;
     }
@@ -215,8 +229,8 @@
   // (identical on the direct host, where the Set collapses them).
   async function postFiltrar(uf, controle) {
     const urls = [...new Set([
-      filtrarUrl(location.origin, location.pathname, true),
-      filtrarUrl(location.origin, location.pathname, false),
+      filtrarUrl(location.origin, location.pathname, 'ListaEnderecos', true),
+      filtrarUrl(location.origin, location.pathname, 'ListaEnderecos', false),
     ])];
     let lastErr = new Error('sem resposta');
     for (const url of urls) {
@@ -228,7 +242,7 @@
             'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
             'X-Requested-With': 'XMLHttpRequest',
           },
-          body: filtroBody(uf, controle),
+          body: filtroBody(uf, controle, 'ListaEnderecos'),
         });
         if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
         const map = parseEnderecosHtml(await res.text());
@@ -259,9 +273,11 @@
     return all;
   }
 
+  const ULTIMO_MOVIMENTO_SLUG = 'relatorio-ultimo-movimento';
+
   function filtroBodyUltimoMovimento(uf, controle) {
     return 'filtro=' + encodeURIComponent(JSON.stringify({
-      IdFiltro: '',
+      IdFiltro: ULTIMO_MOVIMENTO_SLUG,
       IdUf: String(uf),
       IdAgencia: '*',
       IdMunicipio: '*',
@@ -271,23 +287,41 @@
     }));
   }
 
+  // As of 2026-08-07, Último Movimento is served through the same
+  // generic /relatorio/filtrar?slug=... endpoint Lista de Endereços
+  // already used — so this now needs the same simple/full two-mode F5
+  // retry loop as postFiltrar, not the plain-path fetchViaGateway this
+  // call used before the migration.
   async function postUltimoMovimento(uf, controle) {
-    const res = await window.__sigcPro.fetchViaGateway('/UltimoMovimento/Filtrar', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      body: filtroBodyUltimoMovimento(uf, controle),
-    });
-    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-    const table = doc.getElementById('tb_ultimo_movimento');
-    if (!table) return null;
-    const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
-    const rows = [...table.querySelectorAll('tbody tr')].map((tr) =>
-      [...tr.querySelectorAll('td')].map((td) => td.textContent.trim()));
-    return parseUltimoMovimentoTable(headers, rows);
+    const urls = [...new Set([
+      filtrarUrl(location.origin, location.pathname, ULTIMO_MOVIMENTO_SLUG, true),
+      filtrarUrl(location.origin, location.pathname, ULTIMO_MOVIMENTO_SLUG, false),
+    ])];
+    let lastErr = new Error('sem resposta');
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: filtroBodyUltimoMovimento(uf, controle),
+        });
+        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
+        const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+        const table = doc.querySelector('#tableRelatorio');
+        if (!table) { lastErr = new Error('tabela não reconhecida'); continue; }
+        const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+        const rows = [...table.querySelectorAll('tbody tr')].map((tr) =>
+          [...tr.querySelectorAll('td')].map((td) => td.textContent.trim()));
+        return parseUltimoMovimentoTable(headers, rows);
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
   }
 
   // In-memory only, mirrors enderecosCache: controle -> Map(controle ->
@@ -447,5 +481,5 @@
   });
 
   // Exposed only for tests — not part of the runtime public surface.
-  window.__sigcProAgendaMapInternals = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao };
+  window.__sigcProAgendaMapInternals = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl };
 })();
