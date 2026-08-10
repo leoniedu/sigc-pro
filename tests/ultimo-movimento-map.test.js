@@ -553,3 +553,52 @@ describe('filteredAgencia', () => {
     expect(UM.filteredAgencia()).toBe('');
   });
 });
+
+// The "button doesn't show up until a reload" bug (2026-08-10).
+// filteredAgencia was only ever set by a Filtrar CLICK, so a report
+// already rendered at page-load time — SIGC restoring state, a back
+// navigation, or a Filtrar that happened before the listener bound —
+// left it empty forever and the button never mounted.
+describe('adoptRenderedAgencia', () => {
+  function setSelect(value) {
+    document.body.innerHTML =
+      `<select id="IdAgencia"><option value="${value}" selected>x</option></select>` +
+      '<button id="btnFiltrar">Filtrar</button>';
+  }
+
+  test('adopts the selector when a table is already rendered', () => {
+    setSelect('0570');
+    UM.resetFilteredAgencia();
+    UM.adoptRenderedAgencia(true);
+    expect(UM.filteredAgencia()).toBe('0570');
+  });
+
+  test('does nothing when no table is rendered yet', () => {
+    setSelect('0570');
+    UM.resetFilteredAgencia();
+    UM.adoptRenderedAgencia(false);
+    expect(UM.filteredAgencia()).toBe('');
+  });
+
+  // Adoption is a one-time seed for the pre-existing report. Once a
+  // Filtrar has been observed, the captured value is authoritative and
+  // must keep winning over a drifting selector — the whole point of the
+  // earlier filteredAgencia fix.
+  test('does not overwrite an already-captured agência', () => {
+    setSelect('0570');
+    UM.resetFilteredAgencia();
+    UM.captureFilteredAgencia();
+    document.getElementById('IdAgencia').value = '*';
+    UM.adoptRenderedAgencia(true);
+    expect(UM.filteredAgencia()).toBe('0570');
+  });
+
+  // A TODOS report on arrival must stay ungated, not get adopted as ''
+  // and then re-adopted later from a changed selector.
+  test('adopting TODOS leaves the gate closed', () => {
+    setSelect('*');
+    UM.resetFilteredAgencia();
+    UM.adoptRenderedAgencia(true);
+    expect(UM.filteredAgencia()).toBe('');
+  });
+});

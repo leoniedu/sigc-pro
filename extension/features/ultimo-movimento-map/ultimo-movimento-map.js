@@ -674,6 +674,7 @@
   // cases, so each one needs a clean starting point.
   function resetFilteredAgencia() {
     filteredAgenciaValue = '';
+    agenciaAdopted = false;
   }
 
   // Filtrar is a plain form-action button that re-renders the table in
@@ -693,6 +694,30 @@
     if (!btn) return;
     btn.addEventListener('click', captureFilteredAgencia, true);
     filtrarBound = true;
+  }
+
+  // Seeds the captured value from the selector when a report is ALREADY
+  // rendered but no Filtrar click was ever observed.
+  //
+  // Without this the button silently never appeared (reported live
+  // 2026-08-10: "doesn't show up until a reload"). captureFilteredAgencia
+  // only ever ran on a click, so any report that was on screen before
+  // this file's listener existed — SIGC restoring filter state, a back
+  // navigation, or simply a Filtrar during the extension's own startup
+  // — left filteredAgencia empty for the page's whole lifetime. The
+  // "reload" that appeared to fix it actually just gave the user a
+  // reason to click Filtrar again.
+  //
+  // Safe because it's a one-time seed: once anything has been captured
+  // it never overwrites, so a Filtrar-captured value still wins over a
+  // drifting selector, which is the property the gate exists for. On
+  // arrival at a TODOS report it adopts '', leaving the gate closed.
+  let agenciaAdopted = false;
+
+  function adoptRenderedAgencia(hasTable) {
+    if (agenciaAdopted || !hasTable) return;
+    agenciaAdopted = true;
+    if (!filteredAgenciaValue) filteredAgenciaValue = selectedAgencia();
   }
 
   // How many on-screen households the Lista de Endereços call returned
@@ -902,7 +927,9 @@
     when: () => {
       if (!onUltimoMovimento()) return false;
       bindFiltrarCapture();
-      return !!window.__sigcPro.getDataTable() && !!filteredAgencia();
+      const hasTable = !!window.__sigcPro.getDataTable();
+      adoptRenderedAgencia(hasTable);
+      return hasTable && !!filteredAgencia();
     },
     build: () => {
       const btn = window.__sigcPro.makeDtProButton({
@@ -935,6 +962,7 @@
     filteredAgencia,
     captureFilteredAgencia,
     resetFilteredAgencia,
+    adoptRenderedAgencia,
     missingEnderecoCount,
   };
 })();
