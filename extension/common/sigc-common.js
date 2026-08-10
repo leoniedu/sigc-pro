@@ -322,6 +322,18 @@
       `&destination=${encodeURIComponent(`${lat},${lon}`)}`;
   }
 
+  // Just centers/pins the point (Google's Maps "search" API endpoint) —
+  // unlike gmapsDestinoUrl, does NOT open turn-by-turn directions. The
+  // query value is a single encodeURIComponent-wrapped "lat,lon" string
+  // (comma, no space) — mirrors gmapsDestinoUrl's own encoding exactly,
+  // so this is safe as a URL parameter regardless of what separator or
+  // whitespace a caller might otherwise be tempted to hand-format in.
+  function gmapsPontoUrl(lat, lon) {
+    if (lat == null || lon == null) return '';
+    return 'https://www.google.com/maps/search/?api=1' +
+      `&query=${encodeURIComponent(`${lat},${lon}`)}`;
+  }
+
   // --- Agenda (AdministracaoAgenda) shared reading -------------------
   // Used by both agenda-csv-export and agenda-slot-checks, which both
   // need "every slot in the currently rendered calendar, parsed" — kept
@@ -761,6 +773,7 @@
     gatewayUrl,
     fetchViaGateway,
     gmapsDestinoUrl,
+    gmapsPontoUrl,
     escapeHtml,
     buildCsv,
     downloadFile,

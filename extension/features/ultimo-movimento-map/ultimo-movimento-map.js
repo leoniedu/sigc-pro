@@ -528,11 +528,13 @@
       const marker = L.circleMarker([r.lat, r.lon], {
         radius: 6, color, fillColor: color, fillOpacity: 0.8,
       }).addTo(map);
-      // gmapsDestinoUrl is always non-empty here (withCoords already
-      // filtered to temCoordenadas rows), same outbound-link-only
-      // pattern lista-agenda.js's own domicílio table uses — a link the
-      // user clicks, never a request the extension makes itself.
-      const gmapsUrl = window.__sigcPro.gmapsDestinoUrl(r.lat, r.lon);
+      // gmapsPontoUrl (just pins the point — no turn-by-turn directions)
+      // is always non-empty here (withCoords already filtered to
+      // temCoordenadas rows), same outbound-link-only pattern
+      // lista-agenda.js's own domicílio table uses (via the sibling
+      // gmapsDestinoUrl) — a link the user clicks, never a request the
+      // extension makes itself.
+      const gmapsUrl = window.__sigcPro.gmapsPontoUrl(r.lat, r.lon);
       const gmapsLine = gmapsUrl
         ? `<br><a href="${window.__sigcPro.escapeHtml(gmapsUrl)}" target="_blank" rel="noopener">Ver no Google Maps</a>`
         : '';

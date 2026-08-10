@@ -850,6 +850,31 @@ describe('gmapsDestinoUrl', () => {
   });
 });
 
+describe('gmapsPontoUrl', () => {
+  test('builds a plain point link (no turn-by-turn directions)', () => {
+    const url = window.__sigcPro.gmapsPontoUrl(-12.9, -38.5);
+    expect(url).toContain('google.com/maps/search');
+    expect(url).not.toContain('/maps/dir/');
+    expect(url).not.toContain('travelmode');
+    expect(url).not.toContain('destination=');
+  });
+
+  test('the coordinate pair is comma-joined and fully URL-encoded, no raw whitespace', () => {
+    const url = window.__sigcPro.gmapsPontoUrl(-12.9, -38.5);
+    // "-12.9,-38.5" percent-encoded — comma becomes %2C, no literal
+    // space or "+" anywhere in the query value.
+    expect(url).toContain(encodeURIComponent('-12.9,-38.5'));
+    expect(url).not.toMatch(/query=[^&]*\s/);
+    expect(url).not.toContain(' ');
+  });
+
+  test('returns empty string when either coordinate is missing', () => {
+    expect(window.__sigcPro.gmapsPontoUrl(null, -38.5)).toBe('');
+    expect(window.__sigcPro.gmapsPontoUrl(-12.9, null)).toBe('');
+    expect(window.__sigcPro.gmapsPontoUrl(null, null)).toBe('');
+  });
+});
+
 describe('buildDomiciliosTable — maps link', () => {
   const comCoord = [{
     endereco: 'RUA DAS FLORES, 100', nDomicilio: '1',
