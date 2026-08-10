@@ -257,3 +257,48 @@ describe('Mapa button mount', () => {
     expect(document.getElementById('sigc-pro-ultimo-movimento-map-btn')).toBeNull();
   });
 });
+
+describe('convexHull', () => {
+  test('0 points returns null', () => {
+    expect(UM.convexHull([])).toBeNull();
+  });
+
+  test('1 point returns a circle centered on it', () => {
+    const result = UM.convexHull([[10, 20]]);
+    expect(result).toEqual({ type: 'circle', center: [10, 20] });
+  });
+
+  test('2 distinct points returns a capsule', () => {
+    const result = UM.convexHull([[10, 20], [11, 21]]);
+    expect(result).toEqual({ type: 'capsule', a: [10, 20], b: [11, 21] });
+  });
+
+  test('2 identical points (dedup to 1) returns a circle', () => {
+    const result = UM.convexHull([[10, 20], [10, 20]]);
+    expect(result).toEqual({ type: 'circle', center: [10, 20] });
+  });
+
+  test('3 collinear points returns a capsule between the extremes', () => {
+    const result = UM.convexHull([[0, 0], [1, 1], [2, 2]]);
+    expect(result.type).toBe('capsule');
+    expect(result.a).toEqual([0, 0]);
+    expect(result.b).toEqual([2, 2]);
+  });
+
+  test('3 non-collinear points returns a triangle polygon', () => {
+    const result = UM.convexHull([[0, 0], [0, 2], [2, 0]]);
+    expect(result.type).toBe('polygon');
+    expect(result.points).toHaveLength(3);
+    // every input point must be present in the hull for a triangle (all 3 are vertices)
+    [[0, 0], [0, 2], [2, 0]].forEach((p) => {
+      expect(result.points).toContainEqual(p);
+    });
+  });
+
+  test('a point strictly inside the hull is excluded from the polygon', () => {
+    const result = UM.convexHull([[0, 0], [0, 4], [4, 0], [4, 4], [2, 2]]);
+    expect(result.type).toBe('polygon');
+    expect(result.points).not.toContainEqual([2, 2]);
+    expect(result.points).toHaveLength(4);
+  });
+});

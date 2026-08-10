@@ -472,6 +472,68 @@
     }
   }
 
+  // Convex hull over zona domicílio coordinates (spec §2). Hand-rolled
+  // Andrew's monotone chain — no new vendored dependency, matches this
+  // repo's "vendor only what you must, hand-roll small pure logic"
+  // approach (same rationale as zonaColor's own hash-based assignment).
+  // points: Array<[lat, lon]>. Degenerate inputs (0/1/2 points, or all
+  // collinear) never return an empty/broken polygon — every zona with
+  // at least one valid-coordinate domicílio gets SOME shape (spec: "no
+  // zona with points renders nothing").
+  function cross(o, a, b) {
+    return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  }
+
+  function convexHull(points) {
+    // De-dup identical coordinates first — Andrew's monotone chain
+    // assumes distinct points, and two identical rows (e.g. two
+    // domicílios geocoded to the exact same address) must not count as
+    // "2 points" for the polygon/capsule decision below.
+    const uniq = [];
+    const seen = new Set();
+    points.forEach(([lat, lon]) => {
+      const key = `${lat},${lon}`;
+      if (!seen.has(key)) { seen.add(key); uniq.push([lat, lon]); }
+    });
+
+    if (uniq.length === 0) return null;
+    if (uniq.length === 1) return { type: 'circle', center: uniq[0] };
+
+    const sorted = [...uniq].sort((p, q) => (p[0] - q[0]) || (p[1] - q[1]));
+
+    if (uniq.length === 2) {
+      return { type: 'capsule', a: sorted[0], b: sorted[sorted.length - 1] };
+    }
+
+    const lower = [];
+    for (const p of sorted) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+        lower.pop();
+      }
+      lower.push(p);
+    }
+    const upper = [];
+    for (let i = sorted.length - 1; i >= 0; i -= 1) {
+      const p = sorted[i];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+        upper.pop();
+      }
+      upper.push(p);
+    }
+    upper.pop();
+    lower.pop();
+    const hull = lower.concat(upper);
+
+    // All points collinear: the hull-building loop above collapses to
+    // just the two extremes (lower/upper both degenerate) — treat the
+    // same as the 2-point case rather than a degenerate "polygon" with
+    // <3 vertices.
+    if (hull.length < 3) {
+      return { type: 'capsule', a: sorted[0], b: sorted[sorted.length - 1] };
+    }
+    return { type: 'polygon', points: hull };
+  }
+
   window.__sigcPro.mountWidget({
     id: BUTTON_ID,
     anchor: (ctx) => ctx.ultimoMovimentoFiltrarBtn(),
@@ -497,5 +559,6 @@
     buildZonasTableHtml,
     buildPanelHtml,
     onMapaClick,
+    convexHull,
   };
 })();
