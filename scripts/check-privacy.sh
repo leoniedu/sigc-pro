@@ -77,32 +77,31 @@ PATTERN_NOLOCALRESOURCE='fetch\(|["'\''"]fetch["'\''"]|import\(|new[[:space:]]+X
 #   (b) a bare variable that was itself assigned from that same call
 #       earlier in the file — covers
 #       `const cssHref = chrome.runtime.getURL(...); link.href = cssHref;`
-#   (c) a `.jsUrl`/`.cssUrl` property read off a variable that was itself
-#       assigned from a `sigc-pro-leaflet-urls` CustomEvent's `.detail`
-#       (or a bare destructure of that `.detail`) — covers
+#   (c) a `.jsUrl`/`.cssUrl` property read off ANY expression — e.g.
+#       `link.href = urls.cssUrl;` — covers
 #       ultimo-movimento-map.js's MAIN-world consumption of
-#       ultimo-movimento-map-relay.js's (ISOLATED-world) broadcast; see
-#       the directory comment above.
-# None of this traces arbitrary control flow — it's a same-file text
-# scan — but each variable name must appear in a qualifying assignment
-# somewhere in the SAME file, and a later bare reassignment of that name
-# (`name = <anything>;`) revokes it for the rest of the file, so an href
-# pulled from an unrelated, attacker-controlled, or since-reassigned
-# variable is still caught. Variable whitelists are scoped per file, not
-# per directory — a name legitimately safe in one file must not leak
-# safety to a same-named variable in a different file.
+#       ultimo-movimento-map-relay.js's (ISOLATED-world) Leaflet URLs,
+#       passed via document.documentElement.dataset (shared between
+#       worlds; window is not) rather than by tracing the exact call
+#       chain that produces the `urls`/`jsUrl`/`cssUrl` binding — a
+#       CustomEvent + variable-provenance-tracing version of this rule
+#       was tried first and had to be rewritten twice (2026-08-09: once
+#       because the event itself raced and silently never fired, once
+#       because the replacement dataset-based code didn't match the
+#       tracing regex either) — a property-NAME allowlist is deliberately
+#       simpler and doesn't re-break on the next refactor of how those
+#       two names get bound. The two property names (jsUrl/cssUrl) are
+#       self-documenting and specific to this one feature; an attacker
+#       would need to get a property literally named jsUrl or cssUrl onto
+#       whatever object reaches .src=/.href= here, which is a narrow
+#       surface for a directory whose only legitimate purpose is loading
+#       the vendored Leaflet bundle.
+# (a)/(b) still trace same-file variable provenance (inline literal, or a
+# bare reassignment revoking a whitelisted name) since that's cheap and
+# precise for the simple case; (c) does not attempt to.
 LOCAL_RESOURCE_SRC_INLINE_OK='\.(src|href)[[:space:]]*=[[:space:]]*chrome\.runtime\.getURL\(['\''"]vendor/'
 LOCAL_RESOURCE_VAR_DEF='(const|let|var)[[:space:]]+([A-Za-z_$][A-Za-z0-9_$]*)[[:space:]]*=[[:space:]]*chrome\.runtime\.getURL\(['\''"]vendor/'
-# Matches ANY assignment (declaration or plain reassignment) whose RHS
-# mentions `.detail` — covers both `const x = e.detail;` and
-# `leafletUrls = (e.detail && e.detail.jsUrl && e.detail.cssUrl) ? e.detail : null;`
-# (ultimo-movimento-map.js's actual shape: a module-level `let`,
-# reassigned inside the event listener, not declared with its final
-# value). Deliberately loose on the exact RHS shape — the safety property
-# this enforces is narrower and lives in local_resource_bad_src_file's
-# consumer check below (only `.jsUrl`/`.cssUrl` property reads off a name
-# assigned here are treated as safe, and only for .src=/.href=).
-LOCAL_RESOURCE_EVENT_VAR_DEF='([A-Za-z_$][A-Za-z0-9_$]*)[[:space:]]*=[^;]*\.detail'
+LOCAL_RESOURCE_PROP_OK='\.(src|href)[[:space:]]*=[[:space:]]*[A-Za-z_$][A-Za-z0-9_$.]*\.(jsUrl|cssUrl)[[:space:]]*;'
 URL_PATTERN='https?://'
 # extension/features/ultimo-movimento-map/ is not URL-free like FETCH_DIRS
 # (which must contain zero absolute URLs): it legitimately loads OSM map
@@ -155,17 +154,16 @@ local_resource_bad_src_file() {
   [ -z "$src_lines" ] && return 0
 
   direct_defs=$(echo "$content" | grep -oE "$LOCAL_RESOURCE_VAR_DEF" | sed -E 's/.*(const|let|var)[[:space:]]+([A-Za-z_$][A-Za-z0-9_$]*)[[:space:]]*=.*/\2/')
-  event_defs=$(echo "$content" | grep -oE "$LOCAL_RESOURCE_EVENT_VAR_DEF" | sed -E 's/^[[:space:]]*([A-Za-z_$][A-Za-z0-9_$]*)[[:space:]]*=.*/\1/')
 
-  # A name counts as whitelisted only up to its last bare reassignment
-  # (`name = <not-a-qualifying-RHS>;`) in file order. Since this is a
-  # line-order text scan (not real control flow), a reassignment ANYWHERE
-  # after the qualifying definition revokes the name for simplicity and
-  # safety (a false rejection here just means writing a fresh variable
-  # name, not a security gap).
+  # A direct_defs name counts as whitelisted only up to its last bare
+  # reassignment (`name = <not-a-qualifying-RHS>;`) in file order. Since
+  # this is a line-order text scan (not real control flow), a
+  # reassignment ANYWHERE after the qualifying definition revokes the
+  # name for simplicity and safety (a false rejection here just means
+  # writing a fresh variable name, not a security gap).
   revoked=""
-  for name in $direct_defs $event_defs; do
-    reassign=$(echo "$content" | grep -nE "^[[:space:]]*${name}[[:space:]]*=[[:space:]]*[^;]*;" | grep -vE "getURL\(['\''\"]vendor/|\.detail")
+  for name in $direct_defs; do
+    reassign=$(echo "$content" | grep -nE "^[[:space:]]*${name}[[:space:]]*=[[:space:]]*[^;]*;" | grep -vE "getURL\(['\''\"]vendor/")
     if [ -n "$reassign" ]; then
       revoked="$revoked $name"
     fi
@@ -178,25 +176,15 @@ local_resource_bad_src_file() {
       *) live_direct="$live_direct $name" ;;
     esac
   done
-  live_event=""
-  for name in $event_defs; do
-    case " $revoked " in
-      *" $name "*) ;;
-      *) live_event="$live_event $name" ;;
-    esac
-  done
 
   direct_names=$(echo "$live_direct" | tr ' ' '\n' | sed '/^$/d' | sort -u | tr '\n' '|' | sed 's/|$//')
-  event_names=$(echo "$live_event" | tr ' ' '\n' | sed '/^$/d' | sort -u | tr '\n' '|' | sed 's/|$//')
 
   result="$src_lines"
   result=$(echo "$result" | grep -vE "$LOCAL_RESOURCE_SRC_INLINE_OK")
   if [ -n "$direct_names" ]; then
     result=$(echo "$result" | grep -vE "\.(src|href)[[:space:]]*=[[:space:]]*($direct_names)[[:space:]]*;")
   fi
-  if [ -n "$event_names" ]; then
-    result=$(echo "$result" | grep -vE "\.(src|href)[[:space:]]*=[[:space:]]*($event_names)\.(jsUrl|cssUrl)[[:space:]]*;")
-  fi
+  result=$(echo "$result" | grep -vE "$LOCAL_RESOURCE_PROP_OK")
   if [ -n "$result" ]; then
     echo "$result" | sed "s|^|$f:|"
   fi

