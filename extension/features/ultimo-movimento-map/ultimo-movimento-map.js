@@ -384,13 +384,18 @@
     map.fitBounds(bounds, { padding: [20, 20] });
   }
 
+  // Reads via the DataTables JS API (window.__sigcPro.readDataTable),
+  // not raw DOM tr/td scraping: DataTables only renders the CURRENT
+  // page's rows into the DOM (25/50/100 entries per page), so a raw
+  // querySelectorAll('tbody tr') silently missed every Controle not on
+  // the visible page (confirmed live, 2026-08-09). readDataTable() reads
+  // the table's full dataset (rows().data()), all pages, same helper
+  // csv-export.js already relies on for exactly this reason — see its
+  // own comment for the F5-gateway DOM-scraping caveat this also avoids.
   function readUltimoMovimentoTable() {
-    const table = document.getElementById('tableRelatorio');
-    if (!table) return null;
-    const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
-    const rows = [...table.querySelectorAll('tbody tr')].map((tr) =>
-      [...tr.querySelectorAll('td')].map((td) => td.textContent.trim()));
-    return parseUltimoMovimentoRows(headers, rows);
+    const result = window.__sigcPro.readDataTable();
+    if (!result) return null;
+    return parseUltimoMovimentoRows(result.header, result.rows);
   }
 
   // Lista de Endereços cross-fetch — delegates entirely to agenda-map.js's
