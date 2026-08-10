@@ -739,7 +739,11 @@
     build: () => {
       const btn = window.__sigcPro.makeDtProButton({
         id: BUTTON_ID,
-        lines: ['MAPA'],
+        // Every other makeDtProButton caller (KML-pro, CSV-pro, PDF-pro,
+        // Agenda-pro) uses two lines — a single line left the text
+        // sitting high/off-center in the box (confirmed visually), since
+        // the button's vertical centering is tuned for two lines.
+        lines: ['MAPA', 'PRO'],
         title: 'Mapa de domicílios por zona (SIGC-PRO)',
         onClick: () => onMapaClick(btn),
       });
