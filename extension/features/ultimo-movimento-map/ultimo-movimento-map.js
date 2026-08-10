@@ -206,6 +206,11 @@
     .sigc-pro-zonas-table th, .sigc-pro-zonas-table td { border: 1px solid #ddd; padding: 4px 8px; text-align: right; }
     .sigc-pro-zonas-table th:nth-child(-n+2), .sigc-pro-zonas-table td:nth-child(-n+2) { text-align: left; }
     .sigc-pro-zonas-table th { background: #f4f4f4; }
+    .sigc-pro-controle-label span { font-size: 10px; font-weight: 600; color: #fff;
+      padding: 1px 4px; border-radius: 3px; white-space: nowrap;
+      box-shadow: 0 0 2px rgba(0,0,0,.6); }
+    .sigc-pro-status-legend { background: #fff; padding: 6px 8px; border-radius: 4px;
+      font-size: 11px; line-height: 1.6; box-shadow: 0 0 4px rgba(0,0,0,.3); }
   `;
 
   let cssInjected = false;
@@ -389,11 +394,40 @@
     }).addTo(map);
     if (withCoords.length === 0) {
       map.setView([-14, -51], 4); // Brazil-wide fallback view
+      addStatusLegend(map);
       return;
     }
+
+    // --- Layer 1: zona hulls, drawn first so markers sit on top ------
+    const byZona = new Map(); // idZona -> [[lat, lon], ...]
+    withCoords.forEach((r) => {
+      if (!r.idZona) return; // "Sem zona" gets no hull (spec §2)
+      if (!byZona.has(r.idZona)) byZona.set(r.idZona, []);
+      byZona.get(r.idZona).push([r.lat, r.lon]);
+    });
+    byZona.forEach((coords, idZona) => {
+      const hull = convexHull(coords);
+      if (!hull) return;
+      const color = zonaColor(idZona);
+      if (hull.type === 'polygon') {
+        L.polygon(hull.points, { color, weight: 2, fillColor: color, fillOpacity: 0.18 })
+          .bindTooltip(window.__sigcPro.escapeHtml(idZona))
+          .addTo(map);
+      } else if (hull.type === 'capsule') {
+        L.polyline([hull.a, hull.b], { color, weight: 10, opacity: 0.35, lineCap: 'round' })
+          .bindTooltip(window.__sigcPro.escapeHtml(idZona))
+          .addTo(map);
+      } else if (hull.type === 'circle') {
+        L.circle(hull.center, { radius: 30, color, fillColor: color, fillOpacity: 0.35 })
+          .bindTooltip(window.__sigcPro.escapeHtml(idZona))
+          .addTo(map);
+      }
+    });
+
+    // --- Layer 2: domicílio markers, colored by status ---------------
     const bounds = [];
     withCoords.forEach((r) => {
-      const color = zonaColor(r.idZona || null);
+      const color = statusColor(r);
       const marker = L.circleMarker([r.lat, r.lon], {
         radius: 6, color, fillColor: color, fillOpacity: 0.8,
       }).addTo(map);
@@ -406,7 +440,49 @@
       );
       bounds.push([r.lat, r.lon]);
     });
+
+    // --- Layer 3: Controle labels, always visible ---------------------
+    const CONTROLE_LABEL_COLOR = {
+      inactive: '#888888',
+      active: '#0072B2',
+      partial: '#E69F00',
+    };
+    controleCentroids(joined).forEach(({ controle, lat, lon, colorState }) => {
+      const shortId = String(controle).slice(-6);
+      const color = CONTROLE_LABEL_COLOR[colorState];
+      L.marker([lat, lon], {
+        icon: L.divIcon({
+          className: 'sigc-pro-controle-label',
+          html: `<span style="background:${color};" title="${window.__sigcPro.escapeHtml(String(controle))}">${window.__sigcPro.escapeHtml(shortId)}</span>`,
+          iconSize: null,
+        }),
+        interactive: false,
+      }).addTo(map);
+    });
+
+    addStatusLegend(map);
     map.fitBounds(bounds, { padding: [20, 20] });
+  }
+
+  // Fixed corner legend for the 6 marker-status colors (spec: "Status
+  // legend" section) — no separate legend for hull or Controle-label
+  // colors, per the design's explicit scope decision.
+  function addStatusLegend(map) {
+    const entries = [
+      ['Inativo (Distribuído)', STATUS_INATIVO],
+      ['Realizada', STATUS_REALIZADA],
+      ['Recusa', STATUS_RECUSA],
+      ['Não Iniciada', STATUS_NAO_INICIADA],
+      ['Domicílio Fechado', STATUS_FECHADO],
+      ['Outros', STATUS_OUTROS],
+    ];
+    const div = L.DomUtil.create('div', 'sigc-pro-status-legend');
+    div.innerHTML = entries.map(([label, color]) => (
+      `<div><span style="display:inline-block;width:10px;height:10px;background:${color};margin-right:4px;"></span>${window.__sigcPro.escapeHtml(label)}</div>`
+    )).join('');
+    const control = L.control({ position: 'bottomleft' });
+    control.onAdd = () => div;
+    control.addTo(map);
   }
 
   // Reads via the DataTables JS API (window.__sigcPro.readDataTable),
