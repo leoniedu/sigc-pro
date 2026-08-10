@@ -70,10 +70,10 @@
     const out = [];
     movimentoMap.forEach((row, key) => {
       const info = enderecosMap.get(key) || null;
-      const lat = info && info.lat != null ? info.lat : null;
-      const lon = info && info.lon != null ? info.lon : null;
-      const zona = info && info.zona ? info.zona : '';
-      const idZona = info && info.idZona ? info.idZona : '';
+      const lat = info?.lat ?? null;
+      const lon = info?.lon ?? null;
+      const zona = info?.zona || '';
+      const idZona = info?.idZona || '';
       out.push({
         ...row,
         lat,
@@ -174,14 +174,6 @@
     return r.totalDomicilios > r.semCoordenadas;
   }
 
-  // Link-style affordance for a clickable row's Zona cell — cursor:
-  // pointer on the row alone (the previous state) wasn't a visible
-  // signal at rest, only on hover.
-  function zonaCellHtml(esc, idZona, clickable) {
-    const label = esc(idZona || '—');
-    return clickable ? `<a href="#" class="sigc-pro-zona-link">${label}</a>` : label;
-  }
-
   function buildZonasTableHtml(zonaRows) {
     const esc = window.__sigcPro.escapeHtml;
     const head =
@@ -194,9 +186,14 @@
       const rowAttrs = clickable
         ? ` class="sigc-pro-zona-row-clickable" data-id-zona="${esc(zonaKey)}" title="Ver esta zona no mapa"`
         : '';
+      // Link-style affordance for a clickable row's Zona cell — cursor:
+      // pointer on the row alone wasn't a visible signal at rest, only
+      // on hover.
+      const zonaLabel = esc(r.idZona || '—');
+      const zonaCell = clickable ? `<a href="#" class="sigc-pro-zona-link">${zonaLabel}</a>` : zonaLabel;
       return (
         `<tr${rowAttrs}>` +
-        `<td>${zonaCellHtml(esc, r.idZona, clickable)}</td>` +
+        `<td>${zonaCell}</td>` +
         `<td>${esc(r.nomeZona)}</td>` +
         `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
         `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
@@ -259,6 +256,29 @@
     'SIGC-PRO: para desenhar o mapa, o navegador vai buscar imagens de ' +
     'mapa (tiles) de um servidor externo (OpenStreetMap), fora do SIGC. ' +
     'Continuar?';
+
+  // Polls check() every 100ms for up to 20 attempts (~2s), stopping as
+  // soon as it returns a truthy value. Shared by waitForLeafletUrls
+  // (racing the relay's data-attributes on page load) and
+  // focusZonaOnMap (racing the map's own async render after a Zonas-row
+  // click) — same bounded-retry shape, only what happens on
+  // success/timeout differs, via the two callbacks.
+  function pollFor(check, { onFound, onTimeout }) {
+    const found = check();
+    if (found) { onFound(found); return; }
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      const value = check();
+      if (value) {
+        clearInterval(timer);
+        onFound(value);
+      } else if (attempts >= 20) {
+        clearInterval(timer);
+        if (onTimeout) onTimeout();
+      }
+    }, 100);
+  }
 
   // MAIN world has no chrome.* — ultimo-movimento-map-relay.js (ISOLATED
   // world) resolves the vendored Leaflet bundle's extension URLs and
@@ -360,20 +380,10 @@
     // shown, or the user declined tile consent earlier — maybeLoadTiles
     // is already a no-op in the latter case and its own declined-message
     // UI is the right feedback, so this poll just gives up quietly
-    // rather than fighting that UI with a second message). Bounded poll,
-    // same shape as waitForLeafletUrls' own — mapInitialized only turns
-    // true after renderLeafletMap has actually run.
+    // rather than fighting that UI with a second message). mapInitialized
+    // only turns true after renderLeafletMap has actually run.
     maybeLoadTiles();
-    let attempts = 0;
-    const timer = setInterval(() => {
-      attempts += 1;
-      if (currentMap) {
-        clearInterval(timer);
-        currentMap.fitBounds(coords, { padding: [20, 20] });
-      } else if (attempts >= 20) { // ~2s at 100ms
-        clearInterval(timer);
-      }
-    }, 100);
+    pollFor(() => currentMap, { onFound: (map) => map.fitBounds(coords, { padding: [20, 20] }) });
   }
 
   function wireZonaRowClicks(panelEl, joined) {
@@ -392,21 +402,11 @@
   // instant right at page load, not the click itself, which happens long
   // after both scripts have run).
   function waitForLeafletUrls() {
-    const urls = readLeafletUrls();
-    if (urls) return Promise.resolve(urls);
     return new Promise((resolve, reject) => {
-      let attempts = 0;
-      const timer = setInterval(() => {
-        attempts += 1;
-        const polled = readLeafletUrls();
-        if (polled) {
-          clearInterval(timer);
-          resolve(polled);
-        } else if (attempts >= 20) { // ~2s at 100ms
-          clearInterval(timer);
-          reject(new Error('URLs do Leaflet não chegaram do relay a tempo.'));
-        }
-      }, 100);
+      pollFor(readLeafletUrls, {
+        onFound: resolve,
+        onTimeout: () => reject(new Error('URLs do Leaflet não chegaram do relay a tempo.')),
+      });
     });
   }
 
@@ -748,8 +748,9 @@
     const out = [];
     byControle.forEach((bucket, controle) => {
       if (bucket.coords.length === 0) return;
-      const lat = bucket.coords.reduce((sum, [la]) => sum + la, 0) / bucket.coords.length;
-      const lon = bucket.coords.reduce((sum, [, lo]) => sum + lo, 0) / bucket.coords.length;
+      const sums = bucket.coords.reduce((acc, [la, lo]) => [acc[0] + la, acc[1] + lo], [0, 0]);
+      const lat = sums[0] / bucket.coords.length;
+      const lon = sums[1] / bucket.coords.length;
       const colorState = bucket.allDistribuido ? 'inactive' : (bucket.noneDistribuido ? 'active' : 'partial');
       out.push({ controle, lat, lon, colorState });
     });

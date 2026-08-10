@@ -36,13 +36,12 @@
 #     may not call fetch() at all. ultimo-movimento-map.js runs in MAIN
 #     world (no chrome.*), so it never calls chrome.runtime.getURL
 #     directly — ultimo-movimento-map-relay.js (ISOLATED world) resolves
-#     the URLs and hands them over via a CustomEvent
-#     ("sigc-pro-leaflet-urls", detail {jsUrl, cssUrl}); the recognized
+#     the URLs and writes them as document.documentElement.dataset
+#     attributes (shared between worlds; window is not); the recognized
 #     safe pattern below additionally covers .src=/.href= assigned from a
-#     `.jsUrl`/`.cssUrl` property read off a variable populated by that
-#     event's `.detail` — same "provenance must be visible in this file's
-#     own text" principle as the direct-call carve-out, just one hop
-#     removed. This directory ALSO gets an absolute-URL allowlist check
+#     `.jsUrl`/`.cssUrl` property read off ANY expression — a property-NAME
+#     allowlist, not provenance-traced (see the fuller comment below for
+#     why). This directory ALSO gets an absolute-URL allowlist check
 #     (LOCAL_RESOURCE_URL_ALLOWLIST, below): unlike FETCH_DIRS (which must
 #     contain zero absolute URLs), it legitimately needs exactly one — the
 #     OpenStreetMap tile-host template Leaflet's L.tileLayer() uses — so
