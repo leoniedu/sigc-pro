@@ -193,6 +193,14 @@ describe('buildZonasTableHtml', () => {
     expect(html).toContain('data-id-zona="Z1"');
   });
 
+  test('a clickable row renders its Zona cell as a link-styled <a>, visible affordance not just cursor:pointer', () => {
+    const rows = [
+      { idZona: 'Z1', nomeZona: 'Bairro X', realizada: 1, naoIniciada: 0, domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 2, semCoordenadas: 1 },
+    ];
+    const html = UM.buildZonasTableHtml(rows);
+    expect(html).toContain('<a href="#" class="sigc-pro-zona-link">Z1</a>');
+  });
+
   test('a row with zero mapped domicílios (all sem coordenadas) is NOT clickable', () => {
     const rows = [
       { idZona: 'Z2', nomeZona: 'Bairro Y', realizada: 0, naoIniciada: 0, domicilioFechado: 0, recusa: 1, outros: 0, totalDomicilios: 1, semCoordenadas: 1 },
@@ -200,6 +208,7 @@ describe('buildZonasTableHtml', () => {
     const html = UM.buildZonasTableHtml(rows);
     expect(html).not.toContain('sigc-pro-zona-row-clickable');
     expect(html).not.toContain('data-id-zona');
+    expect(html).not.toContain('sigc-pro-zona-link');
   });
 
   test('the "Sem zona" row (idZona null) is clickable via an empty-string data-id-zona', () => {
@@ -248,6 +257,23 @@ describe('buildPanelHtml', () => {
     const html = UM.buildPanelHtml(joined, zonaRows);
     expect(html).toContain('Z1');
     expect(html).toContain('<td>1</td>'); // realizada count for the Z1 row
+  });
+
+  test('shows the "click a zona" hint when at least one row is clickable', () => {
+    const html = UM.buildPanelHtml(joined, zonaRows);
+    expect(html).toContain('sigc-pro-zonas-hint');
+    expect(html).toContain('Clique no nome de uma zona');
+  });
+
+  test('omits the hint when no row has mapped coordinates', () => {
+    const noCoordsJoined = [
+      { controle: 'C1', domicilio: '1', entrevistador: 'A', tipoEntrevista: 'Realizada',
+        ultimaPosicao: 'Transmitido', data: '01/08/2026', lat: null, lon: null,
+        zona: 'Z1', idZona: 'Z1', temCoordenadas: false, temZona: true },
+    ];
+    const noCoordsZonaRows = UM.aggregateZonas(noCoordsJoined);
+    const html = UM.buildPanelHtml(noCoordsJoined, noCoordsZonaRows);
+    expect(html).not.toContain('sigc-pro-zonas-hint');
   });
 
   test('empty joined/zonaRows still renders the panel shell but with a "Zonas (0)" tab and no data rows', () => {

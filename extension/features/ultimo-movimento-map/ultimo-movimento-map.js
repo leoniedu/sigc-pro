@@ -174,6 +174,14 @@
     return r.totalDomicilios > r.semCoordenadas;
   }
 
+  // Link-style affordance for a clickable row's Zona cell — cursor:
+  // pointer on the row alone (the previous state) wasn't a visible
+  // signal at rest, only on hover.
+  function zonaCellHtml(esc, idZona, clickable) {
+    const label = esc(idZona || '—');
+    return clickable ? `<a href="#" class="sigc-pro-zona-link">${label}</a>` : label;
+  }
+
   function buildZonasTableHtml(zonaRows) {
     const esc = window.__sigcPro.escapeHtml;
     const head =
@@ -188,7 +196,7 @@
         : '';
       return (
         `<tr${rowAttrs}>` +
-        `<td>${esc(r.idZona || '—')}</td>` +
+        `<td>${zonaCellHtml(esc, r.idZona, clickable)}</td>` +
         `<td>${esc(r.nomeZona)}</td>` +
         `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
         `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
@@ -224,6 +232,9 @@
     .sigc-pro-zonas-table th { background: #f4f4f4; }
     .sigc-pro-zonas-table tr.sigc-pro-zona-row-clickable { cursor: pointer; }
     .sigc-pro-zonas-table tr.sigc-pro-zona-row-clickable:hover { background: #eef6ff; }
+    .sigc-pro-zona-link { color: #0645ad; text-decoration: none; }
+    .sigc-pro-zona-link:hover { text-decoration: underline; }
+    .sigc-pro-zonas-hint { margin: 0 0 8px; font-size: 12px; color: #555; }
     .sigc-pro-controle-label span { font-size: 10px; font-weight: 600; color: #fff;
       padding: 1px 4px; border-radius: 3px; white-space: nowrap;
       box-shadow: 0 0 2px rgba(0,0,0,.6); }
@@ -276,6 +287,11 @@
 
   function buildPanelHtml(joined, zonaRows) {
     const zonasTable = buildZonasTableHtml(zonaRows);
+    // Only shown when at least one row is actually clickable — no point
+    // telling the user to click a zona if none have mapped coordinates.
+    const zonasHint = zonaRows.some(zonaRowIsClickable)
+      ? '<p class="sigc-pro-zonas-hint">Clique no nome de uma zona para vê-la no mapa.</p>'
+      : '';
     return [
       `<div id="${PANEL_ID}" class="sigc-pro-panel-overlay">`,
       '  <div class="sigc-pro-panel-box">',
@@ -288,6 +304,7 @@
       '      <div id="sigc-pro-leaflet-map"></div>',
       '    </div>',
       '    <div id="sigc-pro-zonas-panel" class="sigc-pro-tab-panel">',
+      `      ${zonasHint}`,
       `      ${zonasTable}`,
       '    </div>',
       '  </div>',
@@ -361,7 +378,10 @@
 
   function wireZonaRowClicks(panelEl, joined) {
     panelEl.querySelectorAll('.sigc-pro-zona-row-clickable').forEach((row) => {
-      row.addEventListener('click', () => focusZonaOnMap(panelEl, joined, row.dataset.idZona || ''));
+      row.addEventListener('click', (event) => {
+        event.preventDefault(); // the Zona cell's <a href="#"> would otherwise jump-scroll
+        focusZonaOnMap(panelEl, joined, row.dataset.idZona || '');
+      });
     });
   }
 
