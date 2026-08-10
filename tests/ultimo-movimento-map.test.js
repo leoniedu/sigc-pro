@@ -9,7 +9,7 @@ const UM = window.__sigcProUltimoMovimentoMapInternals;
 
 describe('parseUltimoMovimentoRows', () => {
   test('maps Controle+Domicilio to full row data by header label', () => {
-    const headers = ['Controle', 'Domicilio', 'Entrevistador', 'Tipo de Entrevista', 'Última Posição', 'Data'];
+    const headers = ['Controle', 'Domicilio', 'Entrevistador', 'Tipo Entrevista', 'Última Posição', 'Data'];
     const rows = [
       ['290570120000125', '1', 'Fulano de Tal', 'Realizada', 'Transmitido', '01/08/2026'],
       ['290570120000125', '2', 'Fulano de Tal', 'Não Iniciada', 'Distribuido', ''],
@@ -23,7 +23,7 @@ describe('parseUltimoMovimentoRows', () => {
   });
 
   test('is tolerant of header order', () => {
-    const headers = ['Data', 'Última Posição', 'Tipo de Entrevista', 'Entrevistador', 'Domicilio', 'Controle'];
+    const headers = ['Data', 'Última Posição', 'Tipo Entrevista', 'Entrevistador', 'Domicilio', 'Controle'];
     const rows = [['01/08/2026', 'Transmitido', 'Realizada', 'Fulano', 'D1', 'C1']];
     const map = UM.parseUltimoMovimentoRows(headers, rows);
     expect(map.get('C1|D1').entrevistador).toBe('Fulano');
@@ -36,7 +36,7 @@ describe('parseUltimoMovimentoRows', () => {
   });
 
   test('matches the real live header "Domicílio" (accented, not the bare "Domicilio")', () => {
-    const headers = ['Controle', 'Domicílio', 'Entrevistador', 'Tipo de Entrevista', 'Última Posição', 'Data'];
+    const headers = ['Controle', 'Domicílio', 'Entrevistador', 'Tipo Entrevista', 'Última Posição', 'Data'];
     const rows = [['C1', 'D1', 'Fulano', 'Realizada', 'Transmitido', '01/08/2026']];
     const map = UM.parseUltimoMovimentoRows(headers, rows);
     expect(map.get('C1|D1')).toEqual({
@@ -46,7 +46,7 @@ describe('parseUltimoMovimentoRows', () => {
   });
 
   test('tolerates the "#!" sort/filter marker some SIGC report grids prepend to a header', () => {
-    const headers = ['#!Controle', '!Domicílio', 'Entrevistador', 'Tipo de Entrevista', 'Última Posição', 'Data'];
+    const headers = ['#!Controle', '!Domicílio', 'Entrevistador', 'Tipo Entrevista', 'Última Posição', 'Data'];
     const rows = [['C1', 'D1', 'Fulano', 'Realizada', 'Transmitido', '01/08/2026']];
     const map = UM.parseUltimoMovimentoRows(headers, rows);
     expect(map.get('C1|D1').entrevistador).toBe('Fulano');

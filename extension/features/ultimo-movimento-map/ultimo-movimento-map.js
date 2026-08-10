@@ -11,7 +11,7 @@
     controle: 'Controle',
     domicilio: 'Domicílio',
     entrevistador: 'Entrevistador',
-    tipoEntrevista: 'Tipo de Entrevista',
+    tipoEntrevista: 'Tipo Entrevista',
     ultimaPosicao: 'Última Posição',
     data: 'Data',
   };
