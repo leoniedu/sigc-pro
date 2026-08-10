@@ -122,6 +122,10 @@ describe('onUltimoMovimento', () => {
     document.body.innerHTML = '<h6>Ultimo Movimento</h6>';
     expect(UME.onUltimoMovimento()).toBe(true);
   });
+  test('true for the real live header "Relatório Último Movimento" (prefixed, not an exact match)', () => {
+    document.body.innerHTML = '<h6 class="font-weight-bold mb-0">Relatório Último Movimento</h6>';
+    expect(UME.onUltimoMovimento()).toBe(true);
+  });
   test('false otherwise', () => {
     document.body.innerHTML = '<div>outra página</div><h6>Outro Relatório</h6>';
     expect(UME.onUltimoMovimento()).toBe(false);

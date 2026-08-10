@@ -25,10 +25,18 @@
   // away, next to Filtrar itself), so it can't depend on the results
   // table (#tableRelatorio), which only renders after a filter is
   // applied — confirmed against the live page.
+  //
+  // Checks for the phrase ANYWHERE in the h6 text (not strict equality):
+  // the live page's h6 reads "Relatório Último Movimento", not the bare
+  // "Último Movimento" this originally matched exactly — an equality
+  // check against the live header silently never fires, hiding every
+  // button anchored on this function (confirmed 2026-08-09, this
+  // silently broke both the Mapa button and the ultimoMovimentoExport
+  // flag's CSV TODAS button).
   function onUltimoMovimento() {
     return [...document.querySelectorAll('h6')].some(
-      (h) => window.__sigcPro.normalizeLabel(h.textContent).replace(/[íú]/g, (c) => (c === 'í' ? 'i' : 'u')) ===
-        'ultimo movimento'
+      (h) => window.__sigcPro.normalizeLabel(h.textContent).replace(/[íú]/g, (c) => (c === 'í' ? 'i' : 'u'))
+        .includes('ultimo movimento')
     );
   }
 
