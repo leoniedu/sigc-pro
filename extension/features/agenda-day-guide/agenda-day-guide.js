@@ -82,7 +82,7 @@
   //
   // Every zona in SIGC has an ID, so there is no nome-only fallback: a
   // row reaching here without one has no zona columns filled at all
-  // (see agenda-map.js — coordinates alone are enough for an entry).
+  // (see agenda-lookups.js — coordinates alone are enough for an entry).
   function zonaLabel(info) {
     return info ? (info.idZona || '') : '';
   }
@@ -921,17 +921,17 @@ ${sections}
   // Exposed only for tests — not part of the runtime public surface.
   window.__sigcProAgendaDayGuideInternals = { zonaFullLabel };
 
-  // Consumed by agenda-map, which owns the only guide button: it calls
+  // Consumed by agenda-lookups, which owns the only guide button: it calls
   // generate(enderecos) after its fetch, or generate(null) when there is
   // nothing to fetch, the fetch fails, or the user declines the consulta.
   // generate(null) is therefore still a live path — the map-free guide —
   // even though no button reaches it directly anymore.
   window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel, buildGuideHtml, routeCheckboxInput, routeCheckboxHtml, buildSlotCard, routeIdxMap, buildRouteMapSvg, buildDayGrid };
 
-  // No button of its own: this module renders the guide, agenda-map mounts
+  // No button of its own: this module renders the guide, agenda-lookups mounts
   // the single "Guia do Dia" button that drives it. Two buttons differing
   // only by whether they made the consulta was clutter — declining the
   // prompt now yields the same map-free guide the second button did.
-  // diaViewActive is exported above so agenda-map can reuse the Dia-only
+  // diaViewActive is exported above so agenda-lookups can reuse the Dia-only
   // gating this module defines.
 })();

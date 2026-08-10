@@ -9,9 +9,9 @@
 # Blanket ban. Sanctioned exceptions, each narrow and audited:
 #   - extension/common/                    : fetch() only, same-origin only
 #     (hosts fetchViaGateway, the shared F5-gateway request helper used by
-#     agenda-map and ultimo-movimento-export; see
+#     agenda-lookups and ultimo-movimento-export; see
 #     docs/superpowers/specs/2026-08-06-guia-do-dia-agencia-entrevistador-zona-nome-design.md)
-#   - extension/features/agenda-map/       : fetch() only, same-origin only
+#   - extension/features/agenda-lookups/       : fetch() only, same-origin only
 #     (queries SIGC's own server; see
 #     docs/superpowers/specs/2026-07-16-agenda-map-design.md)
 #   - extension/features/ultimo-movimento-export/ : fetch() only, same-origin
@@ -55,7 +55,7 @@
 # standard AJAX header value "X-Requested-With: XMLHttpRequest" is a string
 # literal, not a call, and the fetch-sanctioned directories legitimately
 # send that header.
-FETCH_DIRS='extension/common extension/features/agenda-map extension/features/ultimo-movimento-export extension/features/lista-agenda'
+FETCH_DIRS='extension/common extension/features/agenda-lookups extension/features/ultimo-movimento-export extension/features/lista-agenda'
 STORAGE_DIRS='extension/features/settings'
 VENDOR_DIRS='extension/vendor'
 LOCAL_RESOURCE_DIRS='extension/features/ultimo-movimento-map'

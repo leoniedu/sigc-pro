@@ -364,7 +364,7 @@ describe('indexMovimento', () => {
 
   // Backward tolerance: the OLD unmarked/accented forms ('Controle',
   // 'Domicílio', no leading #!/!) must still resolve too — same pattern
-  // agenda-map.js's stripHeaderMarker tests establish.
+  // agenda-lookups.js's stripHeaderMarker tests establish.
   test('tolerates the old unmarked/accented Controle/Domicílio forms', () => {
     const semMarcador = ['Controle', 'Domicílio', 'Entrevistador', 'Tipo Entrevista',
       'Última Posição', 'Data', 'Observação'];

@@ -8,7 +8,7 @@
   const TAG = '[sigc-pro]';
 
   // Column labels every pesquisa's Lista de Endereços is expected to
-  // share. agenda-map resolves fetched-response columns against THESE
+  // share. agenda-lookups resolves fetched-response columns against THESE
   // (the Agenda page has no report title to detectPesquisa against), so
   // it must never depend on any single pesquisa's registry entry — that
   // would silently pin it to the wrong survey once a second one exists.
@@ -268,7 +268,7 @@
   // F5 BIG-IP URL-rewriting prefix ("/f5-w-<hex>$$"); the hex decodes to
   // the real backend origin. null on the direct host (e.g. via VPN).
   // Shared by every feature that talks to portalweb behind the gateway
-  // (agenda-map, ultimo-movimento-export) — each hitting a different
+  // (agenda-lookups, ultimo-movimento-export) — each hitting a different
   // path, hence the parametrized gatewayUrl/fetchViaGateway below rather
   // than a single hardcoded endpoint.
   function f5Prefix(pathname) {
@@ -752,7 +752,7 @@
   }
 
   // Note: agenda-day-guide additionally injects `dayGuide` (generate /
-  // diaViewActive) onto this object at load time, consumed by agenda-map;
+  // diaViewActive) onto this object at load time, consumed by agenda-lookups;
   // manifest load order guarantees day-guide runs first.
   window.__sigcPro = {
     PESQUISAS,

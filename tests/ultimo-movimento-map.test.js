@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'bun:test';
 
 await import('../extension/common/sigc-common.js');
-await import('../extension/features/agenda-map/agenda-map.js');
+await import('../extension/features/agenda-lookups/agenda-lookups.js');
 await import('../extension/features/ultimo-movimento-export/ultimo-movimento-export.js');
 await import('../extension/features/ultimo-movimento-map/ultimo-movimento-map.js');
 

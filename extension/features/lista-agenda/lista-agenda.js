@@ -66,7 +66,7 @@
   const chaveDomicilio = (controle, domicilio) => `${controle}|${domicilio}`;
 
   // Zona columns are populated only for selecionado households (see
-  // agenda-map.js), so counting free slots over a mixed table would
+  // agenda-lookups.js), so counting free slots over a mixed table would
   // undercount. Filtering the rows down to Selecionado = Sim fixes that at
   // the source, letting the button work on every Lista de Endereços view
   // — including the default mixed report — instead of being disabled
@@ -227,7 +227,7 @@
   // live 2026-08-07: "#!Controle", "!Domicílio") — a UI decoration, not
   // part of the label's identity, so it must not be baked into any label
   // constant (that would break the day this decoration is toggled off
-  // again). Same targeted fix as agenda-map.js's stripHeaderMarker.
+  // again). Same targeted fix as agenda-lookups.js's stripHeaderMarker.
   function stripHeaderMarker(h) {
     return String(h ?? '').replace(/^[#!]+/, '');
   }
@@ -531,7 +531,7 @@ ${buildDomiciliosTable(domicilios)}
 
   // As of 2026-08-07, Último Movimento is served through the same generic
   // /relatorio/filtrar?slug=... mechanism Lista de Endereços already
-  // used, not a dedicated endpoint — so this file, like agenda-map.js and
+  // used, not a dedicated endpoint — so this file, like agenda-lookups.js and
   // ultimo-movimento-export.js, needs its own local URL builder (each
   // network file owns its URL logic; this file has no dependency on
   // either of those two). simple=true: plain prefixed path. simple=false:
@@ -552,7 +552,7 @@ ${buildDomiciliosTable(domicilios)}
   // domicílio at once. NOT the multi-agência loop. Tries the simple
   // prefixed URL first, then the full captured F5 form (identical on the
   // direct host, where the Set collapses them) — same two-mode retry
-  // shape as agenda-map.js's postUltimoMovimento and
+  // shape as agenda-lookups.js's postUltimoMovimento and
   // ultimo-movimento-export.js's fetchAgenciaReport.
   async function fetchMovimento(uf, controle) {
     const filtro = {
@@ -614,7 +614,7 @@ ${buildDomiciliosTable(domicilios)}
 
   // --- caches ---------------------------------------------------------
   // In-memory only, never persisted (zero-storage guarantee). A TTL is
-  // needed where agenda-map's coordinate cache has none: someone else
+  // needed where agenda-lookups' coordinate cache has none: someone else
   // booking a slot makes these counts wrong within a page's life.
   const TTL_MS = 5 * 60 * 1000;
   const cacheAgenda = new Map();

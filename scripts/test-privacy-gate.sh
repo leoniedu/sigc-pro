@@ -8,8 +8,8 @@ set -e
 cd "$(git rev-parse --show-toplevel)"
 
 PLANT_OUT="extension/features/__privacy_tripwire__.js"
-PLANT_MAP_XHR="extension/features/agenda-map/__privacy_tripwire_xhr__.js"
-PLANT_MAP_URL="extension/features/agenda-map/__privacy_tripwire_url__.js"
+PLANT_MAP_XHR="extension/features/agenda-lookups/__privacy_tripwire_xhr__.js"
+PLANT_MAP_URL="extension/features/agenda-lookups/__privacy_tripwire_url__.js"
 PLANT_SETTINGS_FETCH="extension/features/settings/__privacy_tripwire_fetch__.js"
 PLANT_UME_XHR="extension/features/ultimo-movimento-export/__privacy_tripwire_xhr__.js"
 PLANT_UME_URL="extension/features/ultimo-movimento-export/__privacy_tripwire_url__.js"
@@ -38,10 +38,10 @@ fail() { echo "privacy gate SELF-TEST FAILED: $1" >&2; exit 1; }
 #    as --staged).
 scripts/check-privacy.sh >/dev/null 2>&1 || fail "gate rejects a clean tree"
 
-# 2. fetch( outside agenda-map must fail.
+# 2. fetch( outside agenda-lookups must fail.
 echo 'fetch("/x");' > "$PLANT_OUT"
 if scripts/check-privacy.sh >/dev/null 2>&1; then
-  fail "gate missed fetch( outside agenda-map"
+  fail "gate missed fetch( outside agenda-lookups"
 fi
 rm -f "$PLANT_OUT"
 
@@ -55,24 +55,24 @@ echo 'var x = new   XMLHttpRequest();' > "$PLANT_OUT"
 git add "$PLANT_OUT"
 if scripts/check-privacy.sh --staged >/dev/null 2>&1; then
   git reset -- "$PLANT_OUT" >/dev/null 2>&1
-  fail "gate --staged missed 'new   XMLHttpRequest' (multi-space) outside agenda-map"
+  fail "gate --staged missed 'new   XMLHttpRequest' (multi-space) outside agenda-lookups"
 fi
 git reset -- "$PLANT_OUT" >/dev/null 2>&1
 rm -f "$PLANT_OUT"
 
-# 3. Non-fetch request API inside agenda-map must fail (only fetch is
+# 3. Non-fetch request API inside agenda-lookups must fail (only fetch is
 #    sanctioned there).
 echo 'var x = new XMLHttpRequest();' > "$PLANT_MAP_XHR"
 if scripts/check-privacy.sh >/dev/null 2>&1; then
-  fail "gate missed new XMLHttpRequest inside agenda-map"
+  fail "gate missed new XMLHttpRequest inside agenda-lookups"
 fi
 rm -f "$PLANT_MAP_XHR"
 
-# 4. Absolute URL inside agenda-map must fail (requests must be built
+# 4. Absolute URL inside agenda-lookups must fail (requests must be built
 #    from location.origin only).
 echo '// see https://example.com' > "$PLANT_MAP_URL"
 if scripts/check-privacy.sh >/dev/null 2>&1; then
-  fail "gate missed absolute URL inside agenda-map"
+  fail "gate missed absolute URL inside agenda-lookups"
 fi
 rm -f "$PLANT_MAP_URL"
 

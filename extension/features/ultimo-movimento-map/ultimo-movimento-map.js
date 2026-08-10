@@ -1,4 +1,4 @@
-// SIGC-PRO feature: "Mapa" on Último Movimento — see agenda-map.js for
+// SIGC-PRO feature: "Mapa" on Último Movimento — see agenda-lookups.js for
 // the sibling feature this reuses the join pattern from (opt-in
 // same-origin fetch of Lista de Endereços, controle|domicilio keying).
 // Spec: docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md
@@ -17,22 +17,22 @@
   };
 
   // headers/rows: plain string arrays from #tableRelatorio, same shape
-  // ultimo-movimento-export.js and agenda-map.js already parse. Returns
+  // ultimo-movimento-export.js and agenda-lookups.js already parse. Returns
   // null (not throw) when a required header is missing, so a live SIGC
   // column rename fails closed with a clear message at the call site,
   // never a silent wrong-column join.
   //
-  // Folds accents (agenda-map.js's stripAccents) and strips the "#!"
+  // Folds accents (agenda-lookups.js's stripAccents) and strips the "#!"
   // sort/filter decoration some SIGC report grids prepend to a header
-  // (agenda-map.js's stripHeaderMarker) before comparing — same table,
-  // same live quirks agenda-map.js's own parseUltimoMovimentoTable
+  // (agenda-lookups.js's stripHeaderMarker) before comparing — same table,
+  // same live quirks agenda-lookups.js's own parseUltimoMovimentoTable
   // already accounts for (confirmed live: "Domicílio" with the accent,
   // occasionally "#!Domicílio"). Matching the accented label constant
   // literally, with no folding, silently failed every header check here
   // and made this feature unusable on the real page (2026-08-09).
   function parseUltimoMovimentoRows(headers, rows) {
     const P = window.__sigcPro;
-    const AM = window.__sigcProAgendaMapInternals;
+    const AM = window.__sigcProAgendaLookups;
     const idx = {};
     for (const key of Object.keys(ULTIMO_MOVIMENTO_MAP_LABELS)) {
       const expected = P.normalizeLabel(AM.stripAccents(ULTIMO_MOVIMENTO_MAP_LABELS[key]));
@@ -59,7 +59,7 @@
   }
 
   // movimentoMap: from parseUltimoMovimentoRows. enderecosMap: from
-  // agenda-map.js's tableToEnderecosMap (controle|domicilio ->
+  // agenda-lookups.js's tableToEnderecosMap (controle|domicilio ->
   // {lat, lon, zona, idZona}, already selecionados-only per its
   // TipoVisualizacao:'S' filtro). A household absent from enderecosMap
   // (fetch gap, or declined consent upstream) is NOT dropped — it keeps
@@ -613,11 +613,11 @@
     return parseUltimoMovimentoRows(result.header, result.rows);
   }
 
-  // Lista de Endereços cross-fetch — delegates entirely to agenda-map.js's
+  // Lista de Endereços cross-fetch — delegates entirely to agenda-lookups.js's
   // fetchEnderecos(uf, controles), a composed, cached, multi-Controle
   // helper (loops its private postFiltrar per uncached Controle, merges
   // results into one Map). This file never issues that request itself:
-  // the network call stays inside agenda-map.js, the directory
+  // the network call stays inside agenda-lookups.js, the directory
   // check-privacy.sh's FETCH_DIRS already sanctions for it.
   async function onMapaClick(btn) {
     ensureCss();
@@ -628,7 +628,7 @@
     }
     if (!confirm(FETCH_CONSENT_MSG)) return;
 
-    const AM = window.__sigcProAgendaMapInternals;
+    const AM = window.__sigcProAgendaLookups;
     const uf = window.__sigcProUltimoMovimentoExportInternals &&
       window.__sigcProUltimoMovimentoExportInternals.getCurrentUf();
     if (!uf) {

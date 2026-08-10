@@ -11,11 +11,11 @@ import { describe, test, expect } from 'bun:test';
 // for the same inputs, so a future edit to one that silently diverges
 // from the other two fails a test instead of shipping quietly broken.
 await import('../extension/common/sigc-common.js');
-await import('../extension/features/agenda-map/agenda-map.js');
+await import('../extension/features/agenda-lookups/agenda-lookups.js');
 await import('../extension/features/ultimo-movimento-export/ultimo-movimento-export.js');
 await import('../extension/features/lista-agenda/lista-agenda.js');
 
-const AM = window.__sigcProAgendaMapInternals;
+const AM = window.__sigcProAgendaLookups;
 const UME = window.__sigcProUltimoMovimentoExportInternals;
 const LA = window.__sigcProListaAgendaInternals;
 

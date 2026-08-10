@@ -1,6 +1,6 @@
 // SIGC-PRO feature: Último Movimento multi-agência CSV export. One of two
 // files in this extension allowed to make network requests (the other is
-// agenda-map/) — see scripts/check-privacy.sh. Gated behind the
+// agenda-lookups/) — see scripts/check-privacy.sh. Gated behind the
 // "ultimoMovimentoExport" advanced flag (off by default): loops every
 // agência in the current UF, fetching /relatorio/filtrar?slug=relatorio-
 // ultimo-movimento per agência (same report SIGC's own UI hits; the
@@ -60,7 +60,7 @@
 
   // As of 2026-08-07, Último Movimento moved onto the same generic
   // /relatorio/filtrar?slug=... mechanism Lista de Endereços already
-  // used (agenda-map.js has its own equivalent, filtrarUrl — this is a
+  // used (agenda-lookups.js has its own equivalent, filtrarUrl — this is a
   // deliberate small local duplicate, not shared: these two files have
   // no cross-file dependency by design, see this file's header
   // comment). simple=true: plain prefixed path. simple=false: the
@@ -77,7 +77,7 @@
 
   // HTML fragment -> {header, rows} | null. DOMParser is inert — nothing
   // in the fetched markup can load resources or run handlers, same
-  // guarantee agenda-map's parser relies on.
+  // guarantee agenda-lookups' parser relies on.
   function parseUltimoMovimentoHtml(html) {
     const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
     const table = doc.getElementById(TABLE_ID);
@@ -265,7 +265,7 @@
   // the design's testing section calls out explicitly; everything else
   // in this block (fetchAgenciaList/fetchAgenciaReport/exportAllAgencias)
   // needs a live authenticated session and stays manually verified only
-  // (Task 6), same as agenda-map's postFiltrar/fetchEnderecos today.
+  // (Task 6), same as agenda-lookups' postFiltrar/fetchEnderecos today.
   window.__sigcProUltimoMovimentoExportInternals.collectAllAgencias = collectAllAgencias;
 
   console.log(`${TAG} loaded.`);

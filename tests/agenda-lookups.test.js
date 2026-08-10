@@ -1,9 +1,9 @@
 import { describe, test, expect } from 'bun:test';
 
 await import('../extension/common/sigc-common.js');
-await import('../extension/features/agenda-map/agenda-map.js');
+await import('../extension/features/agenda-lookups/agenda-lookups.js');
 
-const AM = window.__sigcProAgendaMapInternals;
+const AM = window.__sigcProAgendaLookups;
 
 describe('filtrarUrl', () => {
   const origin = 'https://portalweb.ibge.gov.br';

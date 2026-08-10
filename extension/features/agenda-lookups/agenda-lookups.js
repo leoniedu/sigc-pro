@@ -1,21 +1,34 @@
-// SIGC-PRO feature: "Guia + Mapa" — the ONLY file in this extension
-// allowed to make a network request, and only to the SIGC server the
-// user is already logged into (URL built from location.origin; the
-// privacy gate rejects absolute URLs in this directory). Opt-in: each
-// page load, the first click asks for confirmation before any request.
-// It fetches the Lista de Endereços report per Controle (POST
-// /relatorio/filtrar, an HTML fragment), extracts coordinates and each
-// household's real zona (the Agenda slot text lists every zona from
-// slot creation, even though a filled slot belongs to exactly one), and
-// hands them to window.__sigcPro.dayGuide.generate(enderecos) — the same
-// day-guide pipeline, now with geo links, route links and zona. Results
-// are cached in memory per Controle for the page's lifetime (never
+// SIGC-PRO feature: the "Guia do Dia" button and the data lookups behind
+// it. Despite the button's label this module draws NO map — it enriches
+// the Agenda's already-rendered slots with data the Agenda page doesn't
+// show, then hands the result to window.__sigcPro.dayGuide.generate(),
+// which renders everything (including the SVG route map — see
+// agenda-day-guide/route-map.js). Named features/agenda-map/ until
+// 2026-08-10; renamed because "map" described the consumer, not this.
+//
+// It queries three SIGC reports, once per distinct Controle, and merges
+// them by "controle|domicilio" (agenda-day-guide.js's enderecoKey):
+//   - Lista de Endereços      -> lat/lon + each household's real zona
+//                                (the Agenda slot text lists every zona
+//                                from slot creation, though a filled
+//                                slot belongs to exactly one)
+//   - Último Movimento        -> entrevistador (one per Domicílio)
+//   - Relatório Distribuição  -> agência distribuída
+// Only the first is required: the other two fail soft per Controle, so a
+// bad lookup degrades the guide instead of blocking it.
+//
+// This is one of the few files allowed to make a network request, and
+// only to the SIGC server the user is already logged into (URL built
+// from location.origin; the privacy gate rejects absolute URLs in this
+// directory — see scripts/check-privacy.sh). Opt-in: each page load, the
+// first click asks for confirmation before any request. Results are
+// cached in memory per Controle for the page's lifetime (never
 // persisted) so repeat clicks in one session don't re-fetch.
 // Spec: docs/superpowers/specs/2026-07-16-agenda-map-design.md
 (function () {
   'use strict';
 
-  const TAG = '[sigc-agenda-map]';
+  const TAG = '[sigc-agenda-lookups]';
 
   // --- pure helpers --------------------------------------------------
 
@@ -516,5 +529,5 @@
   // ultimo-movimento-map.js's own #tableRelatorio parser (same table,
   // same live quirks — accented headers, "#!" sort/filter decoration)
   // rather than re-diverging a second copy of this fold.
-  window.__sigcProAgendaMapInternals = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl, fetchEnderecos, stripAccents, stripHeaderMarker };
+  window.__sigcProAgendaLookups = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl, fetchEnderecos, stripAccents, stripHeaderMarker };
 })();
