@@ -534,6 +534,37 @@
     return { type: 'polygon', points: hull };
   }
 
+  // Controle label centroid + active/inactive/partial color rule (spec
+  // §3). colorState is computed over EVERY row for that Controle
+  // (including rows without valid coordinates) — it's a fact about
+  // fieldwork progress, not about geocoding success. The centroid
+  // average, separately, only uses rows with temCoordenadas (nothing
+  // else to average otherwise). A Controle with zero valid-coordinate
+  // rows gets no entry at all — there's no point to center a label on.
+  function controleCentroids(joined) {
+    const byControle = new Map(); // controle -> { coords: [[lat,lon],...], allDistribuido, noneDistribuido }
+    joined.forEach((r) => {
+      if (!byControle.has(r.controle)) {
+        byControle.set(r.controle, { coords: [], allDistribuido: true, noneDistribuido: true });
+      }
+      const bucket = byControle.get(r.controle);
+      if (r.temCoordenadas) bucket.coords.push([r.lat, r.lon]);
+      const isDistribuido = r.ultimaPosicao === 'Distribuido';
+      if (!isDistribuido) bucket.allDistribuido = false;
+      if (isDistribuido) bucket.noneDistribuido = false;
+    });
+
+    const out = [];
+    byControle.forEach((bucket, controle) => {
+      if (bucket.coords.length === 0) return;
+      const lat = bucket.coords.reduce((sum, [la]) => sum + la, 0) / bucket.coords.length;
+      const lon = bucket.coords.reduce((sum, [, lo]) => sum + lo, 0) / bucket.coords.length;
+      const colorState = bucket.allDistribuido ? 'inactive' : (bucket.noneDistribuido ? 'active' : 'partial');
+      out.push({ controle, lat, lon, colorState });
+    });
+    return out;
+  }
+
   window.__sigcPro.mountWidget({
     id: BUTTON_ID,
     anchor: (ctx) => ctx.ultimoMovimentoFiltrarBtn(),
@@ -560,5 +591,6 @@
     buildPanelHtml,
     onMapaClick,
     convexHull,
+    controleCentroids,
   };
 })();

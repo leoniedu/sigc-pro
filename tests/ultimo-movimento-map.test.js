@@ -302,3 +302,82 @@ describe('convexHull', () => {
     expect(result.points).toHaveLength(4);
   });
 });
+
+describe('controleCentroids', () => {
+  test('averages lat/lon across a Controle\'s valid-coordinate rows', () => {
+    const joined = [
+      { controle: 'C1', domicilio: '1', lat: 0, lon: 0, ultimaPosicao: 'Descarregado', temCoordenadas: true },
+      { controle: 'C1', domicilio: '2', lat: 2, lon: 4, ultimaPosicao: 'Descarregado', temCoordenadas: true },
+    ];
+    const result = UM.controleCentroids(joined);
+    expect(result).toHaveLength(1);
+    expect(result[0].controle).toBe('C1');
+    expect(result[0].lat).toBe(1);
+    expect(result[0].lon).toBe(2);
+  });
+
+  test('rows without valid coordinates are excluded from the average', () => {
+    const joined = [
+      { controle: 'C1', domicilio: '1', lat: 0, lon: 0, ultimaPosicao: 'Descarregado', temCoordenadas: true },
+      { controle: 'C1', domicilio: '2', lat: null, lon: null, ultimaPosicao: 'Descarregado', temCoordenadas: false },
+    ];
+    const result = UM.controleCentroids(joined);
+    expect(result[0].lat).toBe(0);
+    expect(result[0].lon).toBe(0);
+  });
+
+  test('a Controle with zero valid-coordinate rows produces no entry', () => {
+    const joined = [
+      { controle: 'C1', domicilio: '1', lat: null, lon: null, ultimaPosicao: 'Descarregado', temCoordenadas: false },
+    ];
+    expect(UM.controleCentroids(joined)).toEqual([]);
+  });
+
+  test('colorState: all Distribuido -> inactive', () => {
+    const joined = [
+      { controle: 'C1', lat: 0, lon: 0, ultimaPosicao: 'Distribuido', temCoordenadas: true },
+      { controle: 'C1', lat: 1, lon: 1, ultimaPosicao: 'Distribuido', temCoordenadas: true },
+    ];
+    expect(UM.controleCentroids(joined)[0].colorState).toBe('inactive');
+  });
+
+  test('colorState: none Distribuido -> active', () => {
+    const joined = [
+      { controle: 'C1', lat: 0, lon: 0, ultimaPosicao: 'Descarregado', temCoordenadas: true },
+      { controle: 'C1', lat: 1, lon: 1, ultimaPosicao: 'Enviado para Carga', temCoordenadas: true },
+    ];
+    expect(UM.controleCentroids(joined)[0].colorState).toBe('active');
+  });
+
+  test('colorState: mixed -> partial', () => {
+    const joined = [
+      { controle: 'C1', lat: 0, lon: 0, ultimaPosicao: 'Distribuido', temCoordenadas: true },
+      { controle: 'C1', lat: 1, lon: 1, ultimaPosicao: 'Descarregado', temCoordenadas: true },
+    ];
+    expect(UM.controleCentroids(joined)[0].colorState).toBe('partial');
+  });
+
+  test('colorState is computed over ALL rows for that Controle, even ones without coordinates', () => {
+    // A Controle's active/inactive/partial status is a fact about its
+    // fieldwork progress, not about which rows happened to geocode —
+    // excluding uncoordinated rows from colorState (unlike the
+    // centroid average, which must exclude them) would misreport a
+    // Controle as "active" when an un-geocoded domicílio is still
+    // Distribuido.
+    const joined = [
+      { controle: 'C1', lat: 0, lon: 0, ultimaPosicao: 'Descarregado', temCoordenadas: true },
+      { controle: 'C1', lat: null, lon: null, ultimaPosicao: 'Distribuido', temCoordenadas: false },
+    ];
+    expect(UM.controleCentroids(joined)[0].colorState).toBe('partial');
+  });
+
+  test('multiple distinct Controles each get their own entry', () => {
+    const joined = [
+      { controle: 'C1', lat: 0, lon: 0, ultimaPosicao: 'Descarregado', temCoordenadas: true },
+      { controle: 'C2', lat: 5, lon: 5, ultimaPosicao: 'Distribuido', temCoordenadas: true },
+    ];
+    const result = UM.controleCentroids(joined);
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.controle).sort()).toEqual(['C1', 'C2']);
+  });
+});
