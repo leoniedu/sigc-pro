@@ -253,9 +253,22 @@
     cssInjected = true;
   }
 
+  // Says "uma consulta", singular, because that is now literally true:
+  // the coordinate lookup is ONE agência-scoped request, not one per
+  // Controle as it was before 2026-08-10. A consent prompt that
+  // overstates what it does is worse than none — it trains the user to
+  // discount it.
   const FETCH_CONSENT_MSG =
-    'SIGC-PRO: isto buscará a Lista de Endereços (coordenadas e zona) ' +
-    'para cada Controle do relatório, ao próprio servidor do SIGC. Continuar?';
+    'SIGC-PRO: isto fará uma consulta ao próprio servidor do SIGC para ' +
+    'obter a Lista de Endereços (coordenadas e zona) da agência filtrada. ' +
+    'Nenhum dado sai do IBGE. Continuar?';
+
+  // In-memory only (zero-storage guarantee): re-asked on every page
+  // load, but not on every click within one. Mirrors agenda-lookups.js's
+  // own consentGiven, and the tilesConsented flag below — the fetch
+  // prompt used to be the odd one out, re-asking on every Mapa click
+  // while the tile prompt asked once.
+  let fetchConsented = false;
 
   const TILE_CONSENT_MSG =
     'SIGC-PRO: para desenhar o mapa, o navegador vai buscar imagens de ' +
@@ -731,7 +744,10 @@
       return;
     }
 
-    if (!confirm(FETCH_CONSENT_MSG)) return;
+    if (!fetchConsented) {
+      if (!confirm(FETCH_CONSENT_MSG)) return;
+      fetchConsented = true;
+    }
 
     btn.disabled = true;
     try {
