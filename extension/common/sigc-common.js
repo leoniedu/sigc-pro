@@ -60,6 +60,17 @@
     return String(s ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
   }
 
+  // The key identifying one household across every SIGC report this
+  // extension joins: a Controle alone is not unique (it covers many
+  // Domicílios, each with its own entrevistador and coordinates).
+  // Defined here because agenda-lookups.js builds these keys from
+  // fetched tables, agenda-day-guide.js looks them up from Agenda rows,
+  // and route-map.js indexes plotted points by them — three modules
+  // that must agree on the exact same string, byte for byte.
+  function enderecoKey(r) {
+    return `${r.controle}|${r.domicilio}`;
+  }
+
   function detectPesquisa() {
     const el = document.querySelector('.header-sigc__title');
     if (!el) return null;
@@ -759,6 +770,7 @@
     LISTA_COMMON_LABELS,
     MISSING_VALUES,
     normalizeLabel,
+    enderecoKey,
     detectPesquisa,
     onListaEnderecos,
     whenReady,

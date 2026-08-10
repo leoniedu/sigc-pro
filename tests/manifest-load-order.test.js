@@ -67,6 +67,18 @@ describe('manifest content_scripts load order', () => {
     expect(mapJs).toBeGreaterThan(exportJs);
   });
 
+  // route-map.js assigns window.__sigcPro.routeMap; agenda-day-guide.js
+  // destructures it at its own top level (teamColor, buildRouteMapSvg,
+  // slotInfo, …), so loading the guide first throws immediately on a
+  // TypeError and the whole Guia do Dia download dies.
+  test('route-map.js loads after sigc-common.js and before agenda-day-guide.js', () => {
+    const common = idx('common/sigc-common.js');
+    const routeMap = idx('features/agenda-day-guide/route-map.js');
+    const dayGuide = idx('features/agenda-day-guide/agenda-day-guide.js');
+    expect(routeMap).toBeGreaterThan(common);
+    expect(dayGuide).toBeGreaterThan(routeMap);
+  });
+
   test('web_accessible_resources exposes vendored Leaflet to SIGC origins only', () => {
     expect(Array.isArray(manifest.web_accessible_resources)).toBe(true);
     const leafletEntry = manifest.web_accessible_resources.find(

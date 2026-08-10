@@ -1,6 +1,7 @@
 import { describe, test, expect } from 'bun:test';
 
 await import('../extension/common/sigc-common.js');
+await import('../extension/features/agenda-day-guide/route-map.js');
 await import('../extension/features/agenda-day-guide/agenda-day-guide.js');
 const { buildRouteSelector } = window.__sigcPro.dayGuide;
 

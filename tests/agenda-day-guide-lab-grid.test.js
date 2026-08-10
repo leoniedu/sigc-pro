@@ -4,6 +4,7 @@ import { describe, test, expect } from 'bun:test';
 // municipios.js augments it — same order as manifest.json.
 await import('../extension/common/sigc-common.js');
 await import('../extension/common/municipios.js');
+await import('../extension/features/agenda-day-guide/route-map.js');
 await import('../extension/features/agenda-day-guide/agenda-day-guide.js');
 
 const { municipioFromControle } = window.__sigcPro;
