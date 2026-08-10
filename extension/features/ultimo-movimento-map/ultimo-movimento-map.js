@@ -1,6 +1,11 @@
 // SIGC-PRO feature: "Mapa" on Último Movimento — see agenda-lookups.js for
 // the sibling feature this reuses the join pattern from (opt-in
 // same-origin fetch of Lista de Endereços, controle|domicilio keying).
+//
+// Agência-only (2026-08-10): the button mounts, and the click proceeds,
+// only when the report is filtered to exactly ONE agência. That gate is
+// what lets the coordinate lookup be a single agência-scoped request
+// instead of one per Controle — see currentAgencia and onMapaClick.
 // Spec: docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md
 (function () {
   'use strict';
@@ -613,12 +618,46 @@
     return parseUltimoMovimentoRows(result.header, result.rows);
   }
 
-  // Lista de Endereços cross-fetch — delegates entirely to agenda-lookups.js's
-  // fetchEnderecos(uf, controles), a composed, cached, multi-Controle
-  // helper (loops its private postFiltrar per uncached Controle, merges
-  // results into one Map). This file never issues that request itself:
-  // the network call stays inside agenda-lookups.js, the directory
-  // check-privacy.sh's FETCH_DIRS already sanctions for it.
+  // The agência the report on screen is filtered to, or '' when it isn't
+  // filtered to exactly one. Read off the same kind of select2-dressed
+  // <select> ultimo-movimento-export.js reads IdUf from: select2 keeps
+  // the real element in the DOM (visually hidden, the "TODOS" text being
+  // a select2-rendered span), so .value still works.
+  //
+  // '*' is the codebase's all-agências wildcard (buildAgenciaFilterBody)
+  // and a blank is the placeholder shape fetchAgenciaList already drops;
+  // both mean "not a single agência" and both must fail the gate, since
+  // Mapa's one agência-scoped fetch can only cover a single-agência
+  // report.
+  function currentAgencia() {
+    const s = document.getElementById('IdAgencia');
+    const v = s ? String(s.value || '').trim() : '';
+    return v === '*' ? '' : v;
+  }
+
+  // How many on-screen households the Lista de Endereços call returned
+  // no entry for. Non-zero is not necessarily an error — a household can
+  // legitimately lack coordinates — but a LARGE count after an
+  // agência-scoped fetch suggests a truncated or paginated response,
+  // which would otherwise be indistinguishable from ordinary missing
+  // geocoding once joinEnderecos folds both into temCoordenadas:false.
+  function missingEnderecoCount(movimentoMap, enderecosMap) {
+    let missing = 0;
+    movimentoMap.forEach((_row, key) => {
+      if (!enderecosMap.has(key)) missing += 1;
+    });
+    return missing;
+  }
+
+  // Lista de Endereços cross-fetch — delegates entirely to
+  // agenda-lookups.js's fetchEnderecosByAgencia(uf, agencia): ONE
+  // request covering the whole agência, replacing the per-Controle loop
+  // this used to make (one POST per Controle on screen, dozens on a
+  // real report). The report here is always agência-scoped, so the
+  // server can scope the same way — see the currentAgencia gate.
+  // This file never issues that request itself: the network call stays
+  // inside agenda-lookups.js, the directory check-privacy.sh's
+  // FETCH_DIRS already sanctions for it.
   async function onMapaClick(btn) {
     ensureCss();
     const movimentoMap = readUltimoMovimentoTable();
@@ -626,8 +665,9 @@
       alert('SIGC-PRO: nenhum dado encontrado no relatório — rode um Filtrar primeiro.');
       return;
     }
-    if (!confirm(FETCH_CONSENT_MSG)) return;
-
+    // Both preconditions are checked BEFORE the consent prompt: asking
+    // permission for a request that then can't be made would train the
+    // user to click through a prompt that didn't mean anything.
     const AM = window.__sigcProAgendaLookups;
     const uf = window.__sigcProUltimoMovimentoExportInternals &&
       window.__sigcProUltimoMovimentoExportInternals.getCurrentUf();
@@ -635,17 +675,37 @@
       alert('SIGC-PRO: não foi possível identificar a UF atual.');
       return;
     }
+    // Re-checked here, not just at mount: the user can switch the filter
+    // to TODOS and re-Filtrar without the button ever unmounting.
+    const agencia = currentAgencia();
+    if (!agencia) {
+      alert('SIGC-PRO: o Mapa só funciona com uma agência selecionada — ' +
+        'escolha uma agência no filtro e rode Filtrar novamente.');
+      return;
+    }
+
+    if (!confirm(FETCH_CONSENT_MSG)) return;
 
     btn.disabled = true;
     try {
-      const controles = [...new Set([...movimentoMap.keys()].map((k) => k.split('|')[0]))];
+      // ONE call for the whole agência, not one per Controle: the report
+      // is agência-scoped (guaranteed by the mount gate below), so the
+      // server can scope the Lista de Endereços the same way.
       let enderecosMap = new Map();
       try {
-        enderecosMap = await AM.fetchEnderecos(uf, controles);
+        enderecosMap = await AM.fetchEnderecosByAgencia(uf, agencia);
       } catch (err) {
         console.warn(`${TAG} Lista de Endereços fetch failed:`, err);
         alert(`SIGC-PRO: não foi possível obter coordenadas (${err && err.message}); ` +
           'o mapa e a tabela de zonas serão exibidos sem coordenadas/zona.');
+      }
+      // A short response looks identical to ordinary missing geocoding
+      // once joined, so say so rather than let it pass silently.
+      const missing = missingEnderecoCount(movimentoMap, enderecosMap);
+      if (enderecosMap.size > 0 && missing > 0) {
+        console.warn(`${TAG} ${missing}/${movimentoMap.size} domicílio(s) sem entrada na Lista de Endereços.`);
+        alert(`SIGC-PRO: ${missing} de ${movimentoMap.size} domicílio(s) não retornaram ` +
+          'endereço na consulta e ficarão sem coordenadas/zona.');
       }
       const joined = joinEnderecos(movimentoMap, enderecosMap);
       pendingJoined = joined;
@@ -767,7 +827,11 @@
   window.__sigcPro.mountWidget({
     id: BUTTON_ID,
     anchor: (ctx) => ctx.dtToolbar(),
-    when: () => onUltimoMovimento() && !!window.__sigcPro.getDataTable(),
+    // Also requires a single agência: Mapa's one agência-scoped Lista de
+    // Endereços call can't cover a TODOS report, so the button stays
+    // absent there rather than appearing and then refusing on click.
+    when: () => onUltimoMovimento() && !!window.__sigcPro.getDataTable() &&
+      !!currentAgencia(),
     build: () => {
       const btn = window.__sigcPro.makeDtProButton({
         id: BUTTON_ID,
@@ -795,5 +859,7 @@
     convexHull,
     controleCentroids,
     zonaRowIsClickable,
+    currentAgencia,
+    missingEnderecoCount,
   };
 })();

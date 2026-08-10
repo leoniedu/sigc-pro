@@ -54,11 +54,16 @@
       : `${origin}${f5.prefix}/relatorio/f5-h-$$/relatorio/filtrar?slug=${slug};F5_origin=${f5.hex}&F5CH=I`;
   }
 
-  function filtroBody(uf, controle, idFiltro) {
+  // '*' is SIGC's "all" wildcard for a filtro field, so scoping by
+  // Controle and scoping by agência are the same request with the two
+  // fields swapped: the Agenda path pins Controle and wildcards
+  // IdAgencia, the Mapa path does the reverse (one call for a whole
+  // agência instead of one per Controle).
+  function filtroBody(uf, controle, idFiltro, agencia) {
     return 'filtro=' + encodeURIComponent(JSON.stringify({
       IdFiltro: idFiltro,
       IdUf: String(uf),
-      IdAgencia: '*',
+      IdAgencia: agencia ? String(agencia) : '*',
       IdMunicipio: '*',
       Controle: String(controle),
       TipoVisualizacao: 'S',
@@ -381,6 +386,29 @@
     return fetchPerControle(enderecosCache, postFiltrar, uf, controles);
   }
 
+  // ONE Lista de Endereços call covering an entire agência, keyed the
+  // same "controle|domicilio" way fetchEnderecos' per-Controle results
+  // are — the caller joins them identically either way.
+  //
+  // Used by ultimo-movimento-map.js, whose report is agência-scoped:
+  // fetching per Controle there meant one POST per Controle on screen
+  // (dozens), where the server will scope by IdAgencia directly. It
+  // takes the agência code rather than deriving it, because only the
+  // caller knows the report on screen is actually scoped to it — see
+  // that file's currentAgencia gate.
+  //
+  // Deliberately NOT cached: enderecosCache is keyed by Controle, and a
+  // whole-agência result doesn't fit that shape. The call happens once
+  // per Mapa click, which is already an explicit user action behind a
+  // consent prompt.
+  function fetchEnderecosByAgencia(uf, agencia) {
+    return postRelatorio({
+      slug: 'ListaEnderecos',
+      body: filtroBody(uf, '*', 'ListaEnderecos', agencia),
+      parse: parseEnderecosHtml,
+    });
+  }
+
   const ULTIMO_MOVIMENTO_SLUG = 'relatorio-ultimo-movimento';
 
   function filtroBodyUltimoMovimento(uf, controle) {
@@ -541,5 +569,5 @@
   // ultimo-movimento-map.js's own #tableRelatorio parser (same table,
   // same live quirks — accented headers, "#!" sort/filter decoration)
   // rather than re-diverging a second copy of this fold.
-  window.__sigcProAgendaLookups = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl, fetchEnderecos, stripAccents, stripHeaderMarker };
+  window.__sigcProAgendaLookups = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl, fetchEnderecos, fetchEnderecosByAgencia, stripAccents, stripHeaderMarker };
 })();

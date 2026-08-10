@@ -450,3 +450,61 @@ describe('controleCentroids', () => {
     expect(result.map((r) => r.controle).sort()).toEqual(['C1', 'C2']);
   });
 });
+
+// The agency gate (2026-08-10). Mapa now issues ONE agency-scoped Lista
+// de Endereços call instead of one per Controle, so the on-screen report
+// must itself be scoped to exactly one agência — otherwise the fetched
+// coordinates wouldn't cover the rows being displayed.
+describe('currentAgencia', () => {
+  function setAgencia(value) {
+    document.body.innerHTML = value === null
+      ? ''
+      : `<select id="IdAgencia"><option value="${value}" selected>x</option></select>`;
+  }
+
+  test('returns the selected agência code', () => {
+    setAgencia('0570');
+    expect(UM.currentAgencia()).toBe('0570');
+  });
+
+  // "TODOS" is the all-agências state. The live select2 wrapper renders
+  // it as the text "TODOS", but the underlying <select> carries the
+  // codebase's usual '*' sentinel (buildAgenciaFilterBody's IdAgencia)
+  // — or a blank, the placeholder shape fetchAgenciaList already drops.
+  // Both must read as "not a single agência".
+  test('treats the * sentinel as no single agência', () => {
+    setAgencia('*');
+    expect(UM.currentAgencia()).toBe('');
+  });
+
+  test('treats a blank value as no single agência', () => {
+    setAgencia('');
+    expect(UM.currentAgencia()).toBe('');
+  });
+
+  test('treats a missing select as no single agência', () => {
+    setAgencia(null);
+    expect(UM.currentAgencia()).toBe('');
+  });
+});
+
+describe('coverage warning', () => {
+  // A single agency-scoped call could come back short (SIGC paginating
+  // or truncating a large agência). That looks exactly like ordinary
+  // missing geocoding once joined, so it's counted explicitly and
+  // surfaced rather than silently absorbed into the no-coordinates
+  // bucket.
+  test('counts on-screen households the fetch returned no entry for', () => {
+    const movimentoMap = new Map([
+      ['C1|1', {}], ['C1|2', {}], ['C2|1', {}],
+    ]);
+    const enderecosMap = new Map([['C1|1', { lat: 1, lon: 2 }]]);
+    expect(UM.missingEnderecoCount(movimentoMap, enderecosMap)).toBe(2);
+  });
+
+  test('is zero when every household came back', () => {
+    const movimentoMap = new Map([['C1|1', {}]]);
+    const enderecosMap = new Map([['C1|1', { lat: 1, lon: 2 }]]);
+    expect(UM.missingEnderecoCount(movimentoMap, enderecosMap)).toBe(0);
+  });
+});
