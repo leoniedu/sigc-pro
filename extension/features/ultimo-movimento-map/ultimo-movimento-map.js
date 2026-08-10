@@ -140,6 +140,31 @@
     return ZONA_PALETTE[Math.abs(hash) % ZONA_PALETTE.length];
   }
 
+  // Marker color = status (spec: docs/superpowers/specs/
+  // 2026-08-09-mapa-status-zonas-controles-design.md §1), not zona —
+  // zonaColor() is still used, but now only for the hull layer.
+  // Okabe-Ito colorblind-safe hex values, assigned by semantic
+  // convention here (unlike zonaColor's arbitrary hash) since status
+  // carries real meaning a survey manager reads at a glance.
+  const STATUS_INATIVO = '#888888';
+  const STATUS_REALIZADA = '#009E73';
+  const STATUS_RECUSA = '#D55E00';
+  const STATUS_NAO_INICIADA = '#F0E442';
+  const STATUS_FECHADO = '#56B4E9';
+  const STATUS_OUTROS = '#000000';
+
+  const STATUS_TIPO_COLOR = {
+    'Realizada': STATUS_REALIZADA,
+    'Recusa': STATUS_RECUSA,
+    'Não Iniciada': STATUS_NAO_INICIADA,
+    'Domicílio Fechado': STATUS_FECHADO,
+  };
+
+  function statusColor(row) {
+    if (row.ultimaPosicao === 'Distribuido') return STATUS_INATIVO;
+    return STATUS_TIPO_COLOR[row.tipoEntrevista] || STATUS_OUTROS;
+  }
+
   function buildZonasTableHtml(zonaRows) {
     const esc = window.__sigcPro.escapeHtml;
     const head =
@@ -468,6 +493,7 @@
     joinEnderecos,
     aggregateZonas,
     zonaColor,
+    statusColor,
     buildZonasTableHtml,
     buildPanelHtml,
     onMapaClick,

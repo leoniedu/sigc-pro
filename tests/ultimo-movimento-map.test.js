@@ -216,6 +216,34 @@ describe('buildPanelHtml', () => {
   });
 });
 
+describe('statusColor', () => {
+  test('Distribuido wins regardless of tipoEntrevista', () => {
+    expect(UM.statusColor({ ultimaPosicao: 'Distribuido', tipoEntrevista: 'Realizada' })).toBe('#888888');
+    expect(UM.statusColor({ ultimaPosicao: 'Distribuido', tipoEntrevista: '' })).toBe('#888888');
+  });
+
+  test('Realizada -> green', () => {
+    expect(UM.statusColor({ ultimaPosicao: 'Descarregado', tipoEntrevista: 'Realizada' })).toBe('#009E73');
+  });
+
+  test('Recusa -> red/orange', () => {
+    expect(UM.statusColor({ ultimaPosicao: 'Descarregado', tipoEntrevista: 'Recusa' })).toBe('#D55E00');
+  });
+
+  test('Não Iniciada -> yellow', () => {
+    expect(UM.statusColor({ ultimaPosicao: 'Descarregado', tipoEntrevista: 'Não Iniciada' })).toBe('#F0E442');
+  });
+
+  test('Domicílio Fechado -> sky-blue', () => {
+    expect(UM.statusColor({ ultimaPosicao: 'Descarregado', tipoEntrevista: 'Domicílio Fechado' })).toBe('#56B4E9');
+  });
+
+  test('unrecognized tipoEntrevista -> black (Outros)', () => {
+    expect(UM.statusColor({ ultimaPosicao: 'Descarregado', tipoEntrevista: 'Em condições de ser habitada' })).toBe('#000000');
+    expect(UM.statusColor({ ultimaPosicao: 'Descarregado', tipoEntrevista: '' })).toBe('#000000');
+  });
+});
+
 describe('Mapa button mount', () => {
   test('button is registered under the expected id', () => {
     // mountWidget registration happens at module load (already imported
