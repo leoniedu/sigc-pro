@@ -708,7 +708,17 @@
     btn.style.borderColor = '#005a9c';
     btn.style.marginLeft = '8px';
     if (small) {
-      btn.style.padding = '2px 8px';
+      // padding alone doesn't shrink this — .btn-sigc/Bootstrap's .btn
+      // holds the box at Filtrar's full height via its own line-height
+      // (and possibly a fixed height/min-height) regardless of padding
+      // (confirmed visually: padding-only left the button just as tall,
+      // only narrower). Pin box-sizing/height/line-height explicitly,
+      // same "override the box, not just the visual style" approach
+      // makeDtProButton already uses for its own native-class fight.
+      btn.style.boxSizing = 'border-box';
+      btn.style.height = '26px';
+      btn.style.lineHeight = '1';
+      btn.style.padding = '0 10px';
       btn.style.fontSize = '11px';
     }
     btn.addEventListener('click', onClick);
