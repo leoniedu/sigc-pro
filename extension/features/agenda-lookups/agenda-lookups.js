@@ -395,7 +395,7 @@
   // (dozens), where the server will scope by IdAgencia directly. It
   // takes the agência code rather than deriving it, because only the
   // caller knows the report on screen is actually scoped to it — see
-  // that file's currentAgencia gate.
+  // that file's filteredAgencia gate.
   //
   // Deliberately NOT cached: enderecosCache is keyed by Controle, and a
   // whole-agência result doesn't fit that shape. The call happens once

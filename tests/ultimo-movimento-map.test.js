@@ -455,7 +455,7 @@ describe('controleCentroids', () => {
 // de Endereços call instead of one per Controle, so the on-screen report
 // must itself be scoped to exactly one agência — otherwise the fetched
 // coordinates wouldn't cover the rows being displayed.
-describe('currentAgencia', () => {
+describe('selectedAgencia', () => {
   function setAgencia(value) {
     document.body.innerHTML = value === null
       ? ''
@@ -464,7 +464,7 @@ describe('currentAgencia', () => {
 
   test('returns the selected agência code', () => {
     setAgencia('0570');
-    expect(UM.currentAgencia()).toBe('0570');
+    expect(UM.selectedAgencia()).toBe('0570');
   });
 
   // "TODOS" is the all-agências state. The live select2 wrapper renders
@@ -474,17 +474,17 @@ describe('currentAgencia', () => {
   // Both must read as "not a single agência".
   test('treats the * sentinel as no single agência', () => {
     setAgencia('*');
-    expect(UM.currentAgencia()).toBe('');
+    expect(UM.selectedAgencia()).toBe('');
   });
 
   test('treats a blank value as no single agência', () => {
     setAgencia('');
-    expect(UM.currentAgencia()).toBe('');
+    expect(UM.selectedAgencia()).toBe('');
   });
 
   test('treats a missing select as no single agência', () => {
     setAgencia(null);
-    expect(UM.currentAgencia()).toBe('');
+    expect(UM.selectedAgencia()).toBe('');
   });
 });
 
@@ -506,5 +506,50 @@ describe('coverage warning', () => {
     const movimentoMap = new Map([['C1|1', {}]]);
     const enderecosMap = new Map([['C1|1', { lat: 1, lon: 2 }]]);
     expect(UM.missingEnderecoCount(movimentoMap, enderecosMap)).toBe(0);
+  });
+});
+
+// The gate follows the FILTERED report, not the live selector (2026-08-10).
+// Changing the agência dropdown without clicking Filtrar leaves the old
+// report on screen: the rendered rows still belong to the previously
+// submitted agência, so that is what the coordinate fetch must use.
+describe('filteredAgencia', () => {
+  function setSelect(value) {
+    document.body.innerHTML = value === null
+      ? '<button id="btnFiltrar">Filtrar</button>'
+      : `<select id="IdAgencia"><option value="${value}" selected>x</option></select>` +
+        '<button id="btnFiltrar">Filtrar</button>';
+  }
+
+  test('is empty before any Filtrar, even with an agência selected', () => {
+    setSelect('0570');
+    UM.resetFilteredAgencia();
+    expect(UM.filteredAgencia()).toBe('');
+  });
+
+  test('captures the selected agência when Filtrar is clicked', () => {
+    setSelect('0570');
+    UM.resetFilteredAgencia();
+    UM.captureFilteredAgencia();
+    expect(UM.filteredAgencia()).toBe('0570');
+  });
+
+  // The core of this change: the captured value must NOT follow a later
+  // dropdown change, because the table on screen didn't change either.
+  test('does not follow the selector after Filtrar', () => {
+    setSelect('0570');
+    UM.resetFilteredAgencia();
+    UM.captureFilteredAgencia();
+    document.getElementById('IdAgencia').value = '*';
+    expect(UM.filteredAgencia()).toBe('0570');
+  });
+
+  test('a Filtrar on TODOS clears a previously captured agência', () => {
+    setSelect('0570');
+    UM.resetFilteredAgencia();
+    UM.captureFilteredAgencia();
+    document.getElementById('IdAgencia').value = '*';
+    UM.captureFilteredAgencia();
+    expect(UM.filteredAgencia()).toBe('');
   });
 });

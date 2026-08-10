@@ -5,7 +5,7 @@
 // Agência-only (2026-08-10): the button mounts, and the click proceeds,
 // only when the report is filtered to exactly ONE agência. That gate is
 // what lets the coordinate lookup be a single agência-scoped request
-// instead of one per Controle — see currentAgencia and onMapaClick.
+// instead of one per Controle — see filteredAgencia and onMapaClick.
 // Spec: docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md
 (function () {
   'use strict';
@@ -618,21 +618,68 @@
     return parseUltimoMovimentoRows(result.header, result.rows);
   }
 
-  // The agência the report on screen is filtered to, or '' when it isn't
-  // filtered to exactly one. Read off the same kind of select2-dressed
-  // <select> ultimo-movimento-export.js reads IdUf from: select2 keeps
-  // the real element in the DOM (visually hidden, the "TODOS" text being
-  // a select2-rendered span), so .value still works.
+  // The agência currently SELECTED in the filter form. Read off the same
+  // kind of select2-dressed <select> ultimo-movimento-export.js reads
+  // IdUf from: select2 keeps the real element in the DOM (visually
+  // hidden, the "TODOS" text being a select2-rendered span), so .value
+  // still works.
   //
   // '*' is the codebase's all-agências wildcard (buildAgenciaFilterBody)
   // and a blank is the placeholder shape fetchAgenciaList already drops;
-  // both mean "not a single agência" and both must fail the gate, since
-  // Mapa's one agência-scoped fetch can only cover a single-agência
-  // report.
-  function currentAgencia() {
+  // both mean "not a single agência".
+  //
+  // This is the form's state, NOT the report's — see filteredAgencia.
+  function selectedAgencia() {
     const s = document.getElementById('IdAgencia');
     const v = s ? String(s.value || '').trim() : '';
     return v === '*' ? '' : v;
+  }
+
+  // The agência the table ON SCREEN was actually filtered by, captured
+  // when Filtrar is clicked. '' when the last Filtrar was a TODOS run,
+  // or when no Filtrar has happened yet in this page's lifetime.
+  //
+  // Gating on this rather than on selectedAgencia() is the whole point:
+  // changing the dropdown does NOT re-run the report, so the rendered
+  // rows still belong to the previously submitted agência. Gating on
+  // the live selector would show the button for an agência whose data
+  // isn't on screen (and hide it for one whose data is), and Mapa's
+  // single agência-scoped coordinate fetch would then be scoped to the
+  // wrong agência entirely — a silent wrong-data join, not a visible
+  // error.
+  let filteredAgenciaValue = '';
+
+  function filteredAgencia() {
+    return filteredAgenciaValue;
+  }
+
+  function captureFilteredAgencia() {
+    filteredAgenciaValue = selectedAgencia();
+  }
+
+  // Test-only seam: the module-level capture survives between test
+  // cases, so each one needs a clean starting point.
+  function resetFilteredAgencia() {
+    filteredAgenciaValue = '';
+  }
+
+  // Filtrar is a plain form-action button that re-renders the table in
+  // place, so there's no navigation or load event to hook — the click
+  // itself is the signal. Capture on the CAPTURE phase so it records the
+  // value even if the page's own handler stops propagation, and record
+  // it before the request goes out (the selector can't change between
+  // the click and the response).
+  //
+  // Bound once, lazily: btnFiltrar exists from page load on Último
+  // Movimento, but this file also loads on pages without it.
+  let filtrarBound = false;
+
+  function bindFiltrarCapture() {
+    if (filtrarBound) return;
+    const btn = document.getElementById('btnFiltrar');
+    if (!btn) return;
+    btn.addEventListener('click', captureFilteredAgencia, true);
+    filtrarBound = true;
   }
 
   // How many on-screen households the Lista de Endereços call returned
@@ -654,7 +701,7 @@
   // request covering the whole agência, replacing the per-Controle loop
   // this used to make (one POST per Controle on screen, dozens on a
   // real report). The report here is always agência-scoped, so the
-  // server can scope the same way — see the currentAgencia gate.
+  // server can scope the same way — see the filteredAgencia gate.
   // This file never issues that request itself: the network call stays
   // inside agenda-lookups.js, the directory check-privacy.sh's
   // FETCH_DIRS already sanctions for it.
@@ -675,9 +722,9 @@
       alert('SIGC-PRO: não foi possível identificar a UF atual.');
       return;
     }
-    // Re-checked here, not just at mount: the user can switch the filter
-    // to TODOS and re-Filtrar without the button ever unmounting.
-    const agencia = currentAgencia();
+    // Re-checked here, not just at mount: a Filtrar on TODOS clears this
+    // between the mount tick and the click.
+    const agencia = filteredAgencia();
     if (!agencia) {
       alert('SIGC-PRO: o Mapa só funciona com uma agência selecionada — ' +
         'escolha uma agência no filtro e rode Filtrar novamente.');
@@ -827,11 +874,20 @@
   window.__sigcPro.mountWidget({
     id: BUTTON_ID,
     anchor: (ctx) => ctx.dtToolbar(),
-    // Also requires a single agência: Mapa's one agência-scoped Lista de
-    // Endereços call can't cover a TODOS report, so the button stays
-    // absent there rather than appearing and then refusing on click.
-    when: () => onUltimoMovimento() && !!window.__sigcPro.getDataTable() &&
-      !!currentAgencia(),
+    // Also requires that the report on screen was filtered by a single
+    // agência — the captured Filtrar value, not the live dropdown, so
+    // merely changing the selector neither shows nor hides the button
+    // while the old table is still displayed. Mapa's one agência-scoped
+    // Lista de Endereços call can't cover a TODOS report, so the button
+    // stays absent there rather than appearing and refusing on click.
+    //
+    // The bind rides along on the mount tick: it's idempotent, and this
+    // is already the one place guaranteed to run repeatedly on the page.
+    when: () => {
+      if (!onUltimoMovimento()) return false;
+      bindFiltrarCapture();
+      return !!window.__sigcPro.getDataTable() && !!filteredAgencia();
+    },
     build: () => {
       const btn = window.__sigcPro.makeDtProButton({
         id: BUTTON_ID,
@@ -859,7 +915,10 @@
     convexHull,
     controleCentroids,
     zonaRowIsClickable,
-    currentAgencia,
+    selectedAgencia,
+    filteredAgencia,
+    captureFilteredAgencia,
+    resetFilteredAgencia,
     missingEnderecoCount,
   };
 })();
