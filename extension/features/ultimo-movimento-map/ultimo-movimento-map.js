@@ -394,7 +394,7 @@
     }).addTo(map);
     if (withCoords.length === 0) {
       map.setView([-14, -51], 4); // Brazil-wide fallback view
-      addStatusLegend(map);
+      addStatusLegend(L, map);
       return;
     }
 
@@ -409,17 +409,18 @@
       const hull = convexHull(coords);
       if (!hull) return;
       const color = zonaColor(idZona);
+      const zonaTooltip = window.__sigcPro.escapeHtml(idZona);
       if (hull.type === 'polygon') {
         L.polygon(hull.points, { color, weight: 2, fillColor: color, fillOpacity: 0.18 })
-          .bindTooltip(window.__sigcPro.escapeHtml(idZona))
+          .bindTooltip(zonaTooltip)
           .addTo(map);
       } else if (hull.type === 'capsule') {
         L.polyline([hull.a, hull.b], { color, weight: 10, opacity: 0.35, lineCap: 'round' })
-          .bindTooltip(window.__sigcPro.escapeHtml(idZona))
+          .bindTooltip(zonaTooltip)
           .addTo(map);
       } else if (hull.type === 'circle') {
         L.circle(hull.center, { radius: 30, color, fillColor: color, fillOpacity: 0.35 })
-          .bindTooltip(window.__sigcPro.escapeHtml(idZona))
+          .bindTooltip(zonaTooltip)
           .addTo(map);
       }
     });
@@ -442,10 +443,14 @@
     });
 
     // --- Layer 3: Controle labels, always visible ---------------------
+    // Muted purple/violet family, deliberately outside the Okabe-Ito set
+    // ZONA_PALETTE and STATUS_* already exhaust — keeps Controle labels
+    // visually distinct from both the status marker colors and the zona
+    // hull colors (spec's distinct-palette requirement).
     const CONTROLE_LABEL_COLOR = {
-      inactive: '#888888',
-      active: '#0072B2',
-      partial: '#E69F00',
+      inactive: '#5C5C8A',
+      active: '#4A148C',
+      partial: '#AB47BC',
     };
     controleCentroids(joined).forEach(({ controle, lat, lon, colorState }) => {
       const shortId = String(controle).slice(-6);
@@ -460,14 +465,16 @@
       }).addTo(map);
     });
 
-    addStatusLegend(map);
+    addStatusLegend(L, map);
     map.fitBounds(bounds, { padding: [20, 20] });
   }
 
   // Fixed corner legend for the 6 marker-status colors (spec: "Status
   // legend" section) — no separate legend for hull or Controle-label
-  // colors, per the design's explicit scope decision.
-  function addStatusLegend(map) {
+  // colors, per the design's explicit scope decision. Takes L explicitly
+  // (matching renderLeafletMap's own established style of receiving L as
+  // a parameter) rather than closing over window.L.
+  function addStatusLegend(L, map) {
     const entries = [
       ['Inativo (Distribuído)', STATUS_INATIVO],
       ['Realizada', STATUS_REALIZADA],
