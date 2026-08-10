@@ -725,15 +725,21 @@
     return out;
   }
 
+  // Anchored to the DataTables toolbar (.dt-buttons), alongside CSV-pro
+  // — not Filtrar/Cancelar — since Mapa needs the filtered table's rows
+  // to do anything useful, same as CSV-pro itself; the toolbar only
+  // exists once a Filtrar has actually rendered a table, so this button
+  // (like CSV-pro) doesn't appear until then, unlike the earlier
+  // Filtrar-anchored version which showed immediately with nothing to
+  // act on yet.
   window.__sigcPro.mountWidget({
     id: BUTTON_ID,
-    anchor: (ctx) => ctx.ultimoMovimentoFiltrarBtn(),
-    insert: 'after',
-    when: () => onUltimoMovimento(),
+    anchor: (ctx) => ctx.dtToolbar(),
+    when: () => onUltimoMovimento() && !!window.__sigcPro.getDataTable(),
     build: () => {
-      const btn = window.__sigcPro.makeSigcFormButton({
+      const btn = window.__sigcPro.makeDtProButton({
         id: BUTTON_ID,
-        text: 'Mapa',
+        lines: ['MAPA'],
         title: 'Mapa de domicílios por zona (SIGC-PRO)',
         onClick: () => onMapaClick(btn),
       });

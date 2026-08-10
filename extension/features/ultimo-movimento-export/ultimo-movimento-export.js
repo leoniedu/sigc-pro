@@ -244,6 +244,7 @@
         text: 'CSV TODAS',
         title: 'Exportar Último Movimento de todas as agências (SIGC-PRO, avançado)',
         onClick: () => exportAllAgencias(btn),
+        small: true,
       });
       return btn;
     },

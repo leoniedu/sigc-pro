@@ -693,7 +693,11 @@
   // is used regardless — no href/javascript: URL needed since onClick is
   // wired directly, and this avoids SIGC's F5 javascript-URL rewriting
   // wrapper entirely.
-  function makeSigcFormButton({ id, text, title, onClick }) {
+  // small: shrinks padding/font below the native Filtrar/Cancelar size —
+  // for a button that shares this style family but shouldn't visually
+  // compete with the primary form actions next to it (e.g. an advanced,
+  // off-by-default export button).
+  function makeSigcFormButton({ id, text, title, onClick, small }) {
     const btn = document.createElement('button');
     btn.id = id;
     btn.type = 'button';
@@ -703,6 +707,10 @@
     btn.style.background = '#005a9c';
     btn.style.borderColor = '#005a9c';
     btn.style.marginLeft = '8px';
+    if (small) {
+      btn.style.padding = '2px 8px';
+      btn.style.fontSize = '11px';
+    }
     btn.addEventListener('click', onClick);
     return btn;
   }

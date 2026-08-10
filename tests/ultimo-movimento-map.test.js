@@ -289,12 +289,14 @@ describe('Mapa button mount', () => {
   test('button is registered under the expected id', () => {
     // mountWidget registration happens at module load (already imported
     // at top of file); confirm the widget was pushed with the right id
-    // by checking the DOM after simulating the anchor being present.
+    // by checking the DOM after simulating a page with neither the
+    // .dt-buttons toolbar nor the h6 page-title text present.
     document.body.innerHTML = '<div><a id="btnFiltrar" class="btn btn-primary btn-sigc">Filtrar</a></div>';
     window.__sigcPro.recheckMounts();
-    // The button only mounts when onUltimoMovimento() is true, which
-    // depends on a title element this fixture doesn't provide — assert
-    // it does NOT mount rather than asserting a false positive here.
+    // The button only mounts when onUltimoMovimento() is true AND a
+    // DataTable exists (the .dt-buttons toolbar it anchors to) — neither
+    // is present in this fixture, so assert it does NOT mount rather
+    // than asserting a false positive.
     expect(document.getElementById('sigc-pro-ultimo-movimento-map-btn')).toBeNull();
   });
 });
