@@ -68,4 +68,29 @@ describe('makeSigcFormButton', () => {
     btn.click();
     expect(clicked).toBe(1);
   });
+
+  test('small: wraps text onto two lines split on the first space', () => {
+    const btn = P.makeSigcFormButton({
+      id: 'sigc-y',
+      text: 'CSV TODAS',
+      title: 'x',
+      onClick: () => {},
+      small: true,
+    });
+    expect(btn.textContent).toBe('CSVTODAS'); // <br> contributes no text
+    expect(btn.querySelector('br')).not.toBeNull();
+    expect(btn.style.width).toBe('64px');
+  });
+
+  test('small: a single-word text renders with no <br>', () => {
+    const btn = P.makeSigcFormButton({
+      id: 'sigc-z',
+      text: 'Mapa',
+      title: 'x',
+      onClick: () => {},
+      small: true,
+    });
+    expect(btn.textContent).toBe('Mapa');
+    expect(btn.querySelector('br')).toBeNull();
+  });
 });

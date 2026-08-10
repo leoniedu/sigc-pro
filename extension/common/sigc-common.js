@@ -693,33 +693,47 @@
   // is used regardless — no href/javascript: URL needed since onClick is
   // wired directly, and this avoids SIGC's F5 javascript-URL rewriting
   // wrapper entirely.
-  // small: shrinks padding/font below the native Filtrar/Cancelar size —
-  // for a button that shares this style family but shouldn't visually
-  // compete with the primary form actions next to it (e.g. an advanced,
-  // off-by-default export button).
+  // small: narrower than the native Filtrar/Cancelar size, with `text`
+  // wrapped onto two stacked lines (split on the first space) — for a
+  // button that shares this style family (rounded, blue, same font as
+  // Filtrar) but shouldn't visually compete width-wise with the primary
+  // form actions next to it (e.g. an advanced, off-by-default export
+  // button). Deliberately NOT shrunk to makeDtProButton's tiny square
+  // icon shape — narrower/taller, not a toolbar icon.
   function makeSigcFormButton({ id, text, title, onClick, small }) {
     const btn = document.createElement('button');
     btn.id = id;
     btn.type = 'button';
     btn.className = 'btn btn-primary btn-sigc';
-    btn.textContent = text;
     btn.title = title;
     btn.style.background = '#005a9c';
     btn.style.borderColor = '#005a9c';
     btn.style.marginLeft = '8px';
     if (small) {
-      // padding alone doesn't shrink this — .btn-sigc/Bootstrap's .btn
-      // holds the box at Filtrar's full height via its own line-height
-      // (and possibly a fixed height/min-height) regardless of padding
-      // (confirmed visually: padding-only left the button just as tall,
-      // only narrower). Pin box-sizing/height/line-height explicitly,
-      // same "override the box, not just the visual style" approach
-      // makeDtProButton already uses for its own native-class fight.
+      const [first, ...rest] = text.split(' ');
+      const span = document.createElement('span');
+      span.appendChild(document.createTextNode(first));
+      if (rest.length > 0) {
+        span.appendChild(document.createElement('br'));
+        span.appendChild(document.createTextNode(rest.join(' ')));
+      }
+      btn.appendChild(span);
+      // Padding alone doesn't narrow this — .btn-sigc/Bootstrap's .btn
+      // sets its own line-height/min-width that holds the box at
+      // Filtrar's full single-line size regardless of padding (confirmed
+      // visually). Pin box dimensions explicitly instead — same
+      // "override the box, not just the visual style" approach
+      // makeDtProButton already needed for its own native-class fight.
       btn.style.boxSizing = 'border-box';
-      btn.style.height = '26px';
-      btn.style.lineHeight = '1';
-      btn.style.padding = '0 10px';
+      btn.style.width = '64px';
+      btn.style.minWidth = '64px';
+      btn.style.lineHeight = '1.3';
+      btn.style.padding = '4px 0';
       btn.style.fontSize = '11px';
+      btn.style.fontWeight = '700';
+      btn.style.textAlign = 'center';
+    } else {
+      btn.textContent = text;
     }
     btn.addEventListener('click', onClick);
     return btn;
