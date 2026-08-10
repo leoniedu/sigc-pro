@@ -72,14 +72,8 @@
   // unknown headers return null (caller treats as failure).
   function tableToEnderecosMap(headers, rows) {
     const P = window.__sigcPro;
-    const labels = P.LISTA_COMMON_LABELS;
-    const idx = {};
-    for (const key of Object.keys(labels)) {
-      const i = headers.findIndex(
-        (h) => P.normalizeLabel(h) === P.normalizeLabel(labels[key]));
-      if (i === -1) return null;
-      idx[key] = i;
-    }
+    const idx = resolveColumns(headers, P.LISTA_COMMON_LABELS, foldPlain);
+    if (!idx) return null;
     const map = new Map();
     rows.forEach((cells) => {
       const controle = String(cells[idx.controle] || '').trim();
@@ -108,16 +102,42 @@
     return map;
   }
 
-  // Response HTML fragment -> endereços map. DOMParser is inert: nothing
-  // in the fetched markup can load resources or run handlers.
-  function parseEnderecosHtml(html) {
+  // Response HTML fragment -> { headers, rows } of trimmed strings, or
+  // null when the expected table isn't there. DOMParser is inert:
+  // nothing in the fetched markup can load resources or run handlers.
+  // All three reports below are read through this one function — their
+  // responses are parsed independently and never share a live DOM, so
+  // two of them using the same generic #tableRelatorio id can't collide.
+  function readReportTable(html, selector) {
     const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
-    const table = doc.querySelector('#tableRelatorio');
+    const table = doc.querySelector(selector);
     if (!table) return null;
-    const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
-    const rows = [...table.querySelectorAll('tbody tr')].map((tr) =>
-      [...tr.querySelectorAll('td')].map((td) => td.textContent.trim()));
-    return tableToEnderecosMap(headers, rows);
+    return {
+      headers: [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim()),
+      rows: [...table.querySelectorAll('tbody tr')].map((tr) =>
+        [...tr.querySelectorAll('td')].map((td) => td.textContent.trim())),
+    };
+  }
+
+  // labels {key: 'Header Label'} -> {key: columnIndex}, or null if ANY
+  // label is missing (callers treat null as "table not recognized", so a
+  // backend column reorder can never silently join the wrong columns).
+  // `fold` normalizes both sides before comparing; pass foldLive to also
+  // absorb the live grid's accent/"#!" decoration.
+  function resolveColumns(headers, labels, fold) {
+    const idx = {};
+    for (const key of Object.keys(labels)) {
+      const expected = fold(labels[key]);
+      const i = headers.findIndex((h) => fold(h) === expected);
+      if (i === -1) return null;
+      idx[key] = i;
+    }
+    return idx;
+  }
+
+  function parseEnderecosHtml(html) {
+    const table = readReportTable(html, '#tableRelatorio');
+    return table ? tableToEnderecosMap(table.headers, table.rows) : null;
   }
 
   // Último Movimento's own results table (#tableRelatorio, same generic
@@ -169,15 +189,23 @@
     return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '');
   }
 
+  // Two header folds, differing only in how much live-grid decoration
+  // they absorb. normalizeLabel itself is whitespace+lowercase only.
+  //   foldLive  — also strips accents and the leading "#!" sort/filter
+  //               marker; needed by Último Movimento, whose live headers
+  //               show both ("#!Controle", "!Domicílio").
+  //   foldPlain — normalizeLabel alone; Distribuição's headers are read
+  //               verbatim off #tb_distribuir with no such decoration.
+  // foldLive is a superset: it would match Distribuição's headers too.
+  // The split is kept because each report is pinned to the fold its live
+  // table was actually confirmed against, not to the loosest one.
+  const foldLive = (s) =>
+    window.__sigcPro.normalizeLabel(stripAccents(stripHeaderMarker(s)));
+  const foldPlain = (s) => window.__sigcPro.normalizeLabel(s);
+
   function parseUltimoMovimentoTable(headers, rows) {
-    const P = window.__sigcPro;
-    const idx = {};
-    for (const key of Object.keys(ULTIMO_MOVIMENTO_LABELS)) {
-      const expected = P.normalizeLabel(stripAccents(ULTIMO_MOVIMENTO_LABELS[key]));
-      const i = headers.findIndex((h) => P.normalizeLabel(stripAccents(stripHeaderMarker(h))) === expected);
-      if (i === -1) return null;
-      idx[key] = i;
-    }
+    const idx = resolveColumns(headers, ULTIMO_MOVIMENTO_LABELS, foldLive);
+    if (!idx) return null;
     const map = new Map();
     rows.forEach((cells) => {
       const controle = String(cells[idx.controle] || '').trim();
@@ -204,14 +232,8 @@
   const DISTRIBUICAO_LABELS = { controle: 'Controle', agencia: 'Agência Distribuida' };
 
   function parseDistribuicaoTable(headers, rows) {
-    const P = window.__sigcPro;
-    const idx = {};
-    for (const key of Object.keys(DISTRIBUICAO_LABELS)) {
-      const i = headers.findIndex(
-        (h) => P.normalizeLabel(h) === P.normalizeLabel(DISTRIBUICAO_LABELS[key]));
-      if (i === -1) return null;
-      idx[key] = i;
-    }
+    const idx = resolveColumns(headers, DISTRIBUICAO_LABELS, foldPlain);
+    if (!idx) return null;
     const map = new Map();
     rows.forEach((cells) => {
       const controle = String(cells[idx.controle] || '').trim();
@@ -264,12 +286,27 @@
 
   // --- network (the sanctioned exception) -----------------------------
 
+  const FORM_POST_HEADERS = {
+    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+    'X-Requested-With': 'XMLHttpRequest',
+  };
+
+  // POSTs one /relatorio/filtrar report and parses its response.
+  //
   // Tries the simple prefixed URL first, then the full captured F5 form
-  // (identical on the direct host, where the Set collapses them).
-  async function postFiltrar(uf, controle) {
+  // (identical on the direct host, where the Set collapses them), moving
+  // on to the next URL on a transport error, a non-2xx, or an
+  // unrecognized table, and throwing the last error if none worked.
+  //
+  // `parse` returns the report's Map, or null for "table not
+  // recognized" — the signal to try the next URL rather than accept an
+  // empty result. Both reports served by this endpoint (Lista de
+  // Endereços and, since 2026-08-07, Último Movimento) go through here;
+  // they differ only in slug, filtro body and parse.
+  async function postRelatorio({ slug, body, parse }) {
     const urls = [...new Set([
-      filtrarUrl(location.origin, location.pathname, 'ListaEnderecos', true),
-      filtrarUrl(location.origin, location.pathname, 'ListaEnderecos', false),
+      filtrarUrl(location.origin, location.pathname, slug, true),
+      filtrarUrl(location.origin, location.pathname, slug, false),
     ])];
     let lastErr = new Error('sem resposta');
     for (const url of urls) {
@@ -277,14 +314,11 @@
         const res = await fetch(url, {
           method: 'POST',
           credentials: 'same-origin',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            'X-Requested-With': 'XMLHttpRequest',
-          },
-          body: filtroBody(uf, controle, 'ListaEnderecos'),
+          headers: FORM_POST_HEADERS,
+          body,
         });
         if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
-        const map = parseEnderecosHtml(await res.text());
+        const map = parse(await res.text());
         if (map) return map;
         lastErr = new Error('tabela não reconhecida');
       } catch (err) {
@@ -294,22 +328,57 @@
     throw lastErr;
   }
 
-  // In-memory only, reset on page load: avoids a redundant POST for a
-  // Controle already fetched earlier in the same session (e.g. the user
-  // regenerates the guide after fixing a slot).
-  const enderecosCache = new Map(); // controle -> Map("controle|domicilio" -> {lat,lon,zona,idZona})
+  function postFiltrar(uf, controle) {
+    return postRelatorio({
+      slug: 'ListaEnderecos',
+      body: filtroBody(uf, controle, 'ListaEnderecos'),
+      parse: parseEnderecosHtml,
+    });
+  }
 
-  // One sequential POST per distinct Controle not already cached
-  // (typically 1-5 per day).
-  async function fetchEnderecos(uf, controles) {
+  // Runs `post` once per distinct Controle not already in `cache`, then
+  // flattens every result into one Map. Caches are in-memory only and
+  // reset on page load (zero-storage guarantee); they exist so repeat
+  // clicks in one session don't re-POST a Controle already fetched
+  // (e.g. the user regenerates the guide after fixing a slot).
+  // Sequential by design — typically 1-5 Controles per day, and the
+  // SIGC backend is not something to fan out against.
+  //
+  // `label` selects the failure mode, which is the one real difference
+  // between the three lookups:
+  //   omitted — the lookup is REQUIRED (Lista de Endereços): errors
+  //             propagate to the caller, which reports them and falls
+  //             back to a map-free guide.
+  //   given   — the lookup is OPTIONAL (Último Movimento,
+  //             Distribuição): a failing Controle is logged under this
+  //             label, cached as null so it isn't retried, and skipped.
+  //             One bad Controle degrades the guide, never blocks it.
+  async function fetchPerControle(cache, post, uf, controles, label) {
     const all = new Map();
     for (const c of controles) {
-      if (!enderecosCache.has(c)) {
-        enderecosCache.set(c, await postFiltrar(uf, c));
+      if (!cache.has(c)) {
+        if (!label) {
+          cache.set(c, await post(uf, c));
+        } else {
+          try {
+            cache.set(c, await post(uf, c));
+          } catch (err) {
+            console.warn(`${TAG} ${label} lookup for Controle ${c} failed:`, err);
+            cache.set(c, null);
+          }
+        }
       }
-      enderecosCache.get(c).forEach((v, k) => all.set(k, v));
+      const result = cache.get(c);
+      if (result) result.forEach((v, k) => all.set(k, v));
     }
     return all;
+  }
+
+  // controle -> Map("controle|domicilio" -> {lat,lon,zona,idZona})
+  const enderecosCache = new Map();
+
+  function fetchEnderecos(uf, controles) {
+    return fetchPerControle(enderecosCache, postFiltrar, uf, controles);
   }
 
   const ULTIMO_MOVIMENTO_SLUG = 'relatorio-ultimo-movimento';
@@ -328,63 +397,26 @@
 
   // As of 2026-08-07, Último Movimento is served through the same
   // generic /relatorio/filtrar?slug=... endpoint Lista de Endereços
-  // already used — so this now needs the same simple/full two-mode F5
-  // retry loop as postFiltrar, not the plain-path fetchViaGateway this
-  // call used before the migration.
-  async function postUltimoMovimento(uf, controle) {
-    const urls = [...new Set([
-      filtrarUrl(location.origin, location.pathname, ULTIMO_MOVIMENTO_SLUG, true),
-      filtrarUrl(location.origin, location.pathname, ULTIMO_MOVIMENTO_SLUG, false),
-    ])];
-    let lastErr = new Error('sem resposta');
-    for (const url of urls) {
-      try {
-        const res = await fetch(url, {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            'X-Requested-With': 'XMLHttpRequest',
-          },
-          body: filtroBodyUltimoMovimento(uf, controle),
-        });
-        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
-        const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-        const table = doc.querySelector('#tableRelatorio');
-        if (!table) { lastErr = new Error('tabela não reconhecida'); continue; }
-        const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
-        const rows = [...table.querySelectorAll('tbody tr')].map((tr) =>
-          [...tr.querySelectorAll('td')].map((td) => td.textContent.trim()));
-        return parseUltimoMovimentoTable(headers, rows);
-      } catch (err) {
-        lastErr = err;
-      }
-    }
-    throw lastErr;
+  // already used — hence the shared postRelatorio, rather than the
+  // plain-path fetchViaGateway this call used before the migration.
+  function postUltimoMovimento(uf, controle) {
+    return postRelatorio({
+      slug: ULTIMO_MOVIMENTO_SLUG,
+      body: filtroBodyUltimoMovimento(uf, controle),
+      parse: (html) => {
+        const table = readReportTable(html, '#tableRelatorio');
+        return table ? parseUltimoMovimentoTable(table.headers, table.rows) : null;
+      },
+    });
   }
 
-  // In-memory only, mirrors enderecosCache: controle -> Map(controle ->
-  // {entrevistador}) | null (null = fetched, no usable table).
+  // controle -> Map("controle|domicilio" -> {entrevistador}) | null
+  // (null = fetched, no usable table).
   const ultimoMovimentoCache = new Map();
 
-  // One sequential POST per distinct Controle not already cached. A
-  // failed or empty-table Controle is logged and skipped — never fatal
-  // to the run, matching fetchEnderecos/postFiltrar's own failure mode.
-  async function fetchUltimoMovimento(uf, controles) {
-    const all = new Map();
-    for (const c of controles) {
-      if (!ultimoMovimentoCache.has(c)) {
-        try {
-          ultimoMovimentoCache.set(c, await postUltimoMovimento(uf, c));
-        } catch (err) {
-          console.warn(`${TAG} Último Movimento lookup for Controle ${c} failed:`, err);
-          ultimoMovimentoCache.set(c, null);
-        }
-      }
-      const result = ultimoMovimentoCache.get(c);
-      if (result) result.forEach((v, k) => all.set(k, v));
-    }
-    return all;
+  function fetchUltimoMovimento(uf, controles) {
+    return fetchPerControle(
+      ultimoMovimentoCache, postUltimoMovimento, uf, controles, 'Último Movimento');
   }
 
   function filtroBodyDistribuicao(uf, controle) {
@@ -396,47 +428,27 @@
     }));
   }
 
+  // Not a /relatorio/filtrar report: Distribuição has its own endpoint
+  // and its own table id, so it goes through fetchViaGateway rather than
+  // postRelatorio's slug + two-mode F5 retry.
   async function postDistribuicao(uf, controle) {
     const res = await window.__sigcPro.fetchViaGateway('/RelatorioDistribuicao/Filtrar', {
       method: 'POST',
       credentials: 'same-origin',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
+      headers: FORM_POST_HEADERS,
       body: filtroBodyDistribuicao(uf, controle),
     });
-    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-    const table = doc.getElementById('tb_distribuir');
-    if (!table) return null;
-    const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
-    const rows = [...table.querySelectorAll('tbody tr')].map((tr) =>
-      [...tr.querySelectorAll('td')].map((td) => td.textContent.trim()));
-    return parseDistribuicaoTable(headers, rows);
+    const table = readReportTable(await res.text(), '#tb_distribuir');
+    return table ? parseDistribuicaoTable(table.headers, table.rows) : null;
   }
 
-  // In-memory only, mirrors ultimoMovimentoCache: controle ->
-  // Map(controle -> {agencia}) | null.
+  // controle -> Map(controle -> {agencia}) | null. Keyed by Controle
+  // alone, unlike the other two — Distribuição is per-Controle data.
   const distribuicaoCache = new Map();
 
-  // One sequential POST per distinct Controle not already cached. Same
-  // per-Controle failure isolation as fetchUltimoMovimento: one bad
-  // Controle is logged and skipped, never fatal to the run.
-  async function fetchDistribuicao(uf, controles) {
-    const all = new Map();
-    for (const c of controles) {
-      if (!distribuicaoCache.has(c)) {
-        try {
-          distribuicaoCache.set(c, await postDistribuicao(uf, c));
-        } catch (err) {
-          console.warn(`${TAG} Distribuição lookup for Controle ${c} failed:`, err);
-          distribuicaoCache.set(c, null);
-        }
-      }
-      const result = distribuicaoCache.get(c);
-      if (result) result.forEach((v, k) => all.set(k, v));
-    }
-    return all;
+  function fetchDistribuicao(uf, controles) {
+    return fetchPerControle(
+      distribuicaoCache, postDistribuicao, uf, controles, 'Distribuição');
   }
 
   // --- UI --------------------------------------------------------------
