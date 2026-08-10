@@ -528,12 +528,21 @@
       const marker = L.circleMarker([r.lat, r.lon], {
         radius: 6, color, fillColor: color, fillOpacity: 0.8,
       }).addTo(map);
+      // gmapsDestinoUrl is always non-empty here (withCoords already
+      // filtered to temCoordenadas rows), same outbound-link-only
+      // pattern lista-agenda.js's own domicílio table uses — a link the
+      // user clicks, never a request the extension makes itself.
+      const gmapsUrl = window.__sigcPro.gmapsDestinoUrl(r.lat, r.lon);
+      const gmapsLine = gmapsUrl
+        ? `<br><a href="${window.__sigcPro.escapeHtml(gmapsUrl)}" target="_blank" rel="noopener">Ver no Google Maps</a>`
+        : '';
       marker.bindPopup(
         `Controle: ${window.__sigcPro.escapeHtml(r.controle)}<br>` +
         `Domicílio: ${window.__sigcPro.escapeHtml(r.domicilio)}<br>` +
         `Entrevistador: ${window.__sigcPro.escapeHtml(r.entrevistador)}<br>` +
         `Tipo: ${window.__sigcPro.escapeHtml(r.tipoEntrevista)}<br>` +
-        `Zona: ${window.__sigcPro.escapeHtml(r.idZona || 'Sem zona')}`
+        `Zona: ${window.__sigcPro.escapeHtml(r.idZona || 'Sem zona')}` +
+        gmapsLine
       );
       bounds.push([r.lat, r.lon]);
     });
