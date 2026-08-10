@@ -151,6 +151,20 @@ describe('zonaColor', () => {
   });
 });
 
+describe('zonaRowIsClickable', () => {
+  test('true when at least one domicílio has valid coordinates', () => {
+    expect(UM.zonaRowIsClickable({ totalDomicilios: 4, semCoordenadas: 1 })).toBe(true);
+  });
+
+  test('false when every domicílio lacks coordinates', () => {
+    expect(UM.zonaRowIsClickable({ totalDomicilios: 3, semCoordenadas: 3 })).toBe(false);
+  });
+
+  test('false when there are zero domicílios at all', () => {
+    expect(UM.zonaRowIsClickable({ totalDomicilios: 0, semCoordenadas: 0 })).toBe(false);
+  });
+});
+
 describe('buildZonasTableHtml', () => {
   test('renders a header row and one row per zona, HTML-escaped', () => {
     const rows = [
@@ -168,6 +182,33 @@ describe('buildZonasTableHtml', () => {
     const html = UM.buildZonasTableHtml([]);
     expect(html).toContain('<table');
     expect(html).not.toMatch(/<td/);
+  });
+
+  test('a row with mapped domicílios is clickable, with its idZona as a data attribute', () => {
+    const rows = [
+      { idZona: 'Z1', nomeZona: 'Bairro X', realizada: 1, naoIniciada: 0, domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 2, semCoordenadas: 1 },
+    ];
+    const html = UM.buildZonasTableHtml(rows);
+    expect(html).toContain('sigc-pro-zona-row-clickable');
+    expect(html).toContain('data-id-zona="Z1"');
+  });
+
+  test('a row with zero mapped domicílios (all sem coordenadas) is NOT clickable', () => {
+    const rows = [
+      { idZona: 'Z2', nomeZona: 'Bairro Y', realizada: 0, naoIniciada: 0, domicilioFechado: 0, recusa: 1, outros: 0, totalDomicilios: 1, semCoordenadas: 1 },
+    ];
+    const html = UM.buildZonasTableHtml(rows);
+    expect(html).not.toContain('sigc-pro-zona-row-clickable');
+    expect(html).not.toContain('data-id-zona');
+  });
+
+  test('the "Sem zona" row (idZona null) is clickable via an empty-string data-id-zona', () => {
+    const rows = [
+      { idZona: null, nomeZona: 'Sem zona', realizada: 0, naoIniciada: 0, domicilioFechado: 0, recusa: 2, outros: 0, totalDomicilios: 2, semCoordenadas: 0 },
+    ];
+    const html = UM.buildZonasTableHtml(rows);
+    expect(html).toContain('sigc-pro-zona-row-clickable');
+    expect(html).toContain('data-id-zona=""');
   });
 });
 

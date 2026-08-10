@@ -165,21 +165,37 @@
     return STATUS_TIPO_COLOR[row.tipoEntrevista] || STATUS_OUTROS;
   }
 
+  // A zona row is clickable (opens the Mapa tab focused on that zona)
+  // only when it has at least one domicílio WITH valid coordinates —
+  // semCoordenadas < totalDomicilios. A row where every domicílio lacks
+  // coordinates has nothing for fitBounds to focus on, so it's left
+  // static rather than inviting a click that silently does nothing.
+  function zonaRowIsClickable(r) {
+    return r.totalDomicilios > r.semCoordenadas;
+  }
+
   function buildZonasTableHtml(zonaRows) {
     const esc = window.__sigcPro.escapeHtml;
     const head =
       '<tr><th>Zona</th><th>Nome</th><th>Realizada</th><th>Não Iniciada</th>' +
       '<th>Dom. Fechado</th><th>Recusa</th><th>Outros</th><th>Total</th>' +
       '<th>Sem coordenadas</th></tr>';
-    const body = zonaRows.map((r) => (
-      '<tr>' +
-      `<td>${esc(r.idZona || '—')}</td>` +
-      `<td>${esc(r.nomeZona)}</td>` +
-      `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
-      `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
-      `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>` +
-      '</tr>'
-    )).join('');
+    const body = zonaRows.map((r) => {
+      const clickable = zonaRowIsClickable(r);
+      const zonaKey = r.idZona || '';
+      const rowAttrs = clickable
+        ? ` class="sigc-pro-zona-row-clickable" data-id-zona="${esc(zonaKey)}" title="Ver esta zona no mapa"`
+        : '';
+      return (
+        `<tr${rowAttrs}>` +
+        `<td>${esc(r.idZona || '—')}</td>` +
+        `<td>${esc(r.nomeZona)}</td>` +
+        `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
+        `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
+        `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>` +
+        '</tr>'
+      );
+    }).join('');
     return `<table class="sigc-pro-zonas-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
   }
 
@@ -206,6 +222,8 @@
     .sigc-pro-zonas-table th, .sigc-pro-zonas-table td { border: 1px solid #ddd; padding: 4px 8px; text-align: right; }
     .sigc-pro-zonas-table th:nth-child(-n+2), .sigc-pro-zonas-table td:nth-child(-n+2) { text-align: left; }
     .sigc-pro-zonas-table th { background: #f4f4f4; }
+    .sigc-pro-zonas-table tr.sigc-pro-zona-row-clickable { cursor: pointer; }
+    .sigc-pro-zonas-table tr.sigc-pro-zona-row-clickable:hover { background: #eef6ff; }
     .sigc-pro-controle-label span { font-size: 10px; font-weight: 600; color: #fff;
       padding: 1px 4px; border-radius: 3px; white-space: nowrap;
       box-shadow: 0 0 2px rgba(0,0,0,.6); }
@@ -280,20 +298,71 @@
   function closePanel() {
     const el = document.getElementById(PANEL_ID);
     if (el) el.remove();
+    currentMap = null;
+  }
+
+  // Shared by the tab-button clicks below and by a Zonas-row click
+  // (see wireZonaRowClicks) — both need to switch the active tab, only
+  // the row click also needs to run extra logic (fitBounds) afterward.
+  function switchToTab(panelEl, tabName) {
+    panelEl.querySelectorAll('.sigc-pro-tab-btn').forEach((b) => {
+      b.classList.toggle('sigc-pro-tab-active', b.dataset.tab === tabName);
+    });
+    panelEl.querySelectorAll('.sigc-pro-tab-panel').forEach((p) => p.classList.remove('sigc-pro-tab-panel-active'));
+    const target = document.getElementById(`sigc-pro-${tabName}-panel`);
+    if (target) target.classList.add('sigc-pro-tab-panel-active');
+    if (tabName === 'mapa') maybeLoadTiles();
   }
 
   function wireTabs(panelEl) {
     panelEl.querySelectorAll('.sigc-pro-tab-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        panelEl.querySelectorAll('.sigc-pro-tab-btn').forEach((b) => b.classList.remove('sigc-pro-tab-active'));
-        panelEl.querySelectorAll('.sigc-pro-tab-panel').forEach((p) => p.classList.remove('sigc-pro-tab-panel-active'));
-        btn.classList.add('sigc-pro-tab-active');
-        const target = document.getElementById(`sigc-pro-${btn.dataset.tab}-panel`);
-        if (target) target.classList.add('sigc-pro-tab-panel-active');
-        if (btn.dataset.tab === 'mapa') maybeLoadTiles();
-      });
+      btn.addEventListener('click', () => switchToTab(panelEl, btn.dataset.tab));
     });
     panelEl.querySelector('.sigc-pro-panel-close').addEventListener('click', closePanel);
+  }
+
+  // Clicking a clickable Zonas row (see zonaRowIsClickable) switches to
+  // the Mapa tab and pans/zooms to fit that zona's (or "Sem zona"'s,
+  // idZona === '') mapped domicílios — the "open the map at this zone"
+  // behavior. Computed fresh from `joined` rather than persisting hull
+  // point arrays from renderLeafletMap: every clickable row has at
+  // least one temCoordenadas domicílio (zonaRowIsClickable's condition
+  // mirrors that), regardless of whether a hull was drawable for it.
+  function focusZonaOnMap(panelEl, joined, idZona) {
+    switchToTab(panelEl, 'mapa');
+    const coords = joined
+      .filter((r) => r.temCoordenadas && (r.idZona || '') === idZona)
+      .map((r) => [r.lat, r.lon]);
+    if (coords.length === 0) return;
+
+    if (currentMap) {
+      currentMap.fitBounds(coords, { padding: [20, 20] });
+      return;
+    }
+    // Map not rendered yet (first time this panel's Mapa tab is being
+    // shown, or the user declined tile consent earlier — maybeLoadTiles
+    // is already a no-op in the latter case and its own declined-message
+    // UI is the right feedback, so this poll just gives up quietly
+    // rather than fighting that UI with a second message). Bounded poll,
+    // same shape as waitForLeafletUrls' own — mapInitialized only turns
+    // true after renderLeafletMap has actually run.
+    maybeLoadTiles();
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      if (currentMap) {
+        clearInterval(timer);
+        currentMap.fitBounds(coords, { padding: [20, 20] });
+      } else if (attempts >= 20) { // ~2s at 100ms
+        clearInterval(timer);
+      }
+    }, 100);
+  }
+
+  function wireZonaRowClicks(panelEl, joined) {
+    panelEl.querySelectorAll('.sigc-pro-zona-row-clickable').forEach((row) => {
+      row.addEventListener('click', () => focusZonaOnMap(panelEl, joined, row.dataset.idZona || ''));
+    });
   }
 
   // Reads ultimo-movimento-map-relay.js's data-attributes, polling
@@ -360,6 +429,12 @@
   let tilesConsented = false;
   let mapInitialized = false;
   let pendingJoined = null;
+  // Live Leaflet map instance, once rendered — lets a Zonas-tab row
+  // click (see focusZonaOnMap below) call fitBounds without threading
+  // the map object through every function in between. Cleared on
+  // closePanel so a stale map from a previous open can never be
+  // fitBounds'd after its container is gone.
+  let currentMap = null;
 
   async function maybeLoadTiles() {
     if (mapInitialized) return;
@@ -388,6 +463,7 @@
   function renderLeafletMap(L, container, joined) {
     const withCoords = joined.filter((r) => r.temCoordenadas);
     const map = L.map(container);
+    currentMap = map;
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
       maxZoom: 19,
@@ -548,6 +624,7 @@
       document.body.insertAdjacentHTML('beforeend', buildPanelHtml(joined, zonaRows));
       const panelEl = document.getElementById(PANEL_ID);
       wireTabs(panelEl);
+      wireZonaRowClicks(panelEl, joined);
       mapInitialized = false;
       maybeLoadTiles();
     } finally {
@@ -675,5 +752,6 @@
     onMapaClick,
     convexHull,
     controleCentroids,
+    zonaRowIsClickable,
   };
 })();
