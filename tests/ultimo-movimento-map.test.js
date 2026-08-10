@@ -34,6 +34,23 @@ describe('parseUltimoMovimentoRows', () => {
     const rows = [['C1', 'D1', 'x']];
     expect(UM.parseUltimoMovimentoRows(headers, rows)).toBeNull();
   });
+
+  test('matches the real live header "Domicílio" (accented, not the bare "Domicilio")', () => {
+    const headers = ['Controle', 'Domicílio', 'Entrevistador', 'Tipo de Entrevista', 'Última Posição', 'Data'];
+    const rows = [['C1', 'D1', 'Fulano', 'Realizada', 'Transmitido', '01/08/2026']];
+    const map = UM.parseUltimoMovimentoRows(headers, rows);
+    expect(map.get('C1|D1')).toEqual({
+      controle: 'C1', domicilio: 'D1', entrevistador: 'Fulano',
+      tipoEntrevista: 'Realizada', ultimaPosicao: 'Transmitido', data: '01/08/2026',
+    });
+  });
+
+  test('tolerates the "#!" sort/filter marker some SIGC report grids prepend to a header', () => {
+    const headers = ['#!Controle', '!Domicílio', 'Entrevistador', 'Tipo de Entrevista', 'Última Posição', 'Data'];
+    const rows = [['C1', 'D1', 'Fulano', 'Realizada', 'Transmitido', '01/08/2026']];
+    const map = UM.parseUltimoMovimentoRows(headers, rows);
+    expect(map.get('C1|D1').entrevistador).toBe('Fulano');
+  });
 });
 
 describe('joinEnderecos', () => {

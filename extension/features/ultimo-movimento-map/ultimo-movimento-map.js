@@ -9,7 +9,7 @@
 
   const ULTIMO_MOVIMENTO_MAP_LABELS = {
     controle: 'Controle',
-    domicilio: 'Domicilio',
+    domicilio: 'Domicílio',
     entrevistador: 'Entrevistador',
     tipoEntrevista: 'Tipo de Entrevista',
     ultimaPosicao: 'Última Posição',
@@ -21,12 +21,23 @@
   // null (not throw) when a required header is missing, so a live SIGC
   // column rename fails closed with a clear message at the call site,
   // never a silent wrong-column join.
+  //
+  // Folds accents (agenda-map.js's stripAccents) and strips the "#!"
+  // sort/filter decoration some SIGC report grids prepend to a header
+  // (agenda-map.js's stripHeaderMarker) before comparing — same table,
+  // same live quirks agenda-map.js's own parseUltimoMovimentoTable
+  // already accounts for (confirmed live: "Domicílio" with the accent,
+  // occasionally "#!Domicílio"). Matching the accented label constant
+  // literally, with no folding, silently failed every header check here
+  // and made this feature unusable on the real page (2026-08-09).
   function parseUltimoMovimentoRows(headers, rows) {
     const P = window.__sigcPro;
+    const AM = window.__sigcProAgendaMapInternals;
     const idx = {};
     for (const key of Object.keys(ULTIMO_MOVIMENTO_MAP_LABELS)) {
+      const expected = P.normalizeLabel(AM.stripAccents(ULTIMO_MOVIMENTO_MAP_LABELS[key]));
       const i = headers.findIndex(
-        (h) => P.normalizeLabel(h) === P.normalizeLabel(ULTIMO_MOVIMENTO_MAP_LABELS[key]));
+        (h) => P.normalizeLabel(AM.stripAccents(AM.stripHeaderMarker(h))) === expected);
       if (i === -1) return null;
       idx[key] = i;
     }

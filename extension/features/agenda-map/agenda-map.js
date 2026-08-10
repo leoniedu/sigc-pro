@@ -512,5 +512,9 @@
   // ultimo-movimento-map.js's own consent-gated fetch rather than
   // duplicating postFiltrar/parseEnderecosHtml in a second file — this
   // directory is where check-privacy.sh sanctions the fetch.
-  window.__sigcProAgendaMapInternals = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl, fetchEnderecos };
+  // stripAccents/stripHeaderMarker are also reused directly by
+  // ultimo-movimento-map.js's own #tableRelatorio parser (same table,
+  // same live quirks — accented headers, "#!" sort/filter decoration)
+  // rather than re-diverging a second copy of this fold.
+  window.__sigcProAgendaMapInternals = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl, fetchEnderecos, stripAccents, stripHeaderMarker };
 })();
