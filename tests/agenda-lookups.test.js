@@ -205,3 +205,51 @@ describe('mergeDistribuicao', () => {
     expect(original).toEqual({ lat: -12.9, lon: -38.5 });
   });
 });
+
+describe('fetchEnderecosByAgencia caching', () => {
+  test('a second call for the same uf|agencia does not refetch', async () => {
+    const AM = window.__sigcProAgendaLookups;
+    AM.resetEnderecosAgenciaCache();
+    let calls = 0;
+    const original = global.fetch;
+    global.fetch = async () => {
+      calls += 1;
+      return { ok: true, status: 200, text: async () => `
+        <table id="tableRelatorio">
+          <thead><tr><th>Controle</th><th>N.º Domicilio</th><th>Latitude</th><th>Longitude</th><th>ID Zona</th><th>Nome ZONA</th></tr></thead>
+          <tbody><tr><td>123</td><td>1</td><td>-12.5</td><td>-38.5</td><td>Z1</td><td>Centro</td></tr></tbody>
+        </table>
+      ` };
+    };
+    try {
+      await AM.fetchEnderecosByAgencia('29', 'AG1');
+      await AM.fetchEnderecosByAgencia('29', 'AG1');
+      expect(calls).toBe(1);
+    } finally {
+      global.fetch = original;
+    }
+  });
+
+  test('a different agência is fetched separately', async () => {
+    const AM = window.__sigcProAgendaLookups;
+    AM.resetEnderecosAgenciaCache();
+    let calls = 0;
+    const original = global.fetch;
+    global.fetch = async () => {
+      calls += 1;
+      return { ok: true, status: 200, text: async () => `
+        <table id="tableRelatorio">
+          <thead><tr><th>Controle</th><th>N.º Domicilio</th><th>Latitude</th><th>Longitude</th><th>ID Zona</th><th>Nome ZONA</th></tr></thead>
+          <tbody><tr><td>123</td><td>1</td><td>-12.5</td><td>-38.5</td><td>Z1</td><td>Centro</td></tr></tbody>
+        </table>
+      ` };
+    };
+    try {
+      await AM.fetchEnderecosByAgencia('29', 'AG1');
+      await AM.fetchEnderecosByAgencia('29', 'AG2');
+      expect(calls).toBe(2);
+    } finally {
+      global.fetch = original;
+    }
+  });
+});

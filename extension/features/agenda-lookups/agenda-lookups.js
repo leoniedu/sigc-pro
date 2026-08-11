@@ -397,16 +397,35 @@
   // caller knows the report on screen is actually scoped to it — see
   // that file's filteredAgencia gate.
   //
-  // Deliberately NOT cached: enderecosCache is keyed by Controle, and a
-  // whole-agência result doesn't fit that shape. The call happens once
-  // per Mapa click, which is already an explicit user action behind a
-  // consent prompt.
+  // Cached by uf|agencia for the page's lifetime (in-memory only). The
+  // previous "deliberately not cached, it happens once per Mapa click"
+  // reasoning stopped holding when the Mapa panel gained tabs that can
+  // be reopened and re-rendered: without this, every reopen re-downloaded
+  // an entire agência's addresses.
+  //
+  // No TTL, matching enderecosCache: coordinates do not go stale within
+  // a page's life the way free-slot counts do.
+  const enderecosAgenciaCache = new Map();
+
+  function resetEnderecosAgenciaCache() {
+    enderecosAgenciaCache.clear();
+  }
+
   function fetchEnderecosByAgencia(uf, agencia) {
-    return postRelatorio({
+    const chave = `${uf}|${agencia}`;
+    const hit = enderecosAgenciaCache.get(chave);
+    if (hit) return hit;
+    const p = postRelatorio({
       slug: 'ListaEnderecos',
       body: filtroBody(uf, '*', 'ListaEnderecos', agencia),
       parse: parseEnderecosHtml,
+    }).catch((err) => {
+      // A failed fetch must not poison the cache — the next click retries.
+      enderecosAgenciaCache.delete(chave);
+      throw err;
     });
+    enderecosAgenciaCache.set(chave, p);
+    return p;
   }
 
   const ULTIMO_MOVIMENTO_SLUG = 'relatorio-ultimo-movimento';
@@ -569,5 +588,5 @@
   // ultimo-movimento-map.js's own #tableRelatorio parser (same table,
   // same live quirks — accented headers, "#!" sort/filter decoration)
   // rather than re-diverging a second copy of this fold.
-  window.__sigcProAgendaLookups = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl, fetchEnderecos, fetchEnderecosByAgencia, stripAccents, stripHeaderMarker };
+  window.__sigcProAgendaLookups = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl, fetchEnderecos, fetchEnderecosByAgencia, resetEnderecosAgenciaCache, stripAccents, stripHeaderMarker };
 })();
