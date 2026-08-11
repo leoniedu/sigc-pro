@@ -99,7 +99,7 @@
           {
             text: present(val(r, cols.nDomicilio)) ? val(r, cols.nDomicilio) : '',
             rowSpan: 2,
-            fontSize: 12,
+            fontSize: 18.5,
             bold: true,
             alignment: 'center',
             margin: [0, 2, 0, 0],
@@ -115,7 +115,7 @@
       });
 
       return {
-        table: { headerRows: 1, widths: [32, 42, '*'], body: tbody },
+        table: { headerRows: 1, widths: [48, 63, '*'], body: tbody },
         layout: {
           hLineWidth: (i) => (i <= 1 ? 0.8 : i % 2 === 1 ? 0.4 : 0),
           vLineWidth: () => 0,
@@ -130,7 +130,7 @@
     };
 
     doc.pageOrientation = 'portrait';
-    doc.pageMargins = [24, 62, 24, 32];
+    doc.pageMargins = [24, 84, 24, 36];
     // Repeated on EVERY page (pdfmake page header, not a content block).
     // Labels bold, values regular.
     doc.header = () => ({
@@ -168,19 +168,19 @@
       ];
     }
     doc.styles = {
-      hdr: { fontSize: 10 },
-      section: { fontSize: 9, bold: true, margin: [0, 0, 0, 4] },
-      th: { fontSize: 8, bold: true },
-      td: { fontSize: 8 },
-      td2: { fontSize: 7, color: '#444444' },
+      hdr: { fontSize: 15 },
+      section: { fontSize: 14, bold: true, margin: [0, 0, 0, 4] },
+      th: { fontSize: 12, bold: true },
+      td: { fontSize: 12 },
+      td2: { fontSize: 10.5, color: '#444444' },
     };
-    doc.defaultStyle = { fontSize: 8 };
+    doc.defaultStyle = { fontSize: 12 };
 
     const gerado = new Date().toLocaleString('pt-BR');
     doc.footer = (page, total) => ({
       columns: [
-        { text: `Pág. ${page} de ${total}`, fontSize: 7 },
-        { text: `Gerado em ${gerado}`, fontSize: 7, alignment: 'right' },
+        { text: `Pág. ${page} de ${total}`, fontSize: 10.5 },
+        { text: `Gerado em ${gerado}`, fontSize: 10.5, alignment: 'right' },
       ],
       margin: [24, 8, 24, 0],
     });
