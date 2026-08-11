@@ -64,6 +64,34 @@ O clique no NOME da zona mantém a função atual (focar a zona no mapa), então
 a expansão precisa de um alvo próprio — célula separada ou caret — em vez de
 roubar esse gesto.
 
+#### Cobertura: TODAS as zonas da agência
+
+`aggregateZonas` hoje itera apenas `joined`, que vem da tabela de Último
+Movimento. Uma zona da agência onde nada foi coletado ainda tem
+coordenadas mas nenhuma linha de movimento — e por isso desaparece da
+aba, justamente a zona mais interessante (nada iniciado, slots
+presumivelmente livres).
+
+Correção: semear os buckets a partir do MAPA DE ENDEREÇOS (que é
+agência-completo) e depois preencher com as linhas de movimento. Uma zona
+sem movimento aparece com zeros nas colunas de status, não some.
+
+#### Estatísticas de agendamento por zona
+
+Com a agenda juntada, cada linha de zona ganha:
+
+- **agendados** — domicílios com agendamento
+- **sem agendamento** — domicílios sem nenhum
+- **slots livres** — a contagem já existente, agora ao lado dos horários
+
+Denominador: SELECIONADOS. A Lista de Endereços já é selecionados-only
+(as colunas de zona só são preenchidas para selecionados — ver
+agenda-lookups.js), então é o universo que os dados já dão; não há
+escolha a fazer, apenas a de notar isso explicitamente.
+
+A aba deixa de ser "o que aconteceu" e passa a ser "o que falta e dá para
+marcar".
+
 ### Aba Domicílios
 
 Colunas da tabela baixada hoje: Endereço, Domicílio, Agendado, Situação,
@@ -124,6 +152,27 @@ VISIBLE either way — an absent button is indistinguishable from a broken
 extension, a mistake already made once in this project."* Com o Último
 Movimento virando a casa única da feature, "o botão sumiu" passa a ser uma
 falha bem pior do que era.
+
+## Onde mora a busca de rede
+
+A busca da agenda vai para `agenda-lookups.js`, não para
+`ultimo-movimento-map.js`. O `FETCH_DIRS` do check-privacy.sh aponta na
+mesma direção, mas NÃO é a justificativa — essa lista é editável e, de
+fato, encolhe neste trabalho (o diretório lista-agenda sai dela).
+
+As razões reais:
+
+- `ultimo-movimento-map.js` tem 968 linhas, o maior arquivo da extensão, e
+  vai crescer com três abas. Manter rede fora dele é o que impede esse
+  arquivo de virar o lugar onde tudo mora.
+- O cache de coordenadas fica em `agenda-lookups.js`. Separar os dois
+  caches do MESMO clique em módulos diferentes convida um terceiro.
+- `agenda-lookups.js` já é o módulo de "buscar um relatório em que não
+  estou e juntar por controle|domicilio" — a busca da agenda é exatamente
+  isso. Não é uma casa nova, é a existente.
+
+Custo: uma indireção via `window.__sigcProAgendaLookups`, que o arquivo do
+mapa já faz para coordenadas.
 
 ## Reuso
 
