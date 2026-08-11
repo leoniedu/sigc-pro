@@ -905,6 +905,24 @@
     return out;
   }
 
+  const TITLE_MAPA_ATIVO = 'Mapa de domicílios por zona (SIGC-PRO)';
+  const TITLE_MAPA_SEM_AGENCIA =
+    'Filtre por uma agência (e clique em Filtrar) para ver o mapa — ' +
+    'um relatório de estado inteiro é grande demais para buscar coordenadas.';
+
+  // Button stays VISIBLE either way — an absent button is
+  // indistinguishable from a broken extension, the same rule
+  // lista-agenda.js states. Now that Último Movimento is the only home
+  // for this feature, "the button disappeared" is a worse failure than
+  // it was when Lista de Endereços still carried AGENDA PRO.
+  function atualizarEstadoBotaoMapa() {
+    const btn = document.getElementById(BUTTON_ID);
+    if (!btn) return;
+    const ok = !!filteredAgencia();
+    btn.disabled = !ok;
+    btn.title = ok ? TITLE_MAPA_ATIVO : TITLE_MAPA_SEM_AGENCIA;
+  }
+
   // Anchored to the DataTables toolbar (.dt-buttons), alongside CSV-pro
   // — not Filtrar/Cancelar — since Mapa needs the filtered table's rows
   // to do anything useful, same as CSV-pro itself; the toolbar only
@@ -917,10 +935,11 @@
     anchor: (ctx) => ctx.dtToolbar(),
     // Also requires that the report on screen was filtered by a single
     // agência — the captured Filtrar value, not the live dropdown, so
-    // merely changing the selector neither shows nor hides the button
-    // while the old table is still displayed. Mapa's one agência-scoped
-    // Lista de Endereços call can't cover a TODOS report, so the button
-    // stays absent there rather than appearing and refusing on click.
+    // merely changing the selector doesn't flip the button's enabled
+    // state while the old table is still displayed. Mapa's one
+    // agência-scoped Lista de Endereços call can't cover a TODOS report,
+    // so the button mounts disabled there rather than vanishing outright
+    // — see atualizarEstadoBotaoMapa.
     //
     // The bind rides along on the mount tick: it's idempotent, and this
     // is already the one place guaranteed to run repeatedly on the page.
@@ -929,7 +948,8 @@
       bindFiltrarCapture();
       const hasTable = !!window.__sigcPro.getDataTable();
       adoptRenderedAgencia(hasTable);
-      return hasTable && !!filteredAgencia();
+      if (hasTable) atualizarEstadoBotaoMapa();
+      return hasTable;
     },
     build: () => {
       const btn = window.__sigcPro.makeDtProButton({
@@ -939,9 +959,17 @@
         // sitting high/off-center in the box (confirmed visually), since
         // the button's vertical centering is tuned for two lines.
         lines: ['MAPA', 'PRO'],
-        title: 'Mapa de domicílios por zona (SIGC-PRO)',
+        title: TITLE_MAPA_ATIVO,
         onClick: () => onMapaClick(btn),
       });
+      // atualizarEstadoBotaoMapa() looks the button up by id in the DOM,
+      // but build() runs BEFORE mountWidget inserts its return value —
+      // set the initial state on btn directly instead of through that
+      // lookup, or a freshly-mounted button would flash as enabled until
+      // the next mount tick corrected it.
+      const ok = !!filteredAgencia();
+      btn.disabled = !ok;
+      btn.title = ok ? TITLE_MAPA_ATIVO : TITLE_MAPA_SEM_AGENCIA;
       return btn;
     },
   });
@@ -964,5 +992,6 @@
     resetFilteredAgencia,
     adoptRenderedAgencia,
     missingEnderecoCount,
+    atualizarEstadoBotaoMapa,
   };
 })();

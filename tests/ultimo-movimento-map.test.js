@@ -602,3 +602,48 @@ describe('adoptRenderedAgencia', () => {
     expect(UM.filteredAgencia()).toBe('');
   });
 });
+
+describe('MAPA PRO button state', () => {
+  test('disabled with an explanatory tooltip when no single agência is filtered', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    // A prior describe block (adoptRenderedAgencia) leaves a stray
+    // #IdAgencia in document.body; clear it so this test's own
+    // getElementById('IdAgencia') lookups aren't shadowed by it.
+    document.body.innerHTML = '';
+    I.resetFilteredAgencia();
+    const btn = document.createElement('button');
+    btn.id = 'sigc-pro-ultimo-movimento-map-btn';
+    document.body.appendChild(btn);
+    try {
+      I.atualizarEstadoBotaoMapa();
+      expect(btn.disabled).toBe(true);
+      expect(btn.title).toContain('agência');
+    } finally {
+      btn.remove();
+    }
+  });
+
+  test('enabled once a single agência is filtered', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    document.body.innerHTML = '';
+    I.resetFilteredAgencia();
+    const sel = document.createElement('select');
+    sel.id = 'IdAgencia';
+    const opt = document.createElement('option');
+    opt.value = 'AG1';
+    sel.appendChild(opt);
+    sel.value = 'AG1';
+    document.body.appendChild(sel);
+    const btn = document.createElement('button');
+    btn.id = 'sigc-pro-ultimo-movimento-map-btn';
+    document.body.appendChild(btn);
+    try {
+      I.captureFilteredAgencia();
+      I.atualizarEstadoBotaoMapa();
+      expect(btn.disabled).toBe(false);
+    } finally {
+      btn.remove();
+      sel.remove();
+    }
+  });
+});
