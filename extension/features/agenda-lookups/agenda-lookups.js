@@ -289,6 +289,170 @@
     return merged;
   }
 
+  // --- agenda helpers (moved verbatim from lista-agenda.js) -----------
+
+  // The agenda response carries name, sex, birth date, address and
+  // telephone per slot. Keep ONLY what the annotations need, so no richer
+  // object is ever held in memory or reachable from a later change.
+  function parseSlots(json) {
+    if (!Array.isArray(json)) return [];
+    return json.map((s) => {
+      const f = window.__sigcPro.parseAgendaSlotTitle(s && s.title);
+      const start = String((s && s.start) || '');
+      return {
+        start,
+        isoDate: start.slice(0, 10),
+        controle: f['Controle'] || '',
+        domicilio: f['Domicílio'] || '',
+        zonas: f['Zonas'] || '',
+        // An open slot's title is only "Zonas: …" — no Controle line,
+        // since nothing is assigned yet. The JSON has no CSS class to
+        // read, so this IS the open test.
+        aberto: !f['Controle'],
+      };
+    });
+  }
+
+  // "29JDM8 - 29.2.01.02 29_Linus_Lauro" -> "29JDM8", the same ID Zona
+  // the table carries in column 18. Entries without the separator key on
+  // themselves rather than being dropped.
+  function zonaIdOf(entry) {
+    const s = String(entry ?? '').trim();
+    const i = s.indexOf(' - ');
+    return i === -1 ? s : s.slice(0, i).trim();
+  }
+
+  const chaveDomicilio = (controle, domicilio) => `${controle}|${domicilio}`;
+
+  function indexByControle(slots) {
+    const map = new Map();
+    slots.forEach((s) => {
+      if (s.aberto || !s.controle) return;
+      const k = chaveDomicilio(s.controle, s.domicilio);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(s);
+    });
+    return map;
+  }
+
+  // Free = open AND on/after the prazo mínimo. A slot before the cutoff
+  // cannot be filled anymore, so counting it would advertise capacity
+  // that does not exist. fimIso (optional) bounds the far end so a slot
+  // months out does not overstate realistically bookable capacity.
+  //
+  // Manhã before 13:00, Tarde from 13:00 — the same cut Slots Abertos
+  // uses. Shared boundary, or the two features drift.
+  const TARDE_FROM_MIN = 13 * 60;
+
+  function indexZonaLivres(slots, minDateIso, fimIso) {
+    const map = new Map();
+    slots.forEach((s) => {
+      if (!s.aberto) return;
+      if (s.isoDate && s.isoDate < minDateIso) return;
+      if (fimIso && s.isoDate && s.isoDate > fimIso) return;
+      const min = window.__sigcPro.toMin(horaDeIso(s.start));
+      if (min == null) return;
+      const turno = min < TARDE_FROM_MIN ? 'manha' : 'tarde';
+      const ids = new Set(
+        window.__sigcPro.parseZonaEntries(s.zonas).map(zonaIdOf).filter(Boolean));
+      if (ids.size === 0) return;
+      const peso = 1 / ids.size;
+      ids.forEach((id) => {
+        if (!map.has(id)) {
+          map.set(id, { manha: 0, tarde: 0, inteiro: 0, peso: 0, compartilhado: false });
+        }
+        const cell = map.get(id);
+        cell[turno] += 1;
+        cell.inteiro += 1;
+        cell.peso += peso;
+        if (ids.size > 1) cell.compartilhado = true;
+      });
+    });
+    return map;
+  }
+
+  // The ONE selection behind both the turno counts and the list below
+  // them. Deriving them separately is how a summary ends up disagreeing
+  // with the detail it summarises.
+  function slotsLivresDaJanela(slots, zonaId, minDateIso, fimIso) {
+    return (slots || [])
+      .filter((s) => {
+        if (!s.aberto) return false;
+        if (!s.isoDate || s.isoDate < minDateIso || s.isoDate > fimIso) return false;
+        if (window.__sigcPro.toMin(horaDeIso(s.start)) == null) return false;
+        return window.__sigcPro.parseZonaEntries(s.zonas).map(zonaIdOf).includes(zonaId);
+      })
+      .map((s) => ({ isoDate: s.isoDate, hora: horaDeIso(s.start) }))
+      .sort((a, b) => a.isoDate.localeCompare(b.isoDate) || a.hora.localeCompare(b.hora));
+  }
+
+  function agruparPorDia(livres) {
+    const dias = new Map();
+    (livres || []).forEach((s) => {
+      if (!dias.has(s.isoDate)) dias.set(s.isoDate, []);
+      dias.get(s.isoDate).push(s.hora);
+    });
+    return [...dias.entries()].map(([isoDate, horas]) => ({ isoDate, horas }));
+  }
+
+  // Grouped by day rather than a flat list: a fortnight of slots stays a
+  // short block you can scan for "when this week?".
+  function buildSlotsLivresHtml(grupos) {
+    const e = window.__sigcPro.escapeHtml;
+    if (!grupos || grupos.length === 0) {
+      return '<p class="sp-livres-vazio">Nenhum slot livre no período.</p>';
+    }
+    const linhas = grupos.map((g) => {
+      const dia = `${g.isoDate.slice(8, 10)}/${g.isoDate.slice(5, 7)}`;
+      const horas = g.horas.map((h) => `<span class="sp-hora">${e(h)}</span>`).join(' ');
+      return `<div class="sp-dia"><strong>${e(dia)}</strong> ${horas}</div>`;
+    }).join('\n');
+    return `<div class="sp-livres">${linhas}</div>`;
+  }
+
+  // HH:MM out of a full ISO timestamp, or '' if unparsable — a household
+  // scheduled at 09:00 vs 15:30 matters when planning a day, so the time
+  // is shown alongside the date wherever it renders.
+  function horaDoStart(start) {
+    const m = /^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})/.exec(String(start || ''));
+    return m ? `${m[1]}:${m[2]}` : '';
+  }
+
+  // HH:MM from an ISO string for the turno split — a bare slice rather
+  // than a regex so the caller passes the result to toMin, which rejects
+  // unparseable values itself.
+  const horaDeIso = (iso) => String(iso || '').slice(11, 16);
+
+  // Only one schedule is live at a time, so a future date wins outright;
+  // otherwise show the most recent past one, flagged so a completed
+  // interview does not read as an upcoming appointment. Sorted by the
+  // full `start` timestamp, not just isoDate: two slots on the same day
+  // would otherwise order arbitrarily (whichever the response listed
+  // first), so the earliest appointment of a day was not deterministically
+  // chosen.
+  function pickAgendado(slots, todayIso) {
+    if (!slots || slots.length === 0) return null;
+    const ordenado = [...slots].sort((a, b) => a.start.localeCompare(b.start));
+    const futura = ordenado.find((s) => s.isoDate >= todayIso);
+    const escolhido = futura || ordenado[ordenado.length - 1];
+    return {
+      data: window.__sigcPro.isoToBr(escolhido.isoDate),
+      hora: horaDoStart(escolhido.start),
+      // Raw ISO timestamp, kept alongside the pt-BR display string as the
+      // exported table's sort key: it sorts correctly as a plain string,
+      // sparing the inline sort script from parsing "dd/mm/yyyy HH:MM".
+      ordenavel: escolhido.start,
+      futura: !!futura,
+    };
+  }
+
+  // "dd/mm/yyyy HH:MM", degrading to date-only when the time can't be
+  // parsed — never "dd/mm/yyyy undefined" or a stray trailing separator.
+  function fmtAgendado(data, hora) {
+    if (!data) return '';
+    return hora ? `${data} ${hora}` : data;
+  }
+
   // --- network (the sanctioned exception) -----------------------------
 
   const FORM_POST_HEADERS = {
@@ -498,6 +662,59 @@
       distribuicaoCache, postDistribuicao, uf, controles, 'Distribuição');
   }
 
+  // Query built by hand: percent-encoding the "$$" in the F5 path turns
+  // the URL into a 404 (learned in pns.zonas/R/sigc_agendamentos.R).
+  async function fetchAgenda(uf, startIso, endIso) {
+    const query = `idUf=${encodeURIComponent(uf)}` +
+      `&start=${encodeURIComponent(startIso)}` +
+      `&end=${encodeURIComponent(endIso)}` +
+      '&semana=true&idEquipe=';
+    const res = await window.__sigcPro.fetchViaGateway(`/AdministracaoAgenda/ObterSlots?${query}`, {
+      credentials: 'same-origin',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    });
+    return parseSlots(await res.json());
+  }
+
+  // --- caches (agenda) --------------------------------------------------
+  // In-memory only, never persisted (zero-storage guarantee). A TTL is
+  // needed where agenda-lookups' coordinate cache has none: someone else
+  // booking a slot makes these counts wrong within a page's life.
+  const TTL_MS = 5 * 60 * 1000;
+  const cacheAgenda = new Map();
+
+  function doCache(cache, chave, produzir) {
+    const hit = cache.get(chave);
+    if (hit && Date.now() - hit.em < TTL_MS) return Promise.resolve({ ...hit, cache: true });
+    return produzir().then((dados) => {
+      const entrada = { dados, em: Date.now() };
+      cache.set(chave, entrada);
+      return { ...entrada, cache: false };
+    });
+  }
+
+  const horaDe = (ms) => new Date(ms).toTimeString().slice(0, 5);
+
+  // A cache hit and a fresh fetch must not look the same: the panel shows
+  // the fetch time specifically because a stale count causes a real
+  // double-booking, so the one case that IS knowably stale (served from
+  // the in-memory cache, up to TTL_MS old) has to say so rather than just
+  // naming the clock time as if it had just been fetched.
+  function fetchLabel(em, cache) {
+    return cache ? `${horaDe(em)} (em cache)` : horaDe(em);
+  }
+
+  function resetAgendaCache() {
+    cacheAgenda.clear();
+  }
+
+  function fetchAgendaSlots(uf, startIso, endIso) {
+    const chave = `${uf}|${startIso}|${endIso}`;
+    return doCache(cacheAgenda, chave, () => fetchAgenda(uf, startIso, endIso));
+  }
+
   // --- UI --------------------------------------------------------------
 
   const BUTTON_ID = 'sigc-pro-agenda-mapa-button';
@@ -588,5 +805,11 @@
   // ultimo-movimento-map.js's own #tableRelatorio parser (same table,
   // same live quirks — accented headers, "#!" sort/filter decoration)
   // rather than re-diverging a second copy of this fold.
-  window.__sigcProAgendaLookups = { parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl, fetchEnderecos, fetchEnderecosByAgencia, resetEnderecosAgenciaCache, stripAccents, stripHeaderMarker };
+  window.__sigcProAgendaLookups = {
+    parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl,
+    fetchEnderecos, fetchEnderecosByAgencia, resetEnderecosAgenciaCache, stripAccents, stripHeaderMarker,
+    parseSlots, zonaIdOf, chaveDomicilio, indexByControle, pickAgendado, fmtAgendado, horaDoStart, horaDeIso,
+    slotsLivresDaJanela, agruparPorDia, buildSlotsLivresHtml, TARDE_FROM_MIN, indexZonaLivres,
+    fetchAgendaSlots, resetAgendaCache,
+  };
 })();

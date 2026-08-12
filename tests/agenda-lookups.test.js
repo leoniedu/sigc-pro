@@ -253,3 +253,40 @@ describe('fetchEnderecosByAgencia caching', () => {
     }
   });
 });
+
+describe('agenda helpers moved from lista-agenda', () => {
+  const AM = () => window.__sigcProAgendaLookups;
+
+  test('parseSlots keeps only the sanctioned fields', () => {
+    const [s] = AM().parseSlots([{
+      start: '2026-08-10T09:00:00',
+      title: 'Zonas: 29JDM8 - x\nControle: 292740805060337\nDomicílio: 1\nTelefone: 71 99999-0000',
+    }]);
+    expect(Object.keys(s).sort())
+      .toEqual(['aberto', 'controle', 'domicilio', 'isoDate', 'start', 'zonas'].sort());
+    expect(JSON.stringify(s)).not.toContain('71 99999-0000');
+  });
+
+  test('pickAgendado prefers the next future visit', () => {
+    const slots = [
+      { start: '2026-07-01T09:00:00', isoDate: '2026-07-01' },
+      { start: '2026-09-01T09:00:00', isoDate: '2026-09-01' },
+    ];
+    const r = AM().pickAgendado(slots, '2026-08-01');
+    expect(r.futura).toBe(true);
+    expect(r.ordenavel).toBe('2026-09-01T09:00:00');
+  });
+
+  test('slotsLivresDaJanela + agruparPorDia list open slots by day', () => {
+    const slots = [
+      { aberto: true, isoDate: '2026-08-12', start: '2026-08-12T09:00:00', zonas: '29JDM8 - x' },
+      { aberto: true, isoDate: '2026-08-12', start: '2026-08-12T14:00:00', zonas: '29JDM8 - x' },
+      { aberto: false, isoDate: '2026-08-12', start: '2026-08-12T10:00:00', zonas: '29JDM8 - x' },
+    ];
+    const livres = AM().slotsLivresDaJanela(slots, '29JDM8', '2026-08-01', '2026-08-31');
+    expect(livres).toHaveLength(2);
+    const grupos = AM().agruparPorDia(livres);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].horas).toEqual(['09:00', '14:00']);
+  });
+});
