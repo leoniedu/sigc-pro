@@ -133,7 +133,7 @@ describe('aggregateZonas', () => {
   ];
 
   test('groups by idZona, one row per distinct zona', () => {
-    const rows = UM.aggregateZonas(joined);
+    const rows = UM.aggregateZonas(joined, new Map());
     const zonaRow = rows.find((r) => r.idZona === '11.1.01.08');
     expect(zonaRow).toMatchObject({
       idZona: '11.1.01.08', nomeZona: 'ESCOLA POLICIA',
@@ -143,7 +143,7 @@ describe('aggregateZonas', () => {
   });
 
   test('households with temZona false land in a single "Sem zona" row (idZona null)', () => {
-    const rows = UM.aggregateZonas(joined);
+    const rows = UM.aggregateZonas(joined, new Map());
     const semZona = rows.find((r) => r.idZona === null);
     expect(semZona).toBeDefined();
     expect(semZona.totalDomicilios).toBe(2);
@@ -155,13 +155,51 @@ describe('aggregateZonas', () => {
   test('unrecognized tipoEntrevista values count under outros', () => {
     const rows = UM.aggregateZonas([
       { idZona: 'Z1', zona: 'Zona 1', tipoEntrevista: 'Endereço Não Localizado', temCoordenadas: true, temZona: true },
-    ]);
+    ], new Map());
     expect(rows[0].outros).toBe(1);
     expect(rows[0].realizada).toBe(0);
   });
 
   test('empty input returns empty array, no Sem zona row', () => {
-    expect(UM.aggregateZonas([])).toEqual([]);
+    expect(UM.aggregateZonas([], new Map())).toEqual([]);
+  });
+});
+
+describe('aggregateZonas coverage and agenda stats', () => {
+  test('a zona with coordinates but no movimento rows still appears, with zeros', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const enderecos = new Map([
+      ['C1|1', { lat: -12.9, lon: -38.5, zona: '29JDM8 - x', idZona: '29JDM8' }],
+      ['C9|1', { lat: -12.8, lon: -38.4, zona: '29LR9E - y', idZona: '29LR9E' }],
+    ]);
+    const joined = [{
+      controle: 'C1', domicilio: '1', idZona: '29JDM8', zona: '29JDM8 - x',
+      temZona: true, temCoordenadas: true, tipoEntrevista: 'REALIZADA', agendado: '',
+    }];
+    const rows = I.aggregateZonas(joined, enderecos);
+    const ids = rows.map((r) => r.idZona).sort();
+    expect(ids).toContain('29LR9E');
+    const vazia = rows.find((r) => r.idZona === '29LR9E');
+    expect(vazia.totalDomicilios).toBe(0);
+    expect(vazia.realizada).toBe(0);
+  });
+
+  test('counts agendados and semAgendamento per zona', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const enderecos = new Map([
+      ['C1|1', { lat: -12.9, lon: -38.5, zona: '29JDM8 - x', idZona: '29JDM8' }],
+      ['C1|2', { lat: -12.9, lon: -38.5, zona: '29JDM8 - x', idZona: '29JDM8' }],
+    ]);
+    const joined = [
+      { controle: 'C1', domicilio: '1', idZona: '29JDM8', zona: '29JDM8 - x',
+        temZona: true, temCoordenadas: true, tipoEntrevista: 'REALIZADA',
+        agendado: '01/09/2026 09:00' },
+      { controle: 'C1', domicilio: '2', idZona: '29JDM8', zona: '29JDM8 - x',
+        temZona: true, temCoordenadas: true, tipoEntrevista: 'REALIZADA', agendado: '' },
+    ];
+    const z = I.aggregateZonas(joined, enderecos).find((r) => r.idZona === '29JDM8');
+    expect(z.agendados).toBe(1);
+    expect(z.semAgendamento).toBe(1);
   });
 });
 
@@ -261,7 +299,7 @@ describe('buildPanelHtml', () => {
       ultimaPosicao: 'Transmitido', data: '01/08/2026', lat: -8.5, lon: -63.8,
       zona: 'Z1', idZona: 'Z1', temCoordenadas: true, temZona: true },
   ];
-  const zonaRows = UM.aggregateZonas(joined);
+  const zonaRows = UM.aggregateZonas(joined, new Map());
 
   test('includes both tab buttons and both panels', () => {
     const html = UM.buildPanelHtml(joined, zonaRows);
@@ -305,7 +343,7 @@ describe('buildPanelHtml', () => {
         ultimaPosicao: 'Transmitido', data: '01/08/2026', lat: null, lon: null,
         zona: 'Z1', idZona: 'Z1', temCoordenadas: false, temZona: true },
     ];
-    const noCoordsZonaRows = UM.aggregateZonas(noCoordsJoined);
+    const noCoordsZonaRows = UM.aggregateZonas(noCoordsJoined, new Map());
     const html = UM.buildPanelHtml(noCoordsJoined, noCoordsZonaRows);
     expect(html).not.toContain('sigc-pro-zonas-hint');
   });

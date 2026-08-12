@@ -117,30 +117,50 @@
     'Recusa': 'recusa',
   };
 
-  // joined: from joinEnderecos. One output row per distinct idZona, plus
-  // exactly one row with idZona===null aggregating every row whose
-  // temZona is false (non-biomarcador selecionados — see spec
-  // "Selecionados without zona"). Never silently drops a row: every
-  // input row lands in exactly one output row.
-  function aggregateZonas(joined) {
+  // joined: from joinAgenda (carries `agendado`). enderecosMap: the
+  // agência-complete controle|domicilio -> {lat, lon, zona, idZona} map
+  // (see joinEnderecos above) — seeded here FIRST, before folding in
+  // `joined`, so a zona with addresses/coordinates but zero movimento
+  // rows (nothing collected yet) still gets a bucket, all zeros, instead
+  // of silently disappearing. Denominator throughout is selecionados:
+  // the Lista de Endereços response is already selecionados-only, so no
+  // extra filtering happens here.
+  //
+  // One output row per distinct idZona (from either source), plus
+  // exactly one row with idZona===null aggregating every movimento row
+  // whose temZona is false (non-biomarcador selecionados — see spec
+  // "Selecionados without zona"). Never silently drops a movimento row:
+  // every row in `joined` lands in exactly one output row.
+  function aggregateZonas(joined, enderecosMap) {
     const byZona = new Map(); // key: idZona || special string
     const SEM_ZONA_KEY = '__SEM_ZONA__';
-    joined.forEach((r) => {
+    const novoBucket = (idZona, nomeZona) => ({
+      idZona, nomeZona,
+      realizada: 0, naoIniciada: 0, domicilioFechado: 0, recusa: 0, outros: 0,
+      totalDomicilios: 0, semCoordenadas: 0, agendados: 0, semAgendamento: 0,
+    });
+
+    (enderecosMap || new Map()).forEach((info) => {
+      const id = info && info.idZona;
+      if (!id) return;
+      if (!byZona.has(id)) byZona.set(id, novoBucket(id, info.zona || id));
+    });
+
+    (joined || []).forEach((r) => {
       const key = r.temZona ? r.idZona : SEM_ZONA_KEY;
       if (!byZona.has(key)) {
-        byZona.set(key, {
-          idZona: r.temZona ? r.idZona : null,
-          nomeZona: r.temZona ? r.zona : 'Sem zona',
-          realizada: 0, naoIniciada: 0, domicilioFechado: 0, recusa: 0, outros: 0,
-          totalDomicilios: 0, semCoordenadas: 0,
-        });
+        byZona.set(key, novoBucket(r.temZona ? r.idZona : null,
+          r.temZona ? r.zona : 'Sem zona'));
       }
       const bucket = byZona.get(key);
       const coluna = TIPO_COLUNA[r.tipoEntrevista] || 'outros';
       bucket[coluna] += 1;
       bucket.totalDomicilios += 1;
       if (!r.temCoordenadas) bucket.semCoordenadas += 1;
+      if (r.agendado) bucket.agendados += 1;
+      else bucket.semAgendamento += 1;
     });
+
     return Array.from(byZona.values());
   }
 
@@ -827,7 +847,7 @@
       const comAgenda = joinAgenda(joined, agendaIdx, todayIso);
 
       pendingJoined = comAgenda;
-      const zonaRows = aggregateZonas(comAgenda);
+      const zonaRows = aggregateZonas(comAgenda, enderecosMap);
 
       closePanel();
       document.body.insertAdjacentHTML('beforeend', buildPanelHtml(comAgenda, zonaRows));
