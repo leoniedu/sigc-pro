@@ -90,6 +90,40 @@ describe('joinEnderecos', () => {
   });
 });
 
+describe('joinAgenda', () => {
+  test('attaches the chosen agendamento to the matching household', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const joined = [{ controle: 'C1', domicilio: '1' }, { controle: 'C1', domicilio: '2' }];
+    const agendaIdx = new Map([
+      ['C1|1', [{ start: '2026-09-01T09:00:00', isoDate: '2026-09-01' }]],
+    ]);
+    const rows = I.joinAgenda(joined, agendaIdx, '2026-08-11');
+    expect(rows[0].agendado).toBe('01/09/2026 09:00');
+    expect(rows[0].futura).toBe(true);
+    expect(rows[0].agendadoOrdenavel).toBe('2026-09-01T09:00:00');
+    expect(rows[1].agendado).toBe('');
+  });
+
+  test('a past visit is kept and flagged not futura', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const joined = [{ controle: 'C1', domicilio: '1' }];
+    const agendaIdx = new Map([
+      ['C1|1', [{ start: '2026-07-01T14:30:00', isoDate: '2026-07-01' }]],
+    ]);
+    const rows = I.joinAgenda(joined, agendaIdx, '2026-08-11');
+    expect(rows[0].agendado).toBe('01/07/2026 14:30');
+    expect(rows[0].futura).toBe(false);
+  });
+
+  test('an empty agenda index leaves every row blank, never undefined', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const rows = I.joinAgenda([{ controle: 'C1', domicilio: '1' }], new Map(), '2026-08-11');
+    expect(rows[0].agendado).toBe('');
+    expect(rows[0].agendadoOrdenavel).toBe('');
+    expect(rows[0].futura).toBe(false);
+  });
+});
+
 describe('aggregateZonas', () => {
   const joined = [
     { idZona: '11.1.01.08', zona: 'ESCOLA POLICIA', tipoEntrevista: 'Realizada', temCoordenadas: true, temZona: true },
@@ -644,6 +678,74 @@ describe('MAPA PRO button state', () => {
     } finally {
       btn.remove();
       sel.remove();
+    }
+  });
+});
+
+// The agenda fetch is an enrichment, not the feature's core (that's the
+// coordinate join) — a rejected agenda fetch must never cost the map.
+describe('onMapaClick — agenda fetch is non-fatal', () => {
+  function fakeDataTable(header, rows) {
+    const node = document.createElement('table');
+    const api = {
+      table: () => ({ node: () => node }),
+      columns: () => ({
+        header: () => ({ toArray: () => header.map((h) => ({ textContent: h })) }),
+      }),
+      rows: () => ({ data: () => ({ toArray: () => rows }) }),
+    };
+    return api;
+  }
+
+  function setUpDom({ header, rows }) {
+    document.body.innerHTML =
+      '<select id="IdUf"><option value="29" selected>29</option></select>' +
+      '<select id="IdAgencia"><option value="0570" selected>0570</option></select>' +
+      '<button id="btnFiltrar">Filtrar</button>';
+    const table = fakeDataTable(header, rows);
+    window.jQuery = window.$ = Object.assign(
+      () => ({ DataTable: () => table }),
+      { fn: { dataTable: true } },
+    );
+  }
+
+  const HEADER = ['Controle', 'Domicilio', 'Entrevistador', 'Tipo Entrevista', 'Última Posição', 'Data'];
+  const ROWS = [['C1', '1', 'Fulano', 'Realizada', 'Transmitido', '01/08/2026']];
+
+  test('the map panel still renders when the agenda fetch rejects', async () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    setUpDom({ header: HEADER, rows: ROWS });
+    I.resetFilteredAgencia();
+    I.captureFilteredAgencia();
+
+    const originalConfirm = window.confirm;
+    const originalAM = window.__sigcProAgendaLookups;
+    window.confirm = () => true;
+    window.__sigcProAgendaLookups = {
+      ...originalAM,
+      fetchEnderecosByAgencia: async () => new Map([
+        ['C1|1', { lat: -8.5, lon: -63.8, zona: 'Z1', idZona: 'Z1' }],
+      ]),
+      fetchAgendaSlots: async () => { throw new Error('network down'); },
+    };
+    const warnSpy = console.warn;
+    const warnCalls = [];
+    console.warn = (...args) => warnCalls.push(args);
+
+    const btn = document.createElement('button');
+    try {
+      await I.onMapaClick(btn);
+      const panel = document.getElementById('sigc-pro-ultimo-movimento-map-panel');
+      expect(panel).not.toBeNull();
+      expect(warnCalls.some((args) => String(args[0]).includes('agenda fetch failed'))).toBe(true);
+    } finally {
+      console.warn = warnSpy;
+      window.confirm = originalConfirm;
+      window.__sigcProAgendaLookups = originalAM;
+      delete window.jQuery;
+      delete window.$;
+      document.getElementById('sigc-pro-ultimo-movimento-map-panel')?.remove();
+      I.resetFilteredAgencia();
     }
   });
 });

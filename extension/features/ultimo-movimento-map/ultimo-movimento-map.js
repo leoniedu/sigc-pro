@@ -92,6 +92,24 @@
     return out;
   }
 
+  // Agenda rows joined onto the already-coordinate-joined households, on
+  // the same controle|domicilio key. Empty strings (never undefined) so
+  // the renderers can write cells without guarding — the convention
+  // lista-agenda.js's annotateRow established.
+  function joinAgenda(joined, agendaIdx, todayIso) {
+    const AM = window.__sigcProAgendaLookups;
+    return (joined || []).map((r) => {
+      const slots = (agendaIdx && agendaIdx.get(`${r.controle}|${r.domicilio}`)) || [];
+      const ag = AM.pickAgendado(slots, todayIso);
+      return {
+        ...r,
+        agendado: ag ? AM.fmtAgendado(ag.data, ag.hora) : '',
+        agendadoOrdenavel: ag ? ag.ordenavel : '',
+        futura: ag ? ag.futura : false,
+      };
+    });
+  }
+
   const TIPO_COLUNA = {
     'Realizada': 'realizada',
     'Não Iniciada': 'naoIniciada',
@@ -253,15 +271,10 @@
     cssInjected = true;
   }
 
-  // Says "uma consulta", singular, because that is now literally true:
-  // the coordinate lookup is ONE agência-scoped request, not one per
-  // Controle as it was before 2026-08-10. A consent prompt that
-  // overstates what it does is worse than none — it trains the user to
-  // discount it.
   const FETCH_CONSENT_MSG =
-    'SIGC-PRO: isto fará uma consulta ao próprio servidor do SIGC para ' +
-    'obter a Lista de Endereços (coordenadas e zona) da agência filtrada. ' +
-    'Nenhum dado sai do IBGE. Continuar?';
+    'SIGC-PRO: isto fará duas consultas ao próprio servidor do SIGC — a ' +
+    'Lista de Endereços (coordenadas e zona) da agência filtrada e a ' +
+    'agenda da UF. Nenhum dado sai do IBGE. Continuar?';
 
   // In-memory only (zero-storage guarantee): re-asked on every page
   // load, but not on every click within one. Mirrors agenda-lookups.js's
@@ -796,14 +809,31 @@
           'endereço na consulta e ficarão sem coordenadas/zona.');
       }
       const joined = joinEnderecos(movimentoMap, enderecosMap);
-      pendingJoined = joined;
-      const zonaRows = aggregateZonas(joined);
+
+      // The agenda is an enrichment, not the feature's core (that's the
+      // coordinate join above) — a rejected agenda fetch must never cost
+      // the map. Falls back to an empty index, leaving every `agendado`
+      // blank, same fail-open shape as the Lista de Endereços fetch above.
+      let agendaIdx = new Map();
+      try {
+        const ano = new Date().getFullYear();
+        const agenda = await AM.fetchAgendaSlots(
+          uf, `${ano}-01-01T00:00:00`, `${ano + 1}-01-01T00:00:00`);
+        agendaIdx = AM.indexByControle(agenda.dados);
+      } catch (err) {
+        console.warn(`${TAG} agenda fetch failed:`, err);
+      }
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const comAgenda = joinAgenda(joined, agendaIdx, todayIso);
+
+      pendingJoined = comAgenda;
+      const zonaRows = aggregateZonas(comAgenda);
 
       closePanel();
-      document.body.insertAdjacentHTML('beforeend', buildPanelHtml(joined, zonaRows));
+      document.body.insertAdjacentHTML('beforeend', buildPanelHtml(comAgenda, zonaRows));
       const panelEl = document.getElementById(PANEL_ID);
       wireTabs(panelEl);
-      wireZonaRowClicks(panelEl, joined);
+      wireZonaRowClicks(panelEl, comAgenda);
       mapInitialized = false;
       maybeLoadTiles();
     } finally {
@@ -977,6 +1007,7 @@
   window.__sigcProUltimoMovimentoMapInternals = {
     parseUltimoMovimentoRows,
     joinEnderecos,
+    joinAgenda,
     aggregateZonas,
     zonaColor,
     statusColor,
