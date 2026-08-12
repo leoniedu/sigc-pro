@@ -355,6 +355,89 @@ describe('buildPanelHtml', () => {
   });
 });
 
+describe('agendamento in the marker popup', () => {
+  test('the popup shows Agendado when one exists', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const html = I.buildPopupHtml({
+      controle: 'C1', domicilio: '1', entrevistador: 'MARIA',
+      tipoEntrevista: 'PRESENCIAL', idZona: '29JDM8',
+      lat: -12.9, lon: -38.5, agendado: '01/09/2026 09:00', futura: true,
+    });
+    expect(html).toContain('Agendado');
+    expect(html).toContain('01/09/2026 09:00');
+  });
+
+  test('the popup omits the Agendado line entirely when there is none', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const html = I.buildPopupHtml({
+      controle: 'C1', domicilio: '1', entrevistador: 'MARIA',
+      tipoEntrevista: 'PRESENCIAL', idZona: '29JDM8',
+      lat: -12.9, lon: -38.5, agendado: '', futura: false,
+    });
+    expect(html).not.toContain('Agendado');
+  });
+});
+
+describe('buildDomiciliosTabHtml', () => {
+  // Real household row shape (joinEnderecos + joinAgenda output) has no
+  // `endereco` field — see ultimo-movimento-map.js's joinEnderecos/joinAgenda.
+  // The first column is Controle + Domicílio instead of a street address.
+  test('renders one row per household with every column', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const html = I.buildDomiciliosTabHtml([{
+      controle: 'C1', domicilio: '1', agendado: '01/09/2026 09:00',
+      ultimaPosicao: 'TRANSMITIDO', tipoEntrevista: 'PRESENCIAL',
+      entrevistador: 'MARIA', data: '28/07/2026',
+    }]);
+    expect(html).toContain('Entrevistador');
+    expect(html).toContain('MARIA');
+    expect(html).toContain('C1');
+  });
+
+  test('missing values render as —', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const html = I.buildDomiciliosTabHtml([{
+      controle: 'C1', domicilio: '2', agendado: '', ultimaPosicao: '',
+      tipoEntrevista: '', entrevistador: '', data: '',
+    }]);
+    expect((html.match(/—/g) || []).length).toBeGreaterThanOrEqual(5);
+  });
+
+  test('escapes HTML in every field', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const html = I.buildDomiciliosTabHtml([{
+      controle: '<img src=x onerror=alert(1)>', domicilio: '1', agendado: '',
+      ultimaPosicao: '', tipoEntrevista: '', entrevistador: '', data: '',
+    }]);
+    expect(html).not.toContain('<img');
+  });
+});
+
+describe('open slots in the Zonas tab', () => {
+  test('a zona row carries its open slots', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const slotsPorZona = new Map([['29JDM8', [{ isoDate: '2026-08-12', horas: ['09:00'] }]]]);
+    const rows = [{
+      idZona: '29JDM8', nomeZona: 'Zona 1', realizada: 1, naoIniciada: 0,
+      domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 1,
+      semCoordenadas: 0, agendados: 0, semAgendamento: 1,
+    }];
+    const html = I.buildZonasTableHtml(rows, slotsPorZona);
+    expect(html).toContain('09:00');
+  });
+
+  test('a zona with no open slots says so', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const rows = [{
+      idZona: '29JDM8', nomeZona: 'Zona 1', realizada: 1, naoIniciada: 0,
+      domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 1,
+      semCoordenadas: 0, agendados: 0, semAgendamento: 1,
+    }];
+    const html = I.buildZonasTableHtml(rows, new Map());
+    expect(html).toContain('Nenhum slot livre');
+  });
+});
+
 describe('statusColor', () => {
   test('Distribuido wins regardless of tipoEntrevista', () => {
     expect(UM.statusColor({ ultimaPosicao: 'Distribuido', tipoEntrevista: 'Realizada' })).toBe('#888888');

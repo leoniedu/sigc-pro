@@ -217,12 +217,22 @@
     return r.totalDomicilios > r.semCoordenadas;
   }
 
-  function buildZonasTableHtml(zonaRows) {
+  // slotsPorZona: Map(idZona -> [{isoDate, horas}]) already grouped by
+  // agruparPorDia — see the window today..+2 weeks computation at the
+  // onMapaClick call site. Rendered in its own cell via <details>, kept
+  // deliberately apart from the Zona name cell's <a>: that click already
+  // does something else (focus the map on this zona, wireZonaRowClicks),
+  // and a <details> nested inside it would either steal that gesture or
+  // silently do nothing when clicked.
+  function buildZonasTableHtml(zonaRows, slotsPorZona) {
     const esc = window.__sigcPro.escapeHtml;
+    const AM = window.__sigcProAgendaLookups;
+    const slotsMap = slotsPorZona || new Map();
     const head =
       '<tr><th>Zona</th><th>Nome</th><th>Realizada</th><th>Não Iniciada</th>' +
       '<th>Dom. Fechado</th><th>Recusa</th><th>Outros</th><th>Total</th>' +
-      '<th>Sem coordenadas</th></tr>';
+      '<th>Sem coordenadas</th><th>Agendados</th><th>Sem agendamento</th>' +
+      '<th>Slots livres</th></tr>';
     const body = zonaRows.map((r) => {
       const clickable = zonaRowIsClickable(r);
       const zonaKey = r.idZona || '';
@@ -234,6 +244,11 @@
       // on hover.
       const zonaLabel = esc(r.idZona || '—');
       const zonaCell = clickable ? `<a href="#" class="sigc-pro-zona-link">${zonaLabel}</a>` : zonaLabel;
+      const grupos = slotsMap.get(zonaKey) || [];
+      const slotsHtml = AM.buildSlotsLivresHtml(grupos);
+      const slotsCell =
+        '<details class="sigc-pro-slots-livres"><summary>Ver horários</summary>' +
+        slotsHtml + '</details>';
       return (
         `<tr${rowAttrs}>` +
         `<td>${zonaCell}</td>` +
@@ -241,10 +256,43 @@
         `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
         `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
         `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>` +
+        `<td>${r.agendados}</td><td>${r.semAgendamento}</td>` +
+        `<td>${slotsCell}</td>` +
         '</tr>'
       );
     }).join('');
     return `<table class="sigc-pro-zonas-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  }
+
+  // Household row columns: Controle+Domicílio, Agendado, Situação
+  // (ultimaPosicao), Tipo (tipoEntrevista), Entrevistador, Data. There is
+  // no street-address field on this row shape (see joinEnderecos/
+  // joinAgenda) — the endereços map carries only {lat, lon, zona,
+  // idZona}, no address — so Controle+Domicílio stands in as the row
+  // identifier instead.
+  function buildDomiciliosTabHtml(rows) {
+    const esc = window.__sigcPro.escapeHtml;
+    const dash = (v) => (v ? esc(v) : '—');
+    const head =
+      '<tr><th>Controle</th><th>Domicílio</th><th>Agendado</th>' +
+      '<th>Situação</th><th>Tipo</th><th>Entrevistador</th><th>Data</th></tr>';
+    const body = (rows || []).map((r) => {
+      const agendadoCell = r.agendado
+        ? `<span class="${r.futura ? 'sigc-pro-futura' : 'sigc-pro-passada'}">${esc(r.agendado)}</span>`
+        : '—';
+      return (
+        '<tr>' +
+        `<td>${dash(r.controle)}</td>` +
+        `<td>${dash(r.domicilio)}</td>` +
+        `<td>${agendadoCell}</td>` +
+        `<td>${dash(r.ultimaPosicao)}</td>` +
+        `<td>${dash(r.tipoEntrevista)}</td>` +
+        `<td>${dash(r.entrevistador)}</td>` +
+        `<td>${dash(r.data)}</td>` +
+        '</tr>'
+      );
+    }).join('');
+    return `<table class="sigc-pro-domicilios-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
   }
 
   const BUTTON_ID = 'sigc-pro-ultimo-movimento-map-btn';
@@ -280,6 +328,12 @@
       box-shadow: 0 0 2px rgba(0,0,0,.6); }
     .sigc-pro-status-legend { background: #fff; padding: 6px 8px; border-radius: 4px;
       font-size: 11px; line-height: 1.6; box-shadow: 0 0 4px rgba(0,0,0,.3); }
+    .sigc-pro-domicilios-table { border-collapse: collapse; width: 100%; }
+    .sigc-pro-domicilios-table th, .sigc-pro-domicilios-table td { border: 1px solid #ddd; padding: 4px 8px; text-align: left; }
+    .sigc-pro-domicilios-table th { background: #f4f4f4; }
+    .sigc-pro-futura { font-weight: 700; color: #161; }
+    .sigc-pro-passada { color: #777; }
+    .sigc-pro-slots-livres summary { cursor: pointer; color: #0645ad; }
   `;
 
   let cssInjected = false;
@@ -356,8 +410,9 @@
       window.__sigcProUltimoMovimentoExportInternals.onUltimoMovimento();
   }
 
-  function buildPanelHtml(joined, zonaRows) {
-    const zonasTable = buildZonasTableHtml(zonaRows);
+  function buildPanelHtml(joined, zonaRows, slotsPorZona) {
+    const zonasTable = buildZonasTableHtml(zonaRows, slotsPorZona);
+    const domiciliosTable = buildDomiciliosTabHtml(joined);
     // Only shown when at least one row is actually clickable — no point
     // telling the user to click a zona if none have mapped coordinates.
     const zonasHint = zonaRows.some(zonaRowIsClickable)
@@ -369,6 +424,7 @@
       '    <div class="sigc-pro-panel-bar">',
       '      <button type="button" class="sigc-pro-tab-btn sigc-pro-tab-active" data-tab="mapa">Mapa</button>',
       `      <button type="button" class="sigc-pro-tab-btn" data-tab="zonas">Zonas (${zonaRows.length})</button>`,
+      `      <button type="button" class="sigc-pro-tab-btn" data-tab="domicilios">Domicílios (${joined.length})</button>`,
       '      <button type="button" class="sigc-pro-panel-close" title="Fechar">×</button>',
       '    </div>',
       '    <div id="sigc-pro-mapa-panel" class="sigc-pro-tab-panel sigc-pro-tab-panel-active">',
@@ -377,6 +433,9 @@
       '    <div id="sigc-pro-zonas-panel" class="sigc-pro-tab-panel">',
       `      ${zonasHint}`,
       `      ${zonasTable}`,
+      '    </div>',
+      '    <div id="sigc-pro-domicilios-panel" class="sigc-pro-tab-panel">',
+      `      ${domiciliosTable}`,
       '    </div>',
       '  </div>',
       '</div>',
@@ -531,6 +590,31 @@
     }
   }
 
+  // Pure/testable: the marker popup body for one household row. The
+  // Agendado line is entirely omitted (not blank) when there is none —
+  // an empty "Agendado:" line would read as a broken lookup rather than
+  // "not scheduled".
+  function buildPopupHtml(r) {
+    const esc = window.__sigcPro.escapeHtml;
+    const gmapsUrl = window.__sigcPro.gmapsPontoUrl(r.lat, r.lon);
+    const gmapsLine = gmapsUrl
+      ? `<br><a href="${esc(gmapsUrl)}" target="_blank" rel="noopener">Ver no Google Maps</a>`
+      : '';
+    const agendadoLinha = r.agendado
+      ? `<br>Agendado: <span class="${r.futura ? 'sigc-pro-futura' : 'sigc-pro-passada'}">` +
+        `${esc(r.agendado)}</span>`
+      : '';
+    return (
+      `Controle: ${esc(r.controle)}<br>` +
+      `Domicílio: ${esc(r.domicilio)}<br>` +
+      `Entrevistador: ${esc(r.entrevistador)}<br>` +
+      `Tipo: ${esc(r.tipoEntrevista)}<br>` +
+      `Zona: ${esc(r.idZona || 'Sem zona')}` +
+      agendadoLinha +
+      gmapsLine
+    );
+  }
+
   function renderLeafletMap(L, container, joined) {
     const withCoords = joined.filter((r) => r.temCoordenadas);
     const map = L.map(container);
@@ -585,18 +669,7 @@
       // lista-agenda.js's own domicílio table uses (via the sibling
       // gmapsDestinoUrl) — a link the user clicks, never a request the
       // extension makes itself.
-      const gmapsUrl = window.__sigcPro.gmapsPontoUrl(r.lat, r.lon);
-      const gmapsLine = gmapsUrl
-        ? `<br><a href="${window.__sigcPro.escapeHtml(gmapsUrl)}" target="_blank" rel="noopener">Ver no Google Maps</a>`
-        : '';
-      marker.bindPopup(
-        `Controle: ${window.__sigcPro.escapeHtml(r.controle)}<br>` +
-        `Domicílio: ${window.__sigcPro.escapeHtml(r.domicilio)}<br>` +
-        `Entrevistador: ${window.__sigcPro.escapeHtml(r.entrevistador)}<br>` +
-        `Tipo: ${window.__sigcPro.escapeHtml(r.tipoEntrevista)}<br>` +
-        `Zona: ${window.__sigcPro.escapeHtml(r.idZona || 'Sem zona')}` +
-        gmapsLine
-      );
+      marker.bindPopup(buildPopupHtml(r));
       bounds.push([r.lat, r.lon]);
     });
 
@@ -835,11 +908,13 @@
       // the map. Falls back to an empty index, leaving every `agendado`
       // blank, same fail-open shape as the Lista de Endereços fetch above.
       let agendaIdx = new Map();
+      let agendaSlots = [];
       try {
         const ano = new Date().getFullYear();
         const agenda = await AM.fetchAgendaSlots(
           uf, `${ano}-01-01T00:00:00`, `${ano + 1}-01-01T00:00:00`);
-        agendaIdx = AM.indexByControle(agenda.dados);
+        agendaSlots = agenda.dados || [];
+        agendaIdx = AM.indexByControle(agendaSlots);
       } catch (err) {
         console.warn(`${TAG} agenda fetch failed:`, err);
       }
@@ -849,8 +924,23 @@
       pendingJoined = comAgenda;
       const zonaRows = aggregateZonas(comAgenda, enderecosMap);
 
+      // "Bookable now": today through +2 weeks, the same window
+      // lista-agenda.js's own Slots Abertos treats as realistically
+      // fillable — a slot months out would overstate capacity a zona
+      // actually has.
+      const minDateIso = todayIso;
+      const fimDate = new Date();
+      fimDate.setDate(fimDate.getDate() + 14);
+      const fimIso = fimDate.toISOString().slice(0, 10);
+      const slotsPorZona = new Map();
+      zonaRows.forEach((z) => {
+        const zonaKey = z.idZona || '';
+        const livres = AM.slotsLivresDaJanela(agendaSlots, zonaKey, minDateIso, fimIso);
+        slotsPorZona.set(zonaKey, AM.agruparPorDia(livres));
+      });
+
       closePanel();
-      document.body.insertAdjacentHTML('beforeend', buildPanelHtml(comAgenda, zonaRows));
+      document.body.insertAdjacentHTML('beforeend', buildPanelHtml(comAgenda, zonaRows, slotsPorZona));
       const panelEl = document.getElementById(PANEL_ID);
       wireTabs(panelEl);
       wireZonaRowClicks(panelEl, comAgenda);
@@ -1032,6 +1122,8 @@
     zonaColor,
     statusColor,
     buildZonasTableHtml,
+    buildDomiciliosTabHtml,
+    buildPopupHtml,
     buildPanelHtml,
     onMapaClick,
     convexHull,
