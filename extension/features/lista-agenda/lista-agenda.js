@@ -376,8 +376,8 @@ ${buildDomiciliosTable(domicilios)}
   // fetchAgenda (the network call + its 5-minute TTL cache) moved to
   // agenda-lookups.js as fetchAgendaSlots (2026-08-11) — the only file
   // scripts/check-privacy.sh sanctions for this fetch. Referenced here
-  // through window.__sigcProAgendaLookups.
-  const fetchAgendaSlots = (uf, startIso, endIso) => AL().fetchAgendaSlots(uf, startIso, endIso);
+  // through window.__sigcProAgendaLookups (see AL().fetchAgendaSlots call
+  // below).
 
   // As of 2026-08-07, Último Movimento is served through the same generic
   // /relatorio/filtrar?slug=... mechanism Lista de Endereços already

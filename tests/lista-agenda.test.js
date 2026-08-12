@@ -2,6 +2,9 @@ import { describe, test, expect } from 'bun:test';
 
 // Order matters: sigc-common.js assigns window.__sigcPro wholesale.
 await import('../extension/common/sigc-common.js');
+// lista-agenda.js resolves agenda-lookups.js lazily via window.__sigcProAgendaLookups
+// at call time, but it still must be loaded into the window before any test runs.
+await import('../extension/features/agenda-lookups/agenda-lookups.js');
 await import('../extension/features/lista-agenda/lista-agenda.js');
 
 const {
