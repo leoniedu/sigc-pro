@@ -852,6 +852,17 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
     const warnSpy = console.warn;
     const warnCalls = [];
     console.warn = (...args) => warnCalls.push(args);
+    // onMapaClick fires a trailing, un-awaited maybeLoadTiles() call —
+    // give it real (if bogus) Leaflet URLs so its readLeafletUrls() poll
+    // resolves synchronously on the first check() (see pollFor's
+    // fast-path) instead of falling back to a setInterval that would
+    // still be ticking, and could still fire renderLeafletMap on this
+    // test's now-detached container, well after this test has finished
+    // and torn down (leaking into whichever later test happens to be
+    // running when a later data-attribute or window.L assignment finally
+    // makes its check() succeed).
+    document.documentElement.dataset.sigcProLeafletJsUrl = 'about:blank#leaflet.js';
+    document.documentElement.dataset.sigcProLeafletCssUrl = 'about:blank#leaflet.css';
 
     const btn = document.createElement('button');
     try {
@@ -859,14 +870,238 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
       const panel = document.getElementById('sigc-pro-ultimo-movimento-map-panel');
       expect(panel).not.toBeNull();
       expect(warnCalls.some((args) => String(args[0]).includes('agenda fetch failed'))).toBe(true);
+      // Let the trailing maybeLoadTiles() call (and its now-synchronous
+      // loadLeafletAssets rejection, since window.L is unset here) fully
+      // settle before teardown — see the comment above.
+      await new Promise((resolve) => setTimeout(resolve, 50));
     } finally {
       console.warn = warnSpy;
       window.confirm = originalConfirm;
       window.__sigcProAgendaLookups = originalAM;
       delete window.jQuery;
       delete window.$;
+      delete document.documentElement.dataset.sigcProLeafletJsUrl;
+      delete document.documentElement.dataset.sigcProLeafletCssUrl;
       document.getElementById('sigc-pro-ultimo-movimento-map-panel')?.remove();
       I.resetFilteredAgencia();
+      I.resetTileState();
+    }
+  });
+
+  // The only other onMapaClick agenda test mocks a REJECTED fetch — this
+  // exercises the success path: fetchAgendaSlots -> agenda.dados ->
+  // indexByControle -> joinAgenda -> a populated `agendado` on the
+  // matching household, reaching all the way to the rendered Domicílios
+  // tab HTML (not just an internal), so the `.dados` unwrapping at the
+  // onMapaClick call site stays covered against a shape change.
+  test('a resolving agenda fetch joins a matching scheduled visit onto its household, visible in the Domicílios tab', async () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    setUpDom({ header: HEADER, rows: ROWS });
+    I.resetFilteredAgencia();
+    I.resetTileState();
+    I.captureFilteredAgencia();
+
+    const originalConfirm = window.confirm;
+    const originalAM = window.__sigcProAgendaLookups;
+    window.confirm = () => true;
+    window.__sigcProAgendaLookups = {
+      ...originalAM,
+      fetchEnderecosByAgencia: async () => new Map([
+        ['C1|1', { lat: -8.5, lon: -63.8, zona: 'Z1', idZona: 'Z1' }],
+      ]),
+      // Realistic shape: fetchAgendaSlots resolves { dados, em, cache },
+      // dados already parsed (agenda-lookups.js's own parseSlots shape) —
+      // one slot matching C1|1 (the household on screen), one open slot
+      // that must NOT match anything (aberto: true, no controle).
+      fetchAgendaSlots: async () => ({
+        dados: [
+          {
+            start: '2026-09-01T09:00:00', isoDate: '2026-09-01',
+            controle: 'C1', domicilio: '1', zonas: 'Z1 - Zona 1', aberto: false,
+          },
+          {
+            start: '2026-09-02T10:00:00', isoDate: '2026-09-02',
+            controle: '', domicilio: '', zonas: 'Z1 - Zona 1', aberto: true,
+          },
+        ],
+        em: Date.now(),
+        cache: false,
+      }),
+    };
+    // onMapaClick's own trailing maybeLoadTiles() call — give it real
+    // (bogus) URLs so its readLeafletUrls() poll resolves on the first
+    // synchronous check() rather than leaking a live setInterval past
+    // this test's teardown (see the identical comment on the rejected-
+    // agenda test above).
+    document.documentElement.dataset.sigcProLeafletJsUrl = 'about:blank#leaflet.js';
+    document.documentElement.dataset.sigcProLeafletCssUrl = 'about:blank#leaflet.css';
+
+    const btn = document.createElement('button');
+    try {
+      await I.onMapaClick(btn);
+      const panel = document.getElementById('sigc-pro-ultimo-movimento-map-panel');
+      expect(panel).not.toBeNull();
+      const domiciliosHtml = document.getElementById('sigc-pro-domicilios-panel').innerHTML;
+      expect(domiciliosHtml).toContain('01/09/2026 09:00');
+      expect(domiciliosHtml).toContain('sigc-pro-futura');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    } finally {
+      window.confirm = originalConfirm;
+      window.__sigcProAgendaLookups = originalAM;
+      delete window.jQuery;
+      delete window.$;
+      delete document.documentElement.dataset.sigcProLeafletJsUrl;
+      delete document.documentElement.dataset.sigcProLeafletCssUrl;
+      document.getElementById('sigc-pro-ultimo-movimento-map-panel')?.remove();
+      I.resetFilteredAgencia();
+      I.resetTileState();
+    }
+  });
+
+  // Minimal fake Leaflet: loadLeafletAssets() short-circuits to
+  // window.L when it's already set (see its `if (window.L) { resolve(L);
+  // return; }` branch), so this never touches a real <script> tag —
+  // happy-dom disables script loading outright, which would otherwise
+  // make every tile load reject via onerror.
+  function fakeLeaflet() {
+    const layer = { addTo: () => layer, bindTooltip: () => layer, bindPopup: () => layer };
+    const map = { addLayer: () => {}, setView: () => map, fitBounds: () => map };
+    let mapCallCount = 0;
+    const L = {
+      mapCallCount: () => mapCallCount,
+      // Mirrors real Leaflet's L.map(container): it takes over the
+      // container element, clearing whatever HTML (e.g. the declined-
+      // consent message) was there before.
+      map: (container) => { mapCallCount += 1; if (container) container.innerHTML = ''; return map; },
+      tileLayer: () => layer,
+      polygon: () => layer,
+      polyline: () => layer,
+      circle: () => layer,
+      circleMarker: () => layer,
+      marker: () => layer,
+      divIcon: () => ({}),
+      DomUtil: { create: () => document.createElement('div') },
+      control: () => ({ addTo: () => {}, onAdd: null }),
+    };
+    return L;
+  }
+
+  test('two concurrent maybeLoadTiles() calls (via two rapid Mapa-tab clicks) construct the Leaflet map only once', async () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    setUpDom({ header: HEADER, rows: ROWS });
+    I.resetFilteredAgencia();
+    I.resetTileState();
+    I.captureFilteredAgencia();
+
+    const originalConfirm = window.confirm;
+    const originalAM = window.__sigcProAgendaLookups;
+    const originalL = window.L;
+    window.confirm = () => true;
+    window.__sigcProAgendaLookups = {
+      ...originalAM,
+      fetchEnderecosByAgencia: async () => new Map([
+        ['C1|1', { lat: -8.5, lon: -63.8, zona: 'Z1', idZona: 'Z1' }],
+      ]),
+      fetchAgendaSlots: async () => { throw new Error('network down'); },
+    };
+    const fakeL = fakeLeaflet();
+    window.L = fakeL;
+    document.documentElement.dataset.sigcProLeafletJsUrl = 'data:text/javascript,';
+    document.documentElement.dataset.sigcProLeafletCssUrl = 'data:text/css,';
+    const warnSpy = console.warn;
+    console.warn = () => {};
+
+    const btn = document.createElement('button');
+    try {
+      await I.onMapaClick(btn);
+      const panelEl = document.getElementById('sigc-pro-ultimo-movimento-map-panel');
+      const mapaTabBtn = panelEl.querySelector('.sigc-pro-tab-btn[data-tab="mapa"]');
+      // Two rapid clicks, neither awaited between them: both reach
+      // maybeLoadTiles() and race past the `mapInitialized` check before
+      // either call's `await loadLeafletAssets()` has a chance to flip
+      // it true (mirrors the real focusZonaOnMap double-call this
+      // finding reported).
+      mapaTabBtn.click();
+      mapaTabBtn.click();
+      // Let every pending microtask/timer (loadLeafletAssets' internal
+      // pollFor + promise chain) drain.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(fakeL.mapCallCount()).toBe(1);
+    } finally {
+      console.warn = warnSpy;
+      window.confirm = originalConfirm;
+      window.__sigcProAgendaLookups = originalAM;
+      if (originalL === undefined) delete window.L; else window.L = originalL;
+      delete document.documentElement.dataset.sigcProLeafletJsUrl;
+      delete document.documentElement.dataset.sigcProLeafletCssUrl;
+      delete window.jQuery;
+      delete window.$;
+      document.getElementById('sigc-pro-ultimo-movimento-map-panel')?.remove();
+      I.resetFilteredAgencia();
+      I.resetTileState();
+    }
+  });
+
+  test('the "Tentar novamente" retry button still recovers the map after a failed tile load', async () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    setUpDom({ header: HEADER, rows: ROWS });
+    I.resetFilteredAgencia();
+    I.resetTileState();
+    I.captureFilteredAgencia();
+
+    const originalConfirm = window.confirm;
+    const originalAM = window.__sigcProAgendaLookups;
+    const originalL = window.L;
+    // Decline the tile consent prompt the first time, accept afterward —
+    // exercises the declined-consent branch's retry button, and confirms
+    // the tileLoadInFlight guard (set only AFTER the consent block) never
+    // leaves a declined attempt stuck unable to retry.
+    let tileConfirmCalls = 0;
+    window.confirm = (msg) => {
+      if (String(msg).includes('Endereços')) return true; // fetch consent
+      tileConfirmCalls += 1; // tile consent: decline the first prompt, accept the retry
+      return tileConfirmCalls > 1;
+    };
+    window.__sigcProAgendaLookups = {
+      ...originalAM,
+      fetchEnderecosByAgencia: async () => new Map([
+        ['C1|1', { lat: -8.5, lon: -63.8, zona: 'Z1', idZona: 'Z1' }],
+      ]),
+      fetchAgendaSlots: async () => { throw new Error('network down'); },
+    };
+    delete window.L; // so the tile fetch path is even reachable if consent were accepted
+    document.documentElement.dataset.sigcProLeafletJsUrl = 'data:text/javascript,';
+    document.documentElement.dataset.sigcProLeafletCssUrl = 'data:text/css,';
+    const warnSpy = console.warn;
+    console.warn = () => {};
+
+    const btn = document.createElement('button');
+    try {
+      await I.onMapaClick(btn);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const declined = document.getElementById('sigc-pro-retry-tiles');
+      expect(declined).not.toBeNull();
+
+      // Now stub in a working Leaflet and click retry — the declined
+      // path must not have left tileLoadInFlight stuck true.
+      const fakeL = fakeLeaflet();
+      window.L = fakeL;
+      declined.click();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(fakeL.mapCallCount()).toBe(1);
+      expect(document.getElementById('sigc-pro-leaflet-map').querySelector('#sigc-pro-retry-tiles')).toBeNull();
+    } finally {
+      console.warn = warnSpy;
+      window.confirm = originalConfirm;
+      window.__sigcProAgendaLookups = originalAM;
+      if (originalL === undefined) delete window.L; else window.L = originalL;
+      delete document.documentElement.dataset.sigcProLeafletJsUrl;
+      delete document.documentElement.dataset.sigcProLeafletCssUrl;
+      delete window.jQuery;
+      delete window.$;
+      document.getElementById('sigc-pro-ultimo-movimento-map-panel')?.remove();
+      I.resetFilteredAgencia();
+      I.resetTileState();
     }
   });
 });

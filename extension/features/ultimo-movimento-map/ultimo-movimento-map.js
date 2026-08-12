@@ -487,12 +487,12 @@
       return;
     }
     // Map not rendered yet (first time this panel's Mapa tab is being
-    // shown, or the user declined tile consent earlier — maybeLoadTiles
-    // is already a no-op in the latter case and its own declined-message
-    // UI is the right feedback, so this poll just gives up quietly
-    // rather than fighting that UI with a second message). mapInitialized
-    // only turns true after renderLeafletMap has actually run.
-    maybeLoadTiles();
+    // shown, or the user declined tile consent earlier — the switchToTab
+    // call above already triggered maybeLoadTiles, which is a no-op in
+    // the declined-consent case, and its own declined-message UI is the
+    // right feedback, so this poll just gives up quietly rather than
+    // fighting that UI with a second message). mapInitialized only turns
+    // true after renderLeafletMap has actually run.
     pollFor(() => currentMap, { onFound: (map) => map.fitBounds(coords, { padding: [20, 20] }) });
   }
 
@@ -558,6 +558,14 @@
   // unaffected.
   let tilesConsented = false;
   let mapInitialized = false;
+  // Guards against two calls in the same tick both passing the
+  // mapInitialized check (mapInitialized only turns true AFTER the async
+  // loadLeafletAssets() resolves) and each constructing a Leaflet map on
+  // the same container — real Leaflet then throws "Map container is
+  // already initialized." Set only after the consent block (a declined
+  // consent must not leave this stuck true) and always cleared in
+  // `finally` so a failed load can still be retried.
+  let tileLoadInFlight = false;
   let pendingJoined = null;
   // Live Leaflet map instance, once rendered — lets a Zonas-tab row
   // click (see focusZonaOnMap below) call fitBounds without threading
@@ -566,8 +574,18 @@
   // fitBounds'd after its container is gone.
   let currentMap = null;
 
+  // Test-only seam, same pattern as resetFilteredAgencia above: this
+  // module-level tile/consent state survives between test cases, so each
+  // one that exercises maybeLoadTiles needs a clean starting point.
+  function resetTileState() {
+    tilesConsented = false;
+    mapInitialized = false;
+    tileLoadInFlight = false;
+    leafletLoadPromise = null;
+  }
+
   async function maybeLoadTiles() {
-    if (mapInitialized) return;
+    if (mapInitialized || tileLoadInFlight) return;
     const container = document.getElementById('sigc-pro-leaflet-map');
     if (!container) return;
     if (!tilesConsented) {
@@ -581,12 +599,15 @@
       }
       tilesConsented = true;
     }
+    tileLoadInFlight = true;
     try {
       const L = await loadLeafletAssets();
       renderLeafletMap(L, container, pendingJoined || []);
       mapInitialized = true;
     } catch (err) {
       container.innerHTML = `<p class="sigc-pro-map-declined">Falha ao carregar o mapa: ${window.__sigcPro.escapeHtml(String(err && err.message || err))}</p>`;
+    } finally {
+      tileLoadInFlight = false;
     }
   }
 
@@ -1133,6 +1154,7 @@
     filteredAgencia,
     captureFilteredAgencia,
     resetFilteredAgencia,
+    resetTileState,
     adoptRenderedAgencia,
     missingEnderecoCount,
     atualizarEstadoBotaoMapa,
