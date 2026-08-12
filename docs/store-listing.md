@@ -21,11 +21,11 @@ Na Lista de Endereços:
 • KML-pro — exporta os endereços como KML para uso em Google Earth,
   Google Maps ou QGIS, com camadas separadas para domicílios
   selecionados e não selecionados (cores seguras para daltonismo).
-• Agenda-pro — anota cada domicílio com a data e hora da entrevista
-  agendada, a situação e o tipo de entrevista do último movimento, e
-  mostra os slots livres de cada zona por turno (Manhã/Tarde) nas
-  próximas 2 semanas, com os horários abertos listados dia a dia; os
-  endereços viram links para o Google Maps quando há coordenadas.
+• Mapa-pro — no relatório de Último Movimento filtrado por uma agência,
+  abre um painel com três abas: o mapa dos domicílios por zona, uma aba
+  de Zonas com a situação de cada uma (incluindo as zonas ainda sem
+  coleta) e os horários livres dia a dia, e uma aba de Domicílios com a
+  entrevista agendada, a situação, o tipo e o entrevistador de cada um.
   Tudo obtido do próprio servidor do SIGC mediante clique e confirmação.
 
 Em qualquer relatório com tabela:
