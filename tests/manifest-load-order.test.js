@@ -54,11 +54,6 @@ describe('manifest content_scripts load order', () => {
     }
   });
 
-  test('lista-agenda.js is registered', () => {
-    expect(idx('features/lista-agenda/lista-agenda.js')).toBeGreaterThan(
-      idx('common/sigc-common.js'));
-  });
-
   test('ultimo-movimento-map.js loads after sigc-common.js and after ultimo-movimento-export.js', () => {
     const common = idx('common/sigc-common.js');
     const exportJs = idx('features/ultimo-movimento-export/ultimo-movimento-export.js');

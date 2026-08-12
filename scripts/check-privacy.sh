@@ -17,10 +17,6 @@
 #   - extension/features/ultimo-movimento-export/ : fetch() only, same-origin
 #     only (same rationale, see
 #     docs/superpowers/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md)
-#   - extension/features/lista-agenda/     : fetch() only, same-origin
-#     (agenda slots + último movimento for the Lista de Endereços;
-#     click+confirm, see
-#     docs/superpowers/specs/2026-07-31-lista-agenda-design.md)
 #   - extension/features/settings/         : chrome.storage only, no fetch
 #     (persists the advanced-flags toggle; same spec as above)
 #   - extension/vendor/                    : vendored third-party libraries,
@@ -55,7 +51,7 @@
 # standard AJAX header value "X-Requested-With: XMLHttpRequest" is a string
 # literal, not a call, and the fetch-sanctioned directories legitimately
 # send that header.
-FETCH_DIRS='extension/common extension/features/agenda-lookups extension/features/ultimo-movimento-export extension/features/lista-agenda'
+FETCH_DIRS='extension/common extension/features/agenda-lookups extension/features/ultimo-movimento-export'
 STORAGE_DIRS='extension/features/settings'
 VENDOR_DIRS='extension/vendor'
 LOCAL_RESOURCE_DIRS='extension/features/ultimo-movimento-map'

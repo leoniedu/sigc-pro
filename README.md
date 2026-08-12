@@ -160,8 +160,8 @@ Essa garantia é verificada por um *gate* automático
 (`scripts/check-privacy.sh`): um hook de pre-commit bloqueia qualquer commit
 que introduza APIs de rede ou armazenamento em `extension/` fora de
 exceções únicas e auditadas: `fetch` (sem URLs absolutas) em
-`common/`, `features/agenda-lookups/`,
-`features/ultimo-movimento-export/` e `features/lista-agenda/`, e
+`common/`, `features/agenda-lookups/` e
+`features/ultimo-movimento-export/`, e
 `chrome.storage` em `features/settings/`. Para ativá-lo
 após clonar o repositório:
 
