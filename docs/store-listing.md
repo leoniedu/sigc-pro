@@ -147,6 +147,60 @@ deliberately noisy; requiring an explicit opt-in prevents
 accidental activation.
 ```
 
+## Data safety / Privacy practices (dashboard form — required to submit)
+
+"Collect" here means Google's definition: **transmitting data off the user's
+machine**. Reading data already on the page, showing it, and saving a file
+locally are not collection. Every answer below is No, and none of them changed
+between 0.2.124 and 0.2.174.
+
+| Data type | Answer | Why |
+|---|---|---|
+| Personally identifiable information | **No** | Names/addresses/telephones are read from the SIGC page the user is already authenticated on, rendered locally, and written to files the user downloads. Nothing is transmitted anywhere. |
+| Health information | **No** | PNS data is displayed and exported locally; never sent to the developer or any third party. |
+| Financial and payment information | **No** | Never handled. |
+| Authentication information | **No** | The extension never reads, stores or transmits credentials, cookies or tokens. Requests reuse the page's existing session (`credentials: 'same-origin'`) — the browser attaches the cookie, the extension never sees it. |
+| Personal communications | **No** | Never handled. |
+| Location | **No** | Household coordinates are read from the SIGC report and plotted locally. They are never transmitted. Google Maps links are `href`s the user may click; nothing is fetched until they do. |
+| Web history | **No** | Never handled. |
+| User activity | **No** | No analytics, no telemetry, no click tracking. |
+| Website content | **No** | Page content is read and reformatted in the page; it is not sent anywhere. |
+
+Required certifications — all three can be affirmed:
+
+- [x] Not being sold to third parties, outside of approved use cases
+- [x] Not being used or transferred for purposes unrelated to the item's core functionality
+- [x] Not being used or transferred to determine creditworthiness or for lending purposes
+
+### If a reviewer asks about network activity
+
+Two things are worth having ready, because they are the only outbound requests
+and one of them is new since 0.2.124:
+
+1. **Same-origin SIGC requests** (Guia do Dia, Mapa-pro, CSV TODAS) — all to the
+   IBGE server the user is already on, inside their authenticated session, each
+   behind a click and a confirmation. These fetch *from* the origin; nothing is
+   sent to anyone else.
+2. **OpenStreetMap tiles** (`https://{s}.tile.openstreetmap.org/...`) — the map
+   background in Mapa-pro, **new in this version**. It is an image request
+   behind its own separate confirmation. No user or SIGC data is attached: the
+   URL carries only zoom/x/y indices of map squares. Declining leaves the
+   Zonas and Domicílios tabs fully functional.
+
+Related points a reviewer may raise about this version:
+
+- **Leaflet is bundled** in `extension/vendor/leaflet/` and declared in
+  `web_accessible_resources` (new since 0.2.124), loaded via
+  `chrome.runtime.getURL`. It is not fetched from a CDN — MV3 forbids remote
+  code, and this is the compliant arrangement. Map *imagery* cannot be bundled,
+  which is why tiles are external.
+- **No `host_permissions`.** The extension declares only `"storage"`. Its
+  requests run in the page's own context (MAIN world), so they are same-origin
+  to the page rather than cross-origin extension requests.
+- **`storage` holds one boolean** — the off-by-default advanced-export flag.
+  Nothing else is persisted; consent flags and caches are in memory and are
+  gone on reload.
+
 ## Category
 
 Productivity (or "Tools" if available for the target region)
