@@ -104,30 +104,14 @@ permissions and stores nothing.
 
 ## Host permission justification (dashboard field)
 
+Limit: 1000 characters. Current text is 975.
+
 ```
-The extension injects a content script only on pages of the SIGC portal
-(Sistema Integrado de Gestão da Coleta, IBGE) — matched by
-`portalweb.ibge.gov.br`, `portalweb2.ibge.gov.br`, and
-`w3sigcpns2025.ibge.gov.br`, the specific hosts SIGC is served from,
-not the whole ibge.gov.br domain — to add
-export buttons (PDF, KML, CSV) to report toolbars
-and Agenda helpers (CSV export, slot checks, open-slot capacity panel,
-printable day guide, date picker), reading data already rendered on the
-page. No access to any
-other site is requested. **No browser permission is declared at all** —
-the manifest's `permissions` list is empty and nothing is stored. The extension
-makes no network calls except three optional, click-and-confirm requests
-to the SIGC server itself (same origin, within the user's existing
-session): the "Guia do Dia" feature; "Mapa-pro" on the Último Movimento
-report, which fetches the filtered agência's Lista de Endereços (for
-coordinates and zona) and the UF's agenda slots; and a bulk "Último Movimento" report
-export that loops one request per agência in the current UF, behind a
-confirmation naming how many agências will be queried. The exported files may include
-Google Maps links (not loaded resources — nothing is fetched until
-clicked). The one external resource is the map background in "Mapa-pro":
-OpenStreetMap tiles, fetched only after a separate confirmation, carrying
-no SIGC data (the Leaflet library itself is bundled, not loaded from a
-CDN). Nothing is ever sent to the developer, and there is no telemetry.
+The extension injects a content script only on SIGC portal pages (Sistema Integrado de Gestão da Coleta, IBGE), matched by the three specific hosts SIGC is served from — portalweb.ibge.gov.br, portalweb2.ibge.gov.br and w3sigcpns2025.ibge.gov.br — not the whole ibge.gov.br domain. It adds export buttons (PDF, KML, CSV), a zone map panel and Agenda helpers, reading data already on the page. No other site is accessed, no permission is declared, and nothing is stored.
+
+Network calls are three optional, click-and-confirm requests to the SIGC server itself, same origin, within the user's session: a printable day guide; a map panel fetching the agência's address list and the UF's agenda slots; and a bulk report export looping one request per agência.
+
+The only external resource is that map's background: OpenStreetMap tiles, fetched after a separate confirmation and carrying no SIGC data. Leaflet is bundled, not from a CDN. Nothing goes to the developer; no telemetry.
 ```
 
 ## Storage permission justification (dashboard field)
