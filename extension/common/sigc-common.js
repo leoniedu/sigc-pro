@@ -129,10 +129,29 @@
 
   // Returns the page's live DataTables instance, or null if jQuery,
   // DataTables, or a table isn't present/initialized yet.
+  // Filtered, not a bare `jq('table')`: SIGC's page script initializes
+  // DataTables over the tables it finds, and SIGC-PRO's own panels inject
+  // tables into document.body — which the bare selector matched too, so
+  // this could hand back OUR table in place of the report's and a caller
+  // like readUltimoMovimentoTable would parse the wrong data. Every
+  // SIGC-PRO-authored table lives under a [data-sigc-pro] root or carries
+  // a sigc-pro- class, so excluding those leaves only the page's.
+  //
+  // A DOM predicate rather than one CSS selector: the ancestor half of
+  // this test ("is it inside a SIGC-PRO panel?") needs `closest`, which a
+  // `:not([data-sigc-pro] table)` selector expresses but neither happy-dom
+  // nor older engines evaluate reliably — verified failing in this repo's
+  // test environment, so it must not be the thing correctness rests on.
+  function isSigcProTable(el) {
+    return /(^|\s)sigc-pro-/.test(el.className || '') || !!el.closest('[data-sigc-pro]');
+  }
+
   function getDataTable() {
     const jq = window.jQuery || window.$;
     if (!jq || !jq.fn || !jq.fn.dataTable) return null;
-    const table = jq('table').DataTable();
+    const ours = Array.from(document.querySelectorAll('table')).filter((t) => !isSigcProTable(t));
+    if (ours.length === 0) return null;
+    const table = jq(ours).DataTable();
     if (!table || !table.table || table.table().node() == null) return null;
     return table;
   }
@@ -814,6 +833,7 @@
     whenReadyGeneric,
     tableMatchesLayout,
     getDataTable,
+    isSigcProTable,
     readDataTable,
     getTableRows,
     exportFileBase,

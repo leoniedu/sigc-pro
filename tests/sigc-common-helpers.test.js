@@ -3,6 +3,72 @@ import { describe, test, expect } from 'bun:test';
 await import('../extension/common/sigc-common.js');
 const P = window.__sigcPro;
 
+// getDataTable() must find the SIGC report's table and never SIGC-PRO's
+// own. The Mapa panel injects tables into document.body, so the old bare
+// `jq('table')` selector matched them too — which could hand a caller
+// like readUltimoMovimentoTable OUR table and make it parse the wrong
+// data entirely (found 2026-08-12, via the panel being auto-paged at 10).
+describe('getDataTable ignores SIGC-PRO tables', () => {
+  const withJq = (selectorSeen) => {
+    const prev = window.jQuery;
+    const fake = (sel) => {
+      selectorSeen.push(sel);
+      return { DataTable: () => null };
+    };
+    fake.fn = { dataTable: {} };
+    window.jQuery = fake;
+    return () => { window.jQuery = prev; };
+  };
+
+  const fixture = () => {
+    document.body.innerHTML =
+      '<table id="tableRelatorio"><tbody><tr><td>x</td></tr></tbody></table>' +
+      '<div id="p" data-sigc-pro>' +
+      '  <table class="sigc-pro-domicilios-table"><tbody><tr><td>y</td></tr></tbody></table>' +
+      '  <table id="plain-inside-panel"><tbody><tr><td>z</td></tr></tbody></table>' +
+      '</div>';
+  };
+
+  test('isSigcProTable spots both a sigc-pro class and a panel ancestor', () => {
+    fixture();
+    const byId = (id) => document.getElementById(id);
+    expect(P.isSigcProTable(byId('tableRelatorio'))).toBe(false);
+    expect(P.isSigcProTable(document.querySelector('.sigc-pro-domicilios-table'))).toBe(true);
+    // The ancestor case: no sigc-pro class of its own, but inside the panel.
+    expect(P.isSigcProTable(byId('plain-inside-panel'))).toBe(true);
+    document.body.innerHTML = '';
+  });
+
+  test('getDataTable hands jQuery only the page-owned tables', () => {
+    fixture();
+    const seen = [];
+    const restore = withJq(seen);
+    try {
+      P.getDataTable();
+    } finally {
+      restore();
+      document.body.innerHTML = '';
+    }
+    expect(seen).toHaveLength(1);
+    const passed = Array.from(seen[0]).map((t) => t.id);
+    expect(passed).toEqual(['tableRelatorio']);
+  });
+
+  test('returns null rather than grabbing a panel table when the page has none', () => {
+    document.body.innerHTML =
+      '<div data-sigc-pro><table class="sigc-pro-zonas-table"><tbody></tbody></table></div>';
+    const seen = [];
+    const restore = withJq(seen);
+    try {
+      expect(P.getDataTable()).toBeNull();
+    } finally {
+      restore();
+      document.body.innerHTML = '';
+    }
+    expect(seen).toHaveLength(0); // never even asked jQuery
+  });
+});
+
 describe('parseCoord', () => {
   test('DMS with hemisphere letters and comma seconds', () => {
     expect(P.parseCoord('12 34 56.7 S')).toBeCloseTo(-12.5824167, 5);

@@ -413,6 +413,74 @@ describe('buildDomiciliosTabHtml', () => {
   });
 });
 
+// SIGC's own page script auto-initializes DataTables over the tables it
+// finds, and this panel injects its tables into document.body — so they
+// were being paged at the library's 10-row default ("Showing 1 to 10 of
+// 90 entries", reported 2026-08-12).
+describe('setPanelPageLength', () => {
+  const withJq = (isDt, record) => {
+    const prev = window.jQuery;
+    const fake = (el) => ({
+      DataTable: () => ({
+        page: { len: (n) => { record.len = n; return { draw: (v) => record.draws.push(v) }; } },
+      }),
+      el,
+    });
+    fake.fn = { dataTable: { isDataTable: () => isDt } };
+    window.jQuery = fake;
+    return () => { window.jQuery = prev; };
+  };
+
+  test('sets 50 rows per page on a DataTables-claimed panel table', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const panel = document.createElement('div');
+    panel.innerHTML = '<table class="sigc-pro-domicilios-table"><tbody></tbody></table>';
+    const record = { len: null, draws: [] };
+    const restore = withJq(true, record);
+    try {
+      I.setPanelPageLength(panel);
+    } finally {
+      restore();
+    }
+    expect(record.len).toBe(50);
+    expect(I.PANEL_PAGE_LENGTH).toBe(50);
+    // draw(false) — redraw without resetting the user's current page.
+    expect(record.draws).toEqual([false]);
+  });
+
+  // Calling .DataTable() on an unclaimed table would CREATE one, which is
+  // not this function's job — it must leave a plain table plain.
+  test('does nothing when DataTables never claimed the table', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const panel = document.createElement('div');
+    panel.innerHTML = '<table class="sigc-pro-zonas-table"><tbody></tbody></table>';
+    const record = { len: null, draws: [] };
+    const restore = withJq(false, record);
+    try {
+      I.setPanelPageLength(panel);
+    } finally {
+      restore();
+    }
+    expect(record.len).toBeNull();
+  });
+
+  test('tolerates jQuery/DataTables being absent entirely', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const prev = window.jQuery;
+    const prevDollar = window.$;
+    window.jQuery = undefined;
+    window.$ = undefined;
+    try {
+      const panel = document.createElement('div');
+      panel.innerHTML = '<table><tbody></tbody></table>';
+      expect(() => I.setPanelPageLength(panel)).not.toThrow();
+    } finally {
+      window.jQuery = prev;
+      window.$ = prevDollar;
+    }
+  });
+});
+
 describe('open slots in the Zonas tab', () => {
   test('a zona row carries its open slots', () => {
     const I = window.__sigcProUltimoMovimentoMapInternals;
@@ -846,7 +914,12 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
     document.body.innerHTML =
       '<select id="IdUf"><option value="29" selected>29</option></select>' +
       '<select id="IdAgencia"><option value="0570" selected>0570</option></select>' +
-      '<button id="btnFiltrar">Filtrar</button>';
+      '<button id="btnFiltrar">Filtrar</button>' +
+      // A real page-owned report table must exist in the DOM: getDataTable()
+      // now filters SIGC-PRO's own tables out and returns null when nothing
+      // page-owned is left, so a fixture that faked only jQuery would make
+      // the whole panel silently fail to render.
+      '<table id="tableRelatorio"><tbody><tr><td>x</td></tr></tbody></table>';
     const table = fakeDataTable(header, rows);
     window.jQuery = window.$ = Object.assign(
       () => ({ DataTable: () => table }),

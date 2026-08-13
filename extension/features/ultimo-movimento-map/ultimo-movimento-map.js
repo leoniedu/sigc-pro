@@ -427,7 +427,10 @@
       ? '<p class="sigc-pro-zonas-hint">Clique no nome de uma zona para vê-la no mapa.</p>'
       : '';
     return [
-      `<div id="${PANEL_ID}" class="sigc-pro-panel-overlay">`,
+      // data-sigc-pro marks the whole subtree as ours, so sigc-common.js's
+      // getDataTable() can exclude every table inside it from the "find
+      // the page's report table" lookup.
+      `<div id="${PANEL_ID}" class="sigc-pro-panel-overlay" data-sigc-pro>`,
       '  <div class="sigc-pro-panel-box">',
       '    <div class="sigc-pro-panel-bar">',
       '      <button type="button" class="sigc-pro-tab-btn sigc-pro-tab-active" data-tab="mapa">Mapa</button>',
@@ -502,6 +505,34 @@
     // fighting that UI with a second message). mapInitialized only turns
     // true after renderLeafletMap has actually run.
     pollFor(() => currentMap, { onFound: (map) => map.fitBounds(coords, { padding: [20, 20] }) });
+  }
+
+  // SIGC's own page script auto-initializes DataTables over the tables it
+  // finds in the document, and this panel's tables are injected into
+  // document.body — so they get swept up and paged at the library's
+  // 10-row default (confirmed live 2026-08-12: "Showing 1 to 10 of 90
+  // entries" on the Domicílios tab).
+  //
+  // Rather than fight the initialization, adopt it: 50 rows is a far more
+  // useful default for scanning an agência's households, and the library's
+  // own "entries per page" selector still lets the user change it. A no-op
+  // when DataTables never claimed these tables (then they simply render in
+  // full, which is also fine).
+  const PANEL_PAGE_LENGTH = 50;
+
+  function setPanelPageLength(panelEl) {
+    const jq = window.jQuery || window.$;
+    if (!jq || !jq.fn || !jq.fn.dataTable || !panelEl) return;
+    panelEl.querySelectorAll('table').forEach((tbl) => {
+      try {
+        // isDataTable first: calling .DataTable() on an unclaimed table
+        // would CREATE one, which is not this function's job.
+        if (!jq.fn.dataTable.isDataTable(tbl)) return;
+        jq(tbl).DataTable().page.len(PANEL_PAGE_LENGTH).draw(false);
+      } catch (err) {
+        console.warn(`${TAG} não foi possível ajustar as linhas por página:`, err);
+      }
+    });
   }
 
   function wireZonaRowClicks(panelEl, joined) {
@@ -973,6 +1004,7 @@
       const panelEl = document.getElementById(PANEL_ID);
       wireTabs(panelEl);
       wireZonaRowClicks(panelEl, comAgenda);
+      setPanelPageLength(panelEl);
       mapInitialized = false;
       maybeLoadTiles();
     } finally {
@@ -1147,6 +1179,8 @@
     parseUltimoMovimentoRows,
     joinEnderecos,
     joinAgenda,
+    setPanelPageLength,
+    PANEL_PAGE_LENGTH,
     aggregateZonas,
     zonaColor,
     statusColor,
