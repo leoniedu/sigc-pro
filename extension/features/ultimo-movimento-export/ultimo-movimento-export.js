@@ -1,7 +1,6 @@
 // SIGC-PRO feature: Último Movimento multi-agência CSV export. One of two
 // files in this extension allowed to make network requests (the other is
-// agenda-lookups/) — see scripts/check-privacy.sh. Gated behind the
-// "ultimoMovimentoExport" advanced flag (off by default): loops every
+// agenda-lookups/) — see scripts/check-privacy.sh. Loops every
 // agência in the current UF, fetching /relatorio/filtrar?slug=relatorio-
 // ultimo-movimento per agência (same report SIGC's own UI hits; the
 // standalone ultimo_movimento.py script this feature replaces predates
@@ -31,8 +30,7 @@
   // "Último Movimento" this originally matched exactly — an equality
   // check against the live header silently never fires, hiding every
   // button anchored on this function (confirmed 2026-08-09, this
-  // silently broke both the Mapa button and the ultimoMovimentoExport
-  // flag's CSV TODAS button).
+  // silently broke both the Mapa button and the CSV TODAS button).
   function onUltimoMovimento() {
     return [...document.querySelectorAll('h6')].some(
       (h) => window.__sigcPro.normalizeLabel(h.textContent).replace(/[íú]/g, (c) => (c === 'í' ? 'i' : 'u'))
@@ -175,13 +173,20 @@
 
   // --- UI ----------------------------------------------------------------
 
-  const CONSENT_MSG =
-    'SIGC-PRO: isto buscará o relatório Último Movimento de TODAS as ' +
-    'agências da UF atual, uma de cada vez (pode levar alguns minutos). ' +
-    'Cada requisição vai apenas ao próprio servidor do SIGC. Continuar?';
+  // Names the actual agência count, so the confirmation states the real
+  // size of what is about to happen instead of a vague "todas". This is
+  // the ONLY guard on this feature since the advanced flag was retired
+  // (2026-08-13) — the flag's stated job was preventing accidental
+  // activation, which a specific, counted prompt does better than a
+  // hidden checkbox nobody revisits.
+  function consentMsg(n) {
+    return `SIGC-PRO: isto buscará o relatório Último Movimento de TODAS as ` +
+      `${n} agências da UF atual, uma de cada vez (pode levar alguns ` +
+      'minutos). Cada requisição vai apenas ao próprio servidor do SIGC. ' +
+      'Continuar?';
+  }
 
   async function exportAllAgencias(btn) {
-    if (!confirm(CONSENT_MSG)) return;
     const uf = getCurrentUf();
     if (!uf) {
       alert('SIGC-PRO: não foi possível identificar a UF atual.');
@@ -202,6 +207,10 @@
         alert('SIGC-PRO: nenhuma agência encontrada para esta UF.');
         return;
       }
+      // Asked AFTER the list is known so the count is real, but BEFORE any
+      // per-agência report request — the list call is one cheap request to
+      // the same origin the user is already on.
+      if (!confirm(consentMsg(agenciaList.length))) return;
 
       const { header, rows, failed } = await collectAllAgencias(uf, agenciaList, (done, total) => {
         btn.textContent = `${done}/${total}`;
@@ -235,14 +244,13 @@
     id: BUTTON_ID,
     anchor: (ctx) => ctx.ultimoMovimentoFiltrarBtn(),
     insert: 'after',
-    when: () => onUltimoMovimento() &&
-      window.__sigcPro.settings.isEnabled('ultimoMovimentoExport'),
+    when: () => onUltimoMovimento(),
     build: () => {
       console.log(`${TAG} multi-agência export button added.`);
       const btn = window.__sigcPro.makeSigcFormButton({
         id: BUTTON_ID,
         text: 'CSV TODAS',
-        title: 'Exportar Último Movimento de todas as agências (SIGC-PRO, avançado)',
+        title: 'Exportar Último Movimento de todas as agências da UF (SIGC-PRO)',
         onClick: () => exportAllAgencias(btn),
         small: true,
       });

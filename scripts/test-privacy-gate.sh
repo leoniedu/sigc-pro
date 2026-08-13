@@ -10,7 +10,7 @@ cd "$(git rev-parse --show-toplevel)"
 PLANT_OUT="extension/features/__privacy_tripwire__.js"
 PLANT_MAP_XHR="extension/features/agenda-lookups/__privacy_tripwire_xhr__.js"
 PLANT_MAP_URL="extension/features/agenda-lookups/__privacy_tripwire_url__.js"
-PLANT_SETTINGS_FETCH="extension/features/settings/__privacy_tripwire_fetch__.js"
+PLANT_SETTINGS_FETCH="extension/features/agenda-date-picker/__privacy_tripwire_fetch__.js"
 PLANT_UME_XHR="extension/features/ultimo-movimento-export/__privacy_tripwire_xhr__.js"
 PLANT_UME_URL="extension/features/ultimo-movimento-export/__privacy_tripwire_url__.js"
 PLANT_UME_STORAGE="extension/features/ultimo-movimento-export/__privacy_tripwire_storage__.js"
@@ -30,7 +30,7 @@ PLANT_UMM_TILE_URL_OK="extension/features/ultimo-movimento-map/__privacy_tripwir
 PLANT_UMM_URL_BAD="extension/features/ultimo-movimento-map/__privacy_tripwire_url_bad__.js"
 cleanup() { rm -f "$PLANT_OUT" "$PLANT_MAP_XHR" "$PLANT_MAP_URL" "$PLANT_SETTINGS_FETCH" "$PLANT_UME_XHR" "$PLANT_UME_URL" "$PLANT_UME_STORAGE" "$PLANT_VENDOR_OK" "$PLANT_VENDOR_LOOKALIKE" "$PLANT_UMM_XHR" "$PLANT_UMM_SRC_BAD" "$PLANT_UMM_SRC_VAR_BAD" "$PLANT_UMM_SRC_OK" "$PLANT_UMM_SRC_VAR_OK" "$PLANT_UMM_SCOPE_DEF" "$PLANT_UMM_SCOPE_LEAK" "$PLANT_UMM_REASSIGN" "$PLANT_UMM_EVENT_OK" "$PLANT_UMM_EVENT_REASSIGN_OK" "$PLANT_UMM_TILE_URL_OK" "$PLANT_UMM_URL_BAD"; rmdir extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
-mkdir -p extension/features/settings extension/features/ultimo-movimento-export extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map
+mkdir -p extension/features/agenda-date-picker extension/features/ultimo-movimento-export extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map
 
 fail() { echo "privacy gate SELF-TEST FAILED: $1" >&2; exit 1; }
 
@@ -84,13 +84,15 @@ if scripts/check-privacy.sh >/dev/null 2>&1; then
 fi
 rm -f "$PLANT_SETTINGS_FETCH"
 
-# 6. chrome.storage inside settings/ must PASS (it's the sanctioned API
-#    there) — proves the exception isn't accidentally too narrow.
-echo 'chrome.storage.local.get(["x"], () => {});' > "extension/features/settings/__privacy_tripwire_storage_ok__.js"
-if ! scripts/check-privacy.sh >/dev/null 2>&1; then
-  fail "gate rejected sanctioned chrome.storage inside settings/"
+# 6. chrome.storage must now FAIL EVERYWHERE. The settings/ exception was
+#    retired with the advanced-flags Options page (2026-08-13) and the
+#    manifest requests no permissions at all — so any storage API
+#    reappearing anywhere is a regression, not a sanctioned use.
+echo 'chrome.storage.local.get(["x"], () => {});' > "extension/features/ultimo-movimento-export/__privacy_tripwire_storage__.js"
+if scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate accepted chrome.storage — the storage ban must now be global"
 fi
-rm -f "extension/features/settings/__privacy_tripwire_storage_ok__.js"
+rm -f "extension/features/ultimo-movimento-export/__privacy_tripwire_storage__.js"
 
 # 7. Non-fetch request API inside ultimo-movimento-export/ must fail.
 echo 'var x = new XMLHttpRequest();' > "$PLANT_UME_XHR"

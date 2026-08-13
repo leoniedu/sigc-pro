@@ -27,7 +27,7 @@
 <header>
   <h1>SIGC-PRO</h1>
   <p>Melhorias não oficiais para o SIGC — Sistema Integrado de Gestão da Coleta (IBGE)</p>
-  <p style="opacity:.75; font-size:.85rem; margin-top:.4rem;">versão 0.2.174</p>
+  <p style="opacity:.75; font-size:.85rem; margin-top:.4rem;">versão 0.2.175</p>
 </header>
 <main>
   <div class="aviso">⚠️ Projeto independente, sem vínculo com o IBGE. Funcionalidades
@@ -64,12 +64,12 @@
     incluindo todas as páginas da tabela, não só a visível.</p>
   </div>
   <div class="card">
-    <h3>📊 CSV TODAS — Último Movimento (avançado)</h3>
-    <p>No relatório Último Movimento, com um flag avançado ativado nas
-    Opções da extensão, exporta o relatório de <strong>todas</strong> as
-    agências da UF atual (não só a selecionada na tela) em um único CSV —
-    uma requisição por agência, com intervalo entre elas, ao próprio
-    servidor do SIGC.</p>
+    <h3>📊 CSV TODAS — Último Movimento</h3>
+    <p>No relatório Último Movimento, exporta o relatório de
+    <strong>todas</strong> as agências da UF atual (não só a selecionada
+    na tela) em um único CSV — uma requisição por agência, com intervalo
+    entre elas, ao próprio servidor do SIGC. Confirma antes de rodar,
+    informando quantas agências serão consultadas.</p>
   </div>
   <div class="card">
     <h3>📅 CSV-PRO — Agenda</h3>
@@ -107,11 +107,11 @@
     <li>Abra a Lista de Endereços ou a Agenda no SIGC e use os botões <strong>PRO</strong>.</li>
   </ol>
   <p>Requer Chrome 111+. A extensão só age em páginas do SIGC e valida o
-  layout da tabela antes de alterar qualquer coisa. Solicita apenas a
-  permissão <code>storage</code>, usada só para lembrar o estado do flag
-  avançado (Opções da extensão) — as únicas chamadas de rede são as
-  consultas opcionais do Guia + Mapa e da exportação avançada do Último
-  Movimento, ambas ao próprio servidor do SIGC, mediante clique e
+  layout da tabela antes de alterar qualquer coisa. <strong>Não solicita
+  nenhuma permissão do navegador e não armazena nada</strong> — as
+  chamadas de rede são as consultas opcionais do Guia + Mapa, do
+  MAPA-PRO e da exportação multi-agência do Último Movimento, todas ao
+  próprio servidor do SIGC, mediante clique e
   confirmação; os arquivos exportados ficam somente no computador do
   usuário.</p>
 </main>

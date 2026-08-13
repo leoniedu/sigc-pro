@@ -38,11 +38,11 @@ Em qualquer relatório com tabela:
   Excel brasileiro), contornando um problema conhecido do portal que
   impede o download pelos botões nativos de CSV/Excel fora da rede VPN.
 
-No relatório Último Movimento, com um flag avançado ativado nas Opções
-da extensão:
+No relatório Último Movimento:
 • CSV TODAS — exporta o relatório de todas as agências da UF atual
   (não só a selecionada na tela) em um único CSV, uma requisição por
-  agência ao próprio servidor do SIGC.
+  agência ao próprio servidor do SIGC. Confirma antes de rodar,
+  informando quantas agências serão consultadas.
 
 Em Administrar Agenda:
 • CSV-PRO — exporta os slots do calendário (dia/semana em exibição) com
@@ -66,11 +66,10 @@ Em Administrar Agenda:
 • Seletor de data — botão de calendário para pular direto a uma data.
 
 PRIVACIDADE: nenhum dado do SIGC sai do circuito usuário–IBGE. A
-extensão solicita apenas a permissão "storage" do navegador, usada só
-para lembrar o estado do flag avançado acima (Opções da extensão); todos
-os arquivos são gerados localmente e salvos pelo mecanismo padrão de
-download do Chrome. As consultas de dados — Guia do Dia, Mapa-pro e
-exportação avançada do Último Movimento — vão todas ao próprio servidor
+extensão não solicita NENHUMA permissão do navegador e não armazena
+nada; todos os arquivos são gerados localmente e salvos pelo mecanismo
+padrão de download do Chrome. As consultas de dados — Guia do Dia, Mapa-pro e
+exportação multi-agência do Último Movimento — vão todas ao próprio servidor
 do SIGC (mesma sessão do usuário), acionadas por clique e confirmação.
 
 O único recurso externo é o fundo cartográfico do Mapa-pro: as imagens
@@ -99,7 +98,8 @@ Adds unofficial productivity tools to SIGC (IBGE) pages: export buttons
 (PDF, KML, CSV) on report tables, a zone map and scheduling panel on the
 Último Movimento report, and Agenda helpers (CSV export, slot checks,
 open-slot capacity panel, printable day guide, date picker), without
-modifying the portal's native features.
+modifying the portal's native features. It requests no browser
+permissions and stores nothing.
 ```
 
 ## Host permission justification (dashboard field)
@@ -114,17 +114,15 @@ export buttons (PDF, KML, CSV) to report toolbars
 and Agenda helpers (CSV export, slot checks, open-slot capacity panel,
 printable day guide, date picker), reading data already rendered on the
 page. No access to any
-other site is requested. The only browser permission declared is
-`storage`, used solely to remember the on/off state of one advanced,
-off-by-default flag (set on the extension's own Options page) that
-gates a bulk export feature; no other data is stored. The extension
+other site is requested. **No browser permission is declared at all** —
+the manifest's `permissions` list is empty and nothing is stored. The extension
 makes no network calls except three optional, click-and-confirm requests
 to the SIGC server itself (same origin, within the user's existing
 session): the "Guia do Dia" feature; "Mapa-pro" on the Último Movimento
 report, which fetches the filtered agência's Lista de Endereços (for
-coordinates and zona) and the UF's agenda slots; and — only when the
-advanced flag above is enabled — a bulk "Último Movimento" report export
-that loops one request per agência in the current UF. The exported files may include
+coordinates and zona) and the UF's agenda slots; and a bulk "Último Movimento" report
+export that loops one request per agência in the current UF, behind a
+confirmation naming how many agências will be queried. The exported files may include
 Google Maps links (not loaded resources — nothing is fetched until
 clicked). The one external resource is the map background in "Mapa-pro":
 OpenStreetMap tiles, fetched only after a separate confirmation, carrying
@@ -134,18 +132,11 @@ CDN). Nothing is ever sent to the developer, and there is no telemetry.
 
 ## Storage permission justification (dashboard field)
 
-```
-The extension uses chrome.storage.local to persist a single
-on/off flag: the "CSV TODAS" advanced export feature on the
-Último Movimento report. The flag is off by default and can only
-be toggled on the extension's own Options page
-(chrome://extensions → Opções). No other data is stored — no
-user preferences, no credentials, no cached responses, no
-analytics. The flag exists because the feature loops one
-same-origin request per agência in the current UF, which is
-deliberately noisy; requiring an explicit opt-in prevents
-accidental activation.
-```
+**Not applicable.** The extension declares no `storage` permission — its
+`permissions` list is empty. (Until 0.2.174 it stored one boolean for an
+advanced-export flag; that flag and its Options page were retired, and the
+permission was dropped with them.) Leave this field blank / do not request
+the permission.
 
 ## Data safety / Privacy practices (dashboard form — required to submit)
 
@@ -194,12 +185,13 @@ Related points a reviewer may raise about this version:
   `chrome.runtime.getURL`. It is not fetched from a CDN — MV3 forbids remote
   code, and this is the compliant arrangement. Map *imagery* cannot be bundled,
   which is why tiles are external.
-- **No `host_permissions`.** The extension declares only `"storage"`. Its
+- **No permissions at all.** The `permissions` list is empty and there are no
+  `host_permissions`. Its
   requests run in the page's own context (MAIN world), so they are same-origin
   to the page rather than cross-origin extension requests.
-- **`storage` holds one boolean** — the off-by-default advanced-export flag.
-  Nothing else is persisted; consent flags and caches are in memory and are
-  gone on reload.
+- **Nothing is persisted at all.** The `permissions` list is empty; there is
+  no `chrome.storage`, `localStorage`, cookie or IndexedDB use anywhere.
+  Consent flags and caches live in memory and are gone on reload.
 
 ## Category
 

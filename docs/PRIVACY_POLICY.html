@@ -23,7 +23,7 @@
 <main>
   <p><em>Última atualização: 3 de agosto de 2026.</em></p>
 
-  <div class="destaque"><strong>Resumo: o SIGC-PRO NÃO coleta, NÃO transmite e NÃO armazena nenhum dado para o desenvolvedor ou para terceiros. As consultas de dados são opcionais, acionadas por clique e confirmadas pelo usuário, e vão ao próprio servidor do SIGC — dentro da sessão já autenticada. A única exceção é o fundo do mapa do "Mapa-pro": após uma confirmação específica, o navegador busca as imagens de mapa (tiles) do OpenStreetMap, um serviço externo. Essas imagens são o fundo cartográfico — nenhum dado do SIGC (endereço, morador, telefone, Controle) é enviado nessa requisição. O único armazenamento é um flag local (ligado/desligado) para uma dessas funcionalidades opcionais.</strong></div>
+  <div class="destaque"><strong>Resumo: o SIGC-PRO NÃO coleta, NÃO transmite e NÃO armazena nenhum dado para o desenvolvedor ou para terceiros. As consultas de dados são opcionais, acionadas por clique e confirmadas pelo usuário, e vão ao próprio servidor do SIGC — dentro da sessão já autenticada. A única exceção é o fundo do mapa do "Mapa-pro": após uma confirmação específica, o navegador busca as imagens de mapa (tiles) do OpenStreetMap, um serviço externo. Essas imagens são o fundo cartográfico — nenhum dado do SIGC (endereço, morador, telefone, Controle) é enviado nessa requisição. A extensão não armazena nada e não solicita nenhuma permissão do navegador.</strong></div>
 
   <h2>1. O que a extensão faz</h2>
   <p>O SIGC-PRO opera exclusivamente dentro das páginas do SIGC já abertas no
@@ -39,8 +39,7 @@
   coordenadas), que são links, não recursos carregados — nada é buscado
   ao abrir o arquivo. Em qualquer relatório com
   tabela: exporta os
-  dados como CSV. No relatório Último Movimento, com um flag avançado
-  ativado nas Opções da extensão (veja item 2): exporta o relatório de
+  dados como CSV. No relatório Último Movimento: exporta o relatório de
   todas as agências da UF atual em um único CSV. Na Agenda (Administrar
   Agenda): exporta os slots do calendário como CSV; verifica prazos de
   agendamento e consistência de nomes de zona/equipe; oferece um seletor de
@@ -66,8 +65,8 @@
   reduzida aos campos exibidos e mantida apenas em memória, e os links
   para o Google Maps são links, não recursos carregados; e a
   exportação avançada do relatório Último Movimento (multi-agência), que
-  só aparece quando o usuário ativa esse flag nas Opções da extensão e,
-  quando usada, faz uma requisição por agência da UF atual (com 2 segundos
+  confirma antes de rodar, nomeando quantas agências serão consultadas, e
+  faz uma requisição por agência da UF atual (com 2 segundos
   de intervalo entre elas) para montar um único CSV. Fora essas três
   funcionalidades opcionais, o código não contém chamadas de rede — uma
   verificação automática do repositório (scripts/check-privacy.sh) confere,
@@ -87,17 +86,18 @@
   nem qualquer outra integração com serviços de terceiros.</p>
 
   <h2>3. Armazenamento</h2>
-  <p>Um único valor local: o estado (ligado/desligado, desligado por
-  padrão) do flag que ativa a exportação avançada do Último Movimento,
-  salvo via <code>chrome.storage.local</code> e alterável na página de
-  Opções da extensão. Fora esse flag, a extensão não usa
-  <code>localStorage</code>, cookies ou IndexedDB. O arquivo KML é gerado
-  em memória e gravado apenas onde você escolher salvá-lo.</p>
+  <p><strong>Nenhum.</strong> Desde 2026-08-13 a extensão não armazena
+  absolutamente nada: não usa <code>chrome.storage</code>,
+  <code>localStorage</code>, cookies nem IndexedDB. (Até então guardava um
+  único booleano — o flag da exportação avançada — que foi retirado junto
+  com a página de Opções.) Consentimentos e caches existem apenas em
+  memória e desaparecem ao recarregar a página. Os arquivos exportados são
+  gerados em memória e gravados apenas onde você escolher salvá-los.</p>
 
   <h2>4. Permissões do navegador</h2>
-  <p>A extensão solicita apenas a permissão <code>storage</code>, usada
-  exclusivamente para o flag descrito no item 3 — nenhuma outra permissão
-  é declarada. O manifesto também declara em quais páginas
+  <p>A extensão <strong>não solicita nenhuma permissão</strong>: a lista
+  <code>permissions</code> do manifesto está vazia. O manifesto declara
+  apenas em quais páginas
   (<code>portalweb.ibge.gov.br</code>,
   <code>portalweb2.ibge.gov.br</code> e <code>w3sigcpns2025.ibge.gov.br</code>,
   os domínios do SIGC) seus scripts são executados. Isso pode ser

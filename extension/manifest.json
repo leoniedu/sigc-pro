@@ -1,21 +1,20 @@
 {
   "manifest_version": 3,
   "name": "SIGC-PRO",
-  "version": "0.2.174",
+  "version": "0.2.175",
   "description": "Melhorias não oficiais para o SIGC (IBGE): exportação de PDF, KML e CSV da Lista de Endereços, e CSV da Agenda.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["storage"],
-  "options_ui": {
-    "page": "features/settings/options.html",
-    "open_in_tab": true
-  },
   "web_accessible_resources": [
     {
-      "resources": ["vendor/leaflet/leaflet.js", "vendor/leaflet/leaflet.css", "vendor/leaflet/images/*"],
+      "resources": [
+        "vendor/leaflet/leaflet.js",
+        "vendor/leaflet/leaflet.css",
+        "vendor/leaflet/images/*"
+      ],
       "matches": [
         "https://portalweb.ibge.gov.br/*",
         "https://portalweb2.ibge.gov.br/*",
@@ -31,7 +30,6 @@
         "https://w3sigcpns2025.ibge.gov.br/*"
       ],
       "js": [
-        "features/settings/settings-relay.js",
         "features/ultimo-movimento-map/ultimo-movimento-map-relay.js"
       ],
       "run_at": "document_idle"
@@ -45,7 +43,6 @@
       "js": [
         "common/sigc-common.js",
         "common/municipios.js",
-        "features/settings/settings.js",
         "features/pdf-export/pdf-export.js",
         "features/kml-export/kml-export.js",
         "features/csv-export/csv-export.js",

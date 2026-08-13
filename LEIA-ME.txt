@@ -29,9 +29,7 @@ No relatório Último Movimento, filtrado por uma agência (rode o Filtrar):
     botão fica visível porém desabilitado — um relatório de estado
     inteiro é grande demais para buscar coordenadas.
 
-No relatório Último Movimento, com o flag avançado "Exportação Último
-Movimento (multi-agência)" ativado (botão direito no ícone do SIGC-PRO
-→ Opções; veja Configurações no README):
+No relatório Último Movimento:
   * CSV TODAS — baixa o Último Movimento de TODAS as agências da UF
     atual (não só a filtrada na tela) e combina tudo em um único CSV.
     Faz uma requisição por agência, com 2s de intervalo, ao próprio
@@ -116,12 +114,12 @@ Problemas?
 Privacidade
 -----------
 Nenhum dado do SIGC sai do seu computador para o desenvolvedor ou para
-terceiros. A extensão pede apenas a permissão "storage" (usada só para
-lembrar o estado do flag avançado); os arquivos são gerados localmente.
+terceiros. A extensão não pede NENHUMA permissão do navegador; os
+arquivos são gerados localmente.
 As consultas de dados são três, todas opcionais e todas ao próprio
-servidor do SIGC — o "Guia + Mapa", o "MAPA-PRO" e, com o flag avançado
-ativado, a exportação Último Movimento multi-agência — somente quando
-você clica e confirma, dentro da sessão já autenticada.
+servidor do SIGC — o "Guia + Mapa", o "MAPA-PRO" e a exportação Último
+Movimento multi-agência — somente quando você clica e confirma, dentro
+da sessão já autenticada.
 
 O único recurso externo é o fundo do mapa do MAPA-PRO: as imagens de
 mapa (tiles) do OpenStreetMap, buscadas apenas depois de uma

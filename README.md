@@ -56,8 +56,7 @@ No relatório **Último Movimento**, filtrado por **uma** agência:
   — um relatório de estado inteiro é grande demais para buscar
   coordenadas.
 
-No relatório **Último Movimento**, com o flag avançado "Exportação
-Último Movimento (multi-agência)" ativado (veja Configurações abaixo):
+No relatório **Último Movimento**:
 
 - **CSV TODAS** — baixa o relatório Último Movimento de TODAS as agências
   da UF atual (não só a agência filtrada na tela) e combina tudo em um
@@ -154,28 +153,15 @@ rede). Para regerá-la a partir de `orcedata::municipios`:
 Rscript scripts/gen-municipios.R
 ```
 
-A página **Opções** da extensão (clique com o botão direito no ícone do
-SIGC-PRO na barra do Chrome → **Opções**, ou em `chrome://extensions` →
-detalhes do SIGC-PRO → **Opções da extensão**) tem um flag avançado
-desativado por padrão: "Exportação Último Movimento (multi-agência)".
-Esse flag existe porque a funcionalidade que ele libera faz várias
-requisições em sequência ao servidor do SIGC (uma por agência da UF) —
-um padrão de uso mais sensível do que o resto da extensão, que só lê a
-página já carregada na tela. O valor do flag fica salvo localmente via
-`chrome.storage.local` (a única funcionalidade da extensão que usa
-armazenamento; veja Privacidade abaixo). Uma mudança no flag vale a
-partir do próximo carregamento da página do SIGC.
-
 ## Privacidade
 
 **Nenhum dado do SIGC sai do seu computador.** A extensão solicita apenas
-a permissão `storage` do navegador (usada exclusivamente para lembrar o
-estado do flag avançado — veja Configuração acima) e não faz chamadas de
-rede, exceto três recursos opcionais, todos mediante clique e
+**nenhuma permissão** do navegador — a lista `permissions` do manifesto
+está vazia — e não faz chamadas de rede, exceto três recursos opcionais, todos mediante clique e
 confirmação, todos apenas ao próprio servidor do SIGC: "Guia + Mapa"
 (coordenadas de endereços), "MAPA-PRO" (Lista de Endereços da agência
-filtrada + agenda da UF) e, com o flag avançado ativado, a exportação
-Último Movimento multi-agência. Fora esses três casos a extensão não tem
+filtrada + agenda da UF) e a exportação Último Movimento
+multi-agência (que confirma, nomeando quantas agências serão consultadas). Fora esses três casos a extensão não tem
 código remoto — o arquivo KML, por exemplo, é gerado em memória e salvo
 localmente.
 
@@ -192,7 +178,7 @@ que introduza APIs de rede ou armazenamento em `extension/` fora de
 exceções únicas e auditadas: `fetch` (sem URLs absolutas) em
 `common/`, `features/agenda-lookups/` e
 `features/ultimo-movimento-export/`;
-`chrome.storage` em `features/settings/`; e, em
+`chrome.storage` em lugar nenhum (banido globalmente); e, em
 `features/ultimo-movimento-map/`, exatamente uma URL absoluta — o
 template de tiles do OpenStreetMap. Qualquer outra URL externa, ali ou
 em qualquer outro lugar, reprova o gate. Para ativá-lo

@@ -17,8 +17,8 @@
 #   - extension/features/ultimo-movimento-export/ : fetch() only, same-origin
 #     only (same rationale, see
 #     docs/superpowers/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md)
-#   - extension/features/settings/         : chrome.storage only, no fetch
-#     (persists the advanced-flags toggle; same spec as above)
+#   (No storage-sanctioned directory: the advanced-flags Options page was
+#    the only one, retired 2026-08-13 — see STORAGE_DIRS below.)
 #   - extension/vendor/                    : vendored third-party libraries,
 #     unmodified from upstream — not swept by this heuristic (which targets
 #     sigc-pro's own code), audited once at vendor time instead of per-commit.
@@ -52,7 +52,12 @@
 # literal, not a call, and the fetch-sanctioned directories legitimately
 # send that header.
 FETCH_DIRS='extension/common extension/features/agenda-lookups extension/features/ultimo-movimento-export'
-STORAGE_DIRS='extension/features/settings'
+# EMPTY since 2026-08-13: the advanced-flags Options page was the only
+# consumer of chrome.storage, and it was retired along with the flag it
+# held. Storage APIs are now banned EVERYWHERE in extension/ — the
+# manifest requests no permissions at all. Re-populating this list means
+# re-introducing a permission request, which is a deliberate decision.
+STORAGE_DIRS=''
 VENDOR_DIRS='extension/vendor'
 LOCAL_RESOURCE_DIRS='extension/features/ultimo-movimento-map'
 
