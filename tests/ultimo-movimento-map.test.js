@@ -426,6 +426,30 @@ describe('open slots in the Zonas tab', () => {
     expect(html).toContain('09:00');
   });
 
+  // Regression (2026-08-12): the times used to sit behind a <details>
+  // "Ver horários" disclosure, which was unopenable — the whole row is a
+  // click target that jumps to the map, so the row handler swallowed the
+  // summary's click and switched tabs instead. Every hour must be legible
+  // in the table itself, with no interaction.
+  test('every open time is visible without any disclosure widget', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const slotsPorZona = new Map([['29JDM8', [
+      { isoDate: '2026-08-12', horas: ['09:00', '14:00'] },
+      { isoDate: '2026-08-13', horas: ['10:30'] },
+    ]]]);
+    const rows = [{
+      idZona: '29JDM8', nomeZona: 'Zona 1', realizada: 1, naoIniciada: 0,
+      domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 1,
+      semCoordenadas: 0, agendados: 0, semAgendamento: 1,
+    }];
+    const html = I.buildZonasTableHtml(rows, slotsPorZona);
+    expect(html).not.toContain('<details');
+    expect(html).not.toContain('Ver horários');
+    ['09:00', '14:00', '10:30', '12/08', '13/08'].forEach((s) => {
+      expect(html).toContain(s);
+    });
+  });
+
   test('a zona with no open slots says so', () => {
     const I = window.__sigcProUltimoMovimentoMapInternals;
     const rows = [{

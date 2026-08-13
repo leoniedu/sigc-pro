@@ -244,11 +244,12 @@
       // on hover.
       const zonaLabel = esc(r.idZona || '—');
       const zonaCell = clickable ? `<a href="#" class="sigc-pro-zona-link">${zonaLabel}</a>` : zonaLabel;
+      // Rendered inline, NOT behind a <details>: the whole row is a click
+      // target that jumps to the map, so a disclosure widget inside it was
+      // unopenable — the row handler swallowed the summary's click and
+      // switched tabs instead (reported 2026-08-12).
       const grupos = slotsMap.get(zonaKey) || [];
-      const slotsHtml = AM.buildSlotsLivresHtml(grupos);
-      const slotsCell =
-        '<details class="sigc-pro-slots-livres"><summary>Ver horários</summary>' +
-        slotsHtml + '</details>';
+      const slotsCell = AM.buildSlotsLivresHtml(grupos);
       return (
         `<tr${rowAttrs}>` +
         `<td>${zonaCell}</td>` +
@@ -257,7 +258,7 @@
         `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
         `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>` +
         `<td>${r.agendados}</td><td>${r.semAgendamento}</td>` +
-        `<td>${slotsCell}</td>` +
+        `<td class="sigc-pro-slots-cell">${slotsCell}</td>` +
         '</tr>'
       );
     }).join('');
@@ -333,7 +334,14 @@
     .sigc-pro-domicilios-table th { background: #f4f4f4; }
     .sigc-pro-futura { font-weight: 700; color: #161; }
     .sigc-pro-passada { color: #777; }
-    .sigc-pro-slots-livres summary { cursor: pointer; color: #0645ad; }
+    /* Slots livres cell: inline, left-aligned against the numeric columns
+       around it, and compact enough that a fortnight of open times still
+       fits one table cell — one line per day, "dd/mm HH:MM HH:MM". */
+    .sigc-pro-zonas-table td.sigc-pro-slots-cell { text-align: left; font-size: 11px;
+      line-height: 1.5; min-width: 12rem; }
+    .sigc-pro-slots-cell .sp-dia { white-space: nowrap; }
+    .sigc-pro-slots-cell .sp-hora { display: inline-block; margin-right: .3rem; color: #333; }
+    .sigc-pro-slots-cell .sp-livres-vazio { color: #888; margin: 0; }
   `;
 
   let cssInjected = false;
