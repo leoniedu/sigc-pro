@@ -197,20 +197,6 @@ Related points a reviewer may raise about this version:
 
 Productivity (or "Tools" if available for the target region)
 
-## Screenshots needed (1280x800 or 640x400, at least 1, up to 5)
-
-1. Toolbar close-up: native buttons + PDF-pro/KML-pro/CSV-pro side by side
-   (already captured informally during development — recreate cleanly).
-2. Mapa-pro: the panel's Mapa tab, domicílios coloured by zona.
-3. PDF-pro output: listagem-style PDF page.
-4. (optional) Mapa-pro: the Zonas tab, showing per-zona status and the
-   free slots listed day by day.
-5. (optional) KML-pro opened in Google Earth, or the Agenda's Guia do Dia
-   with its tabs.
-
-Screenshots must not show real respondent data (names, addresses,
-telephones) — use a test agência or blur them.
-
 ## Privacy policy URL
 
 https://leoniedu.github.io/sigc-pro/PRIVACY_POLICY.html
