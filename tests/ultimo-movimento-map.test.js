@@ -736,6 +736,81 @@ describe('convexHull', () => {
   });
 });
 
+describe('spiderfyRows', () => {
+  const row = (domicilio, lat, lon) => ({ controle: 'C1', domicilio, lat, lon, temCoordenadas: true });
+
+  test('leaves an isolated row on its exact coordinates', () => {
+    const out = UM.spiderfyRows([row('1', -12.5, -38.4)]);
+    expect(out).toHaveLength(1);
+    expect(out[0].lat).toBe(-12.5);
+    expect(out[0].lon).toBe(-38.4);
+    expect(out[0].coLocated).toBe(1);
+  });
+
+  test('fans identical coordinates out onto distinct points', () => {
+    const rows = [row('1', -12.5, -38.4), row('2', -12.5, -38.4), row('3', -12.5, -38.4)];
+    const out = UM.spiderfyRows(rows);
+    expect(out).toHaveLength(3);
+    const keys = new Set(out.map((r) => `${r.lat},${r.lon}`));
+    expect(keys.size).toBe(3);
+    out.forEach((r) => expect(r.coLocated).toBe(3));
+  });
+
+  test('keeps the fanned points within a few dozen meters of the shared spot', () => {
+    const rows = [row('1', -12.5, -38.4), row('2', -12.5, -38.4)];
+    const out = UM.spiderfyRows(rows);
+    out.forEach((r) => {
+      // ~1e-4 degrees is ~11 m; the ring radius must stay in that order.
+      expect(Math.abs(r.lat - -12.5)).toBeLessThan(0.001);
+      expect(Math.abs(r.lon - -38.4)).toBeLessThan(0.001);
+    });
+  });
+
+  test('groups coordinates that differ by less than the ~5 m threshold', () => {
+    // ~2e-5 degrees latitude is ~2.2 m — same building, jittered geocode.
+    const rows = [row('1', -12.5, -38.4), row('2', -12.50002, -38.4)];
+    const out = UM.spiderfyRows(rows);
+    out.forEach((r) => expect(r.coLocated).toBe(2));
+    // Separated onto distinct points (for n=2 the ring puts them due
+    // east/west of the shared centre, so they differ in longitude).
+    expect(`${out[0].lat},${out[0].lon}`).not.toBe(`${out[1].lat},${out[1].lon}`);
+  });
+
+  test('does not group coordinates farther apart than the threshold', () => {
+    // ~1e-3 degrees latitude is ~111 m — genuinely different addresses.
+    const rows = [row('1', -12.5, -38.4), row('2', -12.501, -38.4)];
+    const out = UM.spiderfyRows(rows);
+    out.forEach((r) => expect(r.coLocated).toBe(1));
+    expect(out[0].lat).toBe(-12.5);
+    expect(out[1].lat).toBe(-12.501);
+  });
+
+  test('preserves the original row fields and original coordinates', () => {
+    const rows = [row('7', -12.5, -38.4), row('8', -12.5, -38.4)];
+    const out = UM.spiderfyRows(rows);
+    expect(out.map((r) => r.domicilio).sort()).toEqual(['7', '8']);
+    out.forEach((r) => {
+      expect(r.controle).toBe('C1');
+      expect(r.origLat).toBe(-12.5);
+      expect(r.origLon).toBe(-38.4);
+    });
+  });
+
+  test('returns an empty array for no rows', () => {
+    expect(UM.spiderfyRows([])).toEqual([]);
+  });
+});
+
+describe('domicilioLabel', () => {
+  test('renders the domicilio number', () => {
+    expect(UM.domicilioLabel({ domicilio: '7', coLocated: 1 })).toBe('7');
+  });
+
+  test('escapes unexpected domicilio content', () => {
+    expect(UM.domicilioLabel({ domicilio: '<b>', coLocated: 1 })).toBe('&lt;b&gt;');
+  });
+});
+
 describe('controleCentroids', () => {
   test('averages lat/lon across a Controle\'s valid-coordinate rows', () => {
     const joined = [

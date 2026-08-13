@@ -340,6 +340,14 @@
     .sigc-pro-controle-label span { font-size: 10px; font-weight: 600; color: #fff;
       padding: 1px 4px; border-radius: 3px; white-space: nowrap;
       box-shadow: 0 0 2px rgba(0,0,0,.6); }
+    /* Domicílio number drawn over its status circle. Non-interactive, so
+       clicks fall through to the circleMarker underneath; white text with
+       a dark halo stays legible over every status color in the palette. */
+    .sigc-pro-domicilio-num { pointer-events: none; }
+    .sigc-pro-domicilio-num span { display: flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; font-size: 10px; font-weight: 700; color: #fff;
+      font-family: system-ui, sans-serif; line-height: 1;
+      text-shadow: 0 0 2px rgba(0,0,0,.9), 0 0 3px rgba(0,0,0,.7); }
     .sigc-pro-status-legend { background: #fff; padding: 6px 8px; border-radius: 4px;
       font-size: 11px; line-height: 1.6; box-shadow: 0 0 4px rgba(0,0,0,.3); }
     .sigc-pro-domicilios-table { border-collapse: collapse; width: 100%; }
@@ -700,6 +708,52 @@
     }
   }
 
+  // A building with several domicílios shares one geocode in SIGC, so
+  // their markers land exactly on top of each other and only the last one
+  // drawn is clickable. Rather than collapse them into a count, fan the
+  // group out onto a small ring around the shared point: every domicílio
+  // keeps its own number, status color and popup. Rows are grouped by a
+  // ~5 m threshold (COLOCATED_EPS_DEG below) so a jittered geocode of the
+  // same building collapses together with the exact matches.
+  const COLOCATED_EPS_DEG = 0.00005; // ~5.5 m in latitude
+  const SPIDER_RADIUS_DEG = 0.00012; // ~13 m — visibly apart at street zoom
+
+  function spiderfyRows(rows) {
+    const groups = []; // [{ lat, lon, members: [row, ...] }]
+    rows.forEach((r) => {
+      const hit = groups.find((g) => (
+        Math.abs(g.lat - r.lat) <= COLOCATED_EPS_DEG &&
+        Math.abs(g.lon - r.lon) <= COLOCATED_EPS_DEG
+      ));
+      if (hit) hit.members.push(r);
+      else groups.push({ lat: r.lat, lon: r.lon, members: [r] });
+    });
+    const out = [];
+    groups.forEach((g) => {
+      const n = g.members.length;
+      g.members.forEach((r, i) => {
+        // Longitude degrees shrink with latitude; scale so the ring reads
+        // as a circle on screen rather than an ellipse.
+        const lonScale = 1 / Math.max(0.15, Math.cos(g.lat * Math.PI / 180));
+        const angle = (2 * Math.PI * i) / n;
+        out.push(Object.assign({}, r, {
+          lat: n === 1 ? r.lat : g.lat + SPIDER_RADIUS_DEG * Math.sin(angle),
+          lon: n === 1 ? r.lon : g.lon + SPIDER_RADIUS_DEG * lonScale * Math.cos(angle),
+          origLat: r.lat,
+          origLon: r.lon,
+          coLocated: n,
+        }));
+      });
+    });
+    return out;
+  }
+
+  // The text drawn inside a domicílio marker: the domicílio number, which
+  // in practice is 1–2 digits and so fits the circle without truncation.
+  function domicilioLabel(r) {
+    return window.__sigcPro.escapeHtml(String(r.domicilio));
+  }
+
   // Pure/testable: the marker popup body for one household row. The
   // Agendado line is entirely omitted (not blank) when there is none —
   // an empty "Agendado:" line would read as a broken lookup rather than
@@ -714,9 +768,14 @@
       ? `<br>Agendado: <span class="${r.futura ? 'sigc-pro-futura' : 'sigc-pro-passada'}">` +
         `${esc(r.agendado)}</span>`
       : '';
+    // Only shown when the marker was fanned out of a shared geocode, so
+    // the user knows the ring is one address, not neighbouring ones.
+    const coLocadoLinha = r.coLocated > 1
+      ? `<br><em>${r.coLocated} domicílios neste mesmo ponto</em>`
+      : '';
     return (
       `Controle: ${esc(r.controle)}<br>` +
-      `Domicílio: ${esc(r.domicilio)}<br>` +
+      `Domicílio: ${esc(r.domicilio)}${coLocadoLinha}<br>` +
       `Entrevistador: ${esc(r.entrevistador)}<br>` +
       `Tipo: ${esc(r.tipoEntrevista)}<br>` +
       `Zona: ${esc(r.idZona || 'Sem zona')}` +
@@ -767,11 +826,33 @@
     });
 
     // --- Layer 2: domicílio markers, colored by status ---------------
+    // Co-located rows are fanned onto a ring first (spiderfyRows), so the
+    // markers below never sit exactly on top of one another and each
+    // domicílio number stays readable and clickable.
     const bounds = [];
-    withCoords.forEach((r) => {
+    spiderfyRows(withCoords).forEach((r) => {
       const color = statusColor(r);
+      if (r.coLocated > 1) {
+        // Thin leader line back to the true geocode, so the fan reads as
+        // "these all live at that one point" rather than as separate
+        // addresses scattered around it.
+        L.polyline([[r.origLat, r.origLon], [r.lat, r.lon]], {
+          color: '#666', weight: 1, opacity: 0.5, interactive: false,
+        }).addTo(map);
+      }
       const marker = L.circleMarker([r.lat, r.lon], {
-        radius: 6, color, fillColor: color, fillOpacity: 0.8,
+        radius: 9, color, fillColor: color, fillOpacity: 0.8,
+      }).addTo(map);
+      // The number rides in its own non-interactive divIcon centered on
+      // the circle — circleMarker itself cannot carry text.
+      L.marker([r.lat, r.lon], {
+        icon: L.divIcon({
+          className: 'sigc-pro-domicilio-num',
+          html: `<span>${domicilioLabel(r)}</span>`,
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        }),
+        interactive: false,
       }).addTo(map);
       // gmapsPontoUrl (just pins the point — no turn-by-turn directions)
       // is always non-empty here (withCoords already filtered to
@@ -779,8 +860,11 @@
       // lista-agenda.js's own domicílio table uses (via the sibling
       // gmapsDestinoUrl) — a link the user clicks, never a request the
       // extension makes itself.
-      marker.bindPopup(buildPopupHtml(r));
-      bounds.push([r.lat, r.lon]);
+      // Popup and bounds both use the TRUE geocode, never the fanned ring
+      // position: the Google Maps link must pin the real address, and the
+      // fitBounds box must not be inflated by the fan offsets.
+      marker.bindPopup(buildPopupHtml(Object.assign({}, r, { lat: r.origLat, lon: r.origLon })));
+      bounds.push([r.origLat, r.origLon]);
     });
 
     // --- Layer 3: Controle labels, always visible ---------------------
@@ -1237,6 +1321,8 @@
     buildZonasTableHtml,
     buildDomiciliosTabHtml,
     buildPopupHtml,
+    spiderfyRows,
+    domicilioLabel,
     buildPanelHtml,
     onMapaClick,
     convexHull,
