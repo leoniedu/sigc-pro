@@ -417,6 +417,58 @@ describe('buildDomiciliosTabHtml', () => {
 // finds, and this panel injects its tables into document.body — so they
 // were being paged at the library's 10-row default ("Showing 1 to 10 of
 // 90 entries", reported 2026-08-12).
+// DataTables sorts on a cell's text unless told otherwise, and two columns
+// here would sort wrongly that way: "dd/mm/yyyy HH:MM" is lexicographic
+// nonsense, and the slots cell is a block of markup.
+describe('sort keys for the library-sorted columns', () => {
+  test('Agendado carries the raw ISO timestamp as its sort key', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const html = I.buildDomiciliosTabHtml([{
+      controle: 'C1', domicilio: '1', idZona: 'Z1',
+      agendado: '01/09/2026 09:00', agendadoOrdenavel: '2026-09-01T09:00:00',
+      futura: true, ultimaPosicao: '', tipoEntrevista: '', entrevistador: '', data: '',
+    }]);
+    expect(html).toContain('data-order="2026-09-01T09:00:00"');
+  });
+
+  test('an unscheduled household gets an empty sort key, not "—"', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const html = I.buildDomiciliosTabHtml([{
+      controle: 'C1', domicilio: '1', idZona: 'Z1', agendado: '', agendadoOrdenavel: '',
+      futura: false, ultimaPosicao: '', tipoEntrevista: '', entrevistador: '', data: '',
+    }]);
+    expect(html).toContain('data-order=""');
+  });
+
+  // Sorting a day/hour markup block as text is meaningless; the useful
+  // order is "which zona has the most capacity left".
+  test('the slots cell sorts by how many open slots it holds', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const slotsPorZona = new Map([['29JDM8', [
+      { isoDate: '2026-08-12', horas: ['09:00', '14:00'] },
+      { isoDate: '2026-08-13', horas: ['10:30'] },
+    ]]]);
+    const rows = [{
+      idZona: '29JDM8', nomeZona: 'Zona 1', realizada: 1, naoIniciada: 0,
+      domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 1,
+      semCoordenadas: 0, agendados: 0, semAgendamento: 1,
+    }];
+    const html = I.buildZonasTableHtml(rows, slotsPorZona);
+    expect(html).toContain('data-order="3"');
+  });
+
+  test('a zona with no open slots sorts as zero', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const rows = [{
+      idZona: '29JDM8', nomeZona: 'Zona 1', realizada: 1, naoIniciada: 0,
+      domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 1,
+      semCoordenadas: 0, agendados: 0, semAgendamento: 1,
+    }];
+    const html = I.buildZonasTableHtml(rows, new Map());
+    expect(html).toContain('data-order="0"');
+  });
+});
+
 describe('Domicílios tab — Zona column', () => {
   test('shows the zona id per household', () => {
     const I = window.__sigcProUltimoMovimentoMapInternals;
@@ -457,13 +509,19 @@ describe('consent survives a second script injection', () => {
   });
 });
 
-describe('setPanelPageLength', () => {
+describe('initPanelTables', () => {
+  // The panel's tables are initialized DELIBERATELY rather than inheriting
+  // SIGC's own auto-init, which gave a 10-row default and no sorting say
+  // (reported live 2026-08-12).
   const withJq = (isDt, record) => {
     const prev = window.jQuery;
     const fake = (el) => ({
-      DataTable: () => ({
-        page: { len: (n) => { record.len = n; return { draw: (v) => record.draws.push(v) }; } },
-      }),
+      DataTable: (opts) => {
+        if (opts) record.initOpts = opts;
+        return {
+          page: { len: (n) => { record.len = n; return { draw: (v) => record.draws.push(v) }; } },
+        };
+      },
       el,
     });
     fake.fn = { dataTable: { isDataTable: () => isDt } };
@@ -471,37 +529,56 @@ describe('setPanelPageLength', () => {
     return () => { window.jQuery = prev; };
   };
 
-  test('sets 50 rows per page on a DataTables-claimed panel table', () => {
+  const run = (isDt, html) => {
     const I = window.__sigcProUltimoMovimentoMapInternals;
     const panel = document.createElement('div');
-    panel.innerHTML = '<table class="sigc-pro-domicilios-table"><tbody></tbody></table>';
-    const record = { len: null, draws: [] };
-    const restore = withJq(true, record);
+    panel.innerHTML = html;
+    const record = { len: null, draws: [], initOpts: null };
+    const restore = withJq(isDt, record);
     try {
-      I.setPanelPageLength(panel);
+      I.initPanelTables(panel);
     } finally {
       restore();
     }
-    expect(record.len).toBe(50);
+    return record;
+  };
+
+  const DOMICILIOS = '<table class="sigc-pro-domicilios-table"><tbody></tbody></table>';
+
+  test('initializes an unclaimed table with 50 rows per page', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const r = run(false, DOMICILIOS);
+    expect(r.initOpts).not.toBeNull();
+    expect(r.initOpts.pageLength).toBe(50);
     expect(I.PANEL_PAGE_LENGTH).toBe(50);
-    // draw(false) — redraw without resetting the user's current page.
-    expect(record.draws).toEqual([false]);
+    // No initial re-sort: the panel already built the rows in a meaningful
+    // order (report order / zona order).
+    expect(r.initOpts.order).toEqual([]);
   });
 
-  // Calling .DataTable() on an unclaimed table would CREATE one, which is
-  // not this function's job — it must leave a plain table plain.
-  test('does nothing when DataTables never claimed the table', () => {
-    const I = window.__sigcProUltimoMovimentoMapInternals;
-    const panel = document.createElement('div');
-    panel.innerHTML = '<table class="sigc-pro-zonas-table"><tbody></tbody></table>';
-    const record = { len: null, draws: [] };
-    const restore = withJq(false, record);
-    try {
-      I.setPanelPageLength(panel);
-    } finally {
-      restore();
-    }
-    expect(record.len).toBeNull();
+  test('the length menu offers a show-everything option', () => {
+    const r = run(false, DOMICILIOS);
+    const [values, labels] = r.initOpts.lengthMenu;
+    expect(values).toContain(-1);
+    expect(labels).toContain('Todos');
+  });
+
+  // Every other string in this panel is Portuguese, so the table's own
+  // chrome must be too — and it must not come from a third-party CDN.
+  test('the table chrome is Portuguese', () => {
+    const r = run(false, DOMICILIOS);
+    expect(r.initOpts.language.paginate.next).toBe('Próxima');
+    expect(r.initOpts.language.lengthMenu).toContain('linhas por página');
+    expect(r.initOpts.language.info).toContain('registros');
+  });
+
+  // Re-initializing an already-claimed table throws, so that case adjusts
+  // the live instance instead.
+  test('adjusts in place when SIGC already claimed the table', () => {
+    const r = run(true, '<table class="sigc-pro-zonas-table"><tbody></tbody></table>');
+    expect(r.initOpts).toBeNull();
+    expect(r.len).toBe(50);
+    expect(r.draws).toEqual([false]); // redraw without losing the current page
   });
 
   test('tolerates jQuery/DataTables being absent entirely', () => {
@@ -513,7 +590,7 @@ describe('setPanelPageLength', () => {
     try {
       const panel = document.createElement('div');
       panel.innerHTML = '<table><tbody></tbody></table>';
-      expect(() => I.setPanelPageLength(panel)).not.toThrow();
+      expect(() => I.initPanelTables(panel)).not.toThrow();
     } finally {
       window.jQuery = prev;
       window.$ = prevDollar;

@@ -250,6 +250,10 @@
       // switched tabs instead (reported 2026-08-12).
       const grupos = slotsMap.get(zonaKey) || [];
       const slotsCell = AM.buildSlotsLivresHtml(grupos);
+      // Sorting a block of day/hour markup as text is meaningless; the
+      // useful order is "which zona has the most capacity left", so the
+      // sort key is the total number of open slots.
+      const slotsCount = grupos.reduce((n, g) => n + ((g.horas && g.horas.length) || 0), 0);
       return (
         `<tr${rowAttrs}>` +
         `<td>${zonaCell}</td>` +
@@ -258,7 +262,7 @@
         `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
         `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>` +
         `<td>${r.agendados}</td><td>${r.semAgendamento}</td>` +
-        `<td class="sigc-pro-slots-cell">${slotsCell}</td>` +
+        `<td class="sigc-pro-slots-cell" data-order="${slotsCount}">${slotsCell}</td>` +
         '</tr>'
       );
     }).join('');
@@ -278,9 +282,14 @@
       '<tr><th>Controle</th><th>Domicílio</th><th>Zona</th><th>Agendado</th>' +
       '<th>Situação</th><th>Tipo</th><th>Entrevistador</th><th>Data</th></tr>';
     const body = (rows || []).map((r) => {
+      // data-order: the raw ISO timestamp, so DataTables sorts this column
+      // chronologically instead of lexicographically on "dd/mm/yyyy HH:MM"
+      // (which would put every 01/… together regardless of month or year).
+      // Unscheduled rows sort last under either direction via the empty key.
       const agendadoCell = r.agendado
         ? `<span class="${r.futura ? 'sigc-pro-futura' : 'sigc-pro-passada'}">${esc(r.agendado)}</span>`
         : '—';
+      const agendadoSort = esc(r.agendadoOrdenavel || '');
       return (
         '<tr>' +
         `<td>${dash(r.controle)}</td>` +
@@ -289,7 +298,7 @@
         // carries the names, and this column exists to tell rows apart and
         // to sort/filter by zona, which the short ID does in far less width.
         `<td>${dash(r.idZona)}</td>` +
-        `<td>${agendadoCell}</td>` +
+        `<td data-order="${agendadoSort}">${agendadoCell}</td>` +
         `<td>${dash(r.ultimaPosicao)}</td>` +
         `<td>${dash(r.tipoEntrevista)}</td>` +
         `<td>${dash(r.entrevistador)}</td>` +
@@ -532,17 +541,44 @@
   // full, which is also fine).
   const PANEL_PAGE_LENGTH = 50;
 
-  function setPanelPageLength(panelEl) {
+  // DataTables ships English chrome; every other string in this panel is
+  // Portuguese, so the table's own controls have to be too. Inlined rather
+  // than fetched from DataTables' CDN language files — this extension makes
+  // no third-party requests.
+  const DT_PT_BR = {
+    search: 'Filtrar:',
+    lengthMenu: '_MENU_ linhas por página',
+    info: 'Mostrando _START_ a _END_ de _TOTAL_ registros',
+    infoEmpty: 'Nenhum registro',
+    infoFiltered: '(filtrado de _MAX_ no total)',
+    zeroRecords: 'Nenhum registro encontrado',
+    emptyTable: 'Sem dados',
+    paginate: { first: 'Primeira', last: 'Última', next: 'Próxima', previous: 'Anterior' },
+  };
+
+  function initPanelTables(panelEl) {
     const jq = window.jQuery || window.$;
     if (!jq || !jq.fn || !jq.fn.dataTable || !panelEl) return;
     panelEl.querySelectorAll('table').forEach((tbl) => {
       try {
-        // isDataTable first: calling .DataTable() on an unclaimed table
-        // would CREATE one, which is not this function's job.
-        if (!jq.fn.dataTable.isDataTable(tbl)) return;
-        jq(tbl).DataTable().page.len(PANEL_PAGE_LENGTH).draw(false);
+        // Initialize deliberately rather than inheriting whatever SIGC's
+        // own auto-init would do: that gave a 10-row default and no say
+        // over sorting. Already-claimed tables (SIGC got there first) are
+        // adjusted in place instead — re-initializing throws.
+        if (jq.fn.dataTable.isDataTable(tbl)) {
+          jq(tbl).DataTable().page.len(PANEL_PAGE_LENGTH).draw(false);
+          return;
+        }
+        jq(tbl).DataTable({
+          pageLength: PANEL_PAGE_LENGTH,
+          lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'Todos']],
+          order: [], // keep the order the panel built (zona/report order)
+          language: DT_PT_BR,
+        });
       } catch (err) {
-        console.warn(`${TAG} não foi possível ajustar as linhas por página:`, err);
+        // A failed init is not fatal: the plain table still renders every
+        // row, just without sorting or paging.
+        console.warn(`${TAG} não foi possível inicializar a tabela:`, err);
       }
     });
   }
@@ -1018,7 +1054,7 @@
       const panelEl = document.getElementById(PANEL_ID);
       wireTabs(panelEl);
       wireZonaRowClicks(panelEl, comAgenda);
-      setPanelPageLength(panelEl);
+      initPanelTables(panelEl);
       mapInitialized = false;
       maybeLoadTiles();
     } finally {
@@ -1193,7 +1229,7 @@
     parseUltimoMovimentoRows,
     joinEnderecos,
     joinAgenda,
-    setPanelPageLength,
+    initPanelTables,
     PANEL_PAGE_LENGTH,
     aggregateZonas,
     zonaColor,
