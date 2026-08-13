@@ -654,6 +654,42 @@
   // hand kept drifting; reusing the classes guarantees identical
   // alignment since it's the same rules. We only override color and
   // font to make ours read as SIGC-PRO, not layout.
+  // The PRO blue, and the washed-out variant a disabled button wears.
+  // Both factories set `background` INLINE, which beats any stylesheet —
+  // so a :disabled CSS rule could never take effect and the only way to
+  // show unavailability is to rewrite the inline value.
+  const PRO_BLUE = '#005a9c';
+  const PRO_BLUE_DISABLED = '#7fb3d3';
+
+  // Makes `disabled` visible on a PRO button. Two different states share
+  // this look, and both mean "you can't click this now": a feature gated
+  // off (e.g. Mapa outside a single agência) and one busy fetching. The
+  // FullCalendar buttons got this free from .fc-button:disabled's opacity
+  // — the DataTables ones never did, so a click that started a multi-
+  // second fetch gave no feedback at all (reported 2026-08-12).
+  //
+  // Wraps the `disabled` property so every existing `btn.disabled = x`
+  // call site repaints with no change: there is no separate "set busy"
+  // API to remember to call, and no way for the flag and the colour to
+  // drift apart.
+  function paintDisabledState(btn) {
+    const proto = Object.getPrototypeOf(btn);
+    const desc = Object.getOwnPropertyDescriptor(proto, 'disabled') ||
+      Object.getOwnPropertyDescriptor(HTMLButtonElement.prototype, 'disabled');
+    if (!desc || !desc.set) return;
+    const repaint = (on) => {
+      btn.style.background = on ? PRO_BLUE_DISABLED : PRO_BLUE;
+      btn.style.borderColor = on ? PRO_BLUE_DISABLED : PRO_BLUE;
+      btn.style.cursor = on ? 'default' : '';
+    };
+    Object.defineProperty(btn, 'disabled', {
+      configurable: true,
+      get() { return desc.get.call(btn); },
+      set(v) { desc.set.call(btn, v); repaint(!!v); },
+    });
+    repaint(btn.disabled);
+  }
+
   function makeDtProButton({ id, lines, title, onClick }) {
     const btn = document.createElement('button');
     btn.id = id;
@@ -684,6 +720,7 @@
     btn.style.maxWidth = '36px';
     btn.style.borderRadius = '4px';
     btn.addEventListener('click', onClick);
+    paintDisabledState(btn);
     return btn;
   }
 
