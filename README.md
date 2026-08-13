@@ -33,6 +33,29 @@ Em **qualquer relatório do SIGC** com tabela (DataTables):
   da VPN — o CSV-pro lê os dados diretamente via API do DataTables, sem
   depender desses botões.
 
+No relatório **Último Movimento**, filtrado por **uma** agência:
+
+- **MAPA-PRO** — abre um painel com três abas:
+  - **Mapa** — os domicílios da agência plotados e coloridos por zona
+    (cascos convexos por zona, cores seguras para daltonismo), com a
+    situação de coleta por marcador e, no popup de cada domicílio, a
+    entrevista agendada quando existe. O fundo cartográfico
+    (OpenStreetMap) só é carregado após uma confirmação própria.
+  - **Zonas** — uma linha por zona da agência, **inclusive as que ainda
+    não tiveram coleta** (semeadas a partir da Lista de Endereços, não do
+    relatório): situação de coleta, quantos domicílios estão agendados e
+    quantos não, e os horários ainda livres listados dia a dia. Clicar no
+    nome da zona a enquadra no mapa.
+  - **Domicílios** — a lista completa, ordenável por qualquer coluna, com
+    zona, entrevista agendada, situação, tipo e entrevistador.
+
+  As coordenadas (Lista de Endereços da agência) e a agenda da UF são
+  obtidas do próprio servidor do SIGC mediante clique e confirmação, em
+  uma requisição cada, com cache por página. Sem uma agência filtrada o
+  botão fica visível porém **desabilitado**, com a explicação no tooltip
+  — um relatório de estado inteiro é grande demais para buscar
+  coordenadas.
+
 No relatório **Último Movimento**, com o flag avançado "Exportação
 Último Movimento (multi-agência)" ativado (veja Configurações abaixo):
 
@@ -145,15 +168,22 @@ partir do próximo carregamento da página do SIGC.
 
 ## Privacidade
 
-**Nenhum dado sai do seu computador.** A extensão solicita apenas a
-permissão `storage` do navegador (usada exclusivamente para lembrar o
+**Nenhum dado do SIGC sai do seu computador.** A extensão solicita apenas
+a permissão `storage` do navegador (usada exclusivamente para lembrar o
 estado do flag avançado — veja Configuração acima) e não faz chamadas de
-rede, exceto dois recursos opcionais, ambos mediante clique e
-confirmação, ambos apenas ao próprio servidor do SIGC (nada vai a
-terceiros): "Guia + Mapa" (coordenadas de endereços) e, com o flag
-avançado ativado, a exportação Último Movimento multi-agência. Fora
-esses dois casos a extensão não tem código remoto — o arquivo KML, por
-exemplo, é gerado em memória e salvo localmente. Detalhes em
+rede, exceto três recursos opcionais, todos mediante clique e
+confirmação, todos apenas ao próprio servidor do SIGC: "Guia + Mapa"
+(coordenadas de endereços), "MAPA-PRO" (Lista de Endereços da agência
+filtrada + agenda da UF) e, com o flag avançado ativado, a exportação
+Último Movimento multi-agência. Fora esses três casos a extensão não tem
+código remoto — o arquivo KML, por exemplo, é gerado em memória e salvo
+localmente.
+
+O único recurso de terceiros em toda a extensão é o fundo cartográfico do
+MAPA-PRO: as imagens de mapa (tiles) do OpenStreetMap, buscadas somente
+após uma confirmação própria e separada da consulta de dados. Nenhum dado
+do SIGC acompanha esse pedido, e o Leaflet é distribuído dentro da
+extensão (`extension/vendor/`), não carregado de um CDN. Detalhes em
 [PRIVACY_POLICY](docs/PRIVACY_POLICY.html).
 
 Essa garantia é verificada por um *gate* automático
@@ -161,8 +191,11 @@ Essa garantia é verificada por um *gate* automático
 que introduza APIs de rede ou armazenamento em `extension/` fora de
 exceções únicas e auditadas: `fetch` (sem URLs absolutas) em
 `common/`, `features/agenda-lookups/` e
-`features/ultimo-movimento-export/`, e
-`chrome.storage` em `features/settings/`. Para ativá-lo
+`features/ultimo-movimento-export/`;
+`chrome.storage` em `features/settings/`; e, em
+`features/ultimo-movimento-map/`, exatamente uma URL absoluta — o
+template de tiles do OpenStreetMap. Qualquer outra URL externa, ali ou
+em qualquer outro lugar, reprova o gate. Para ativá-lo
 após clonar o repositório:
 
 ```sh

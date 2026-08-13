@@ -23,7 +23,7 @@
 <main>
   <p><em>Última atualização: 3 de agosto de 2026.</em></p>
 
-  <div class="destaque"><strong>Resumo: o SIGC-PRO NÃO coleta, NÃO transmite e NÃO armazena nenhum dado para o desenvolvedor ou para terceiros. As únicas comunicações de rede são consultas opcionais, acionadas por clique e confirmadas pelo usuário, ao próprio servidor do SIGC — dentro da sessão já autenticada. O único armazenamento é um flag local (ligado/desligado) para uma dessas funcionalidades opcionais. Nenhuma informação sai do circuito usuário–IBGE.</strong></div>
+  <div class="destaque"><strong>Resumo: o SIGC-PRO NÃO coleta, NÃO transmite e NÃO armazena nenhum dado para o desenvolvedor ou para terceiros. As consultas de dados são opcionais, acionadas por clique e confirmadas pelo usuário, e vão ao próprio servidor do SIGC — dentro da sessão já autenticada. A única exceção é o fundo do mapa do "Mapa-pro": após uma confirmação específica, o navegador busca as imagens de mapa (tiles) do OpenStreetMap, um serviço externo. Essas imagens são o fundo cartográfico — nenhum dado do SIGC (endereço, morador, telefone, Controle) é enviado nessa requisição. O único armazenamento é um flag local (ligado/desligado) para uma dessas funcionalidades opcionais.</strong></div>
 
   <h2>1. O que a extensão faz</h2>
   <p>O SIGC-PRO opera exclusivamente dentro das páginas do SIGC já abertas no
@@ -58,23 +58,33 @@
   guia gerado, esses dados por visita, links de navegação para o Google
   Maps (por visita e por equipe) e um mapa-esquema em SVG da rota, que
   não carrega nenhuma imagem ou serviço externo;
-  e a anotação da Lista de Endereços, que consulta a agenda da UF e o
-  último movimento do controle exibido, mediante clique e confirmação,
-  para mostrar em cada domicílio se há entrevista agendada, sua situação
-  de coleta e o tipo de entrevista, além dos slots livres da zona por
-  turno — a resposta é processada localmente, reduzida aos campos
-  exibidos e mantida apenas em memória, e o arquivo gerado inclui links
-  para o Google Maps nos endereços (links, não recursos carregados); e a
+  o "Mapa-pro" do relatório Último Movimento, que consulta a Lista de
+  Endereços da agência filtrada (coordenadas e zona) e a agenda da UF,
+  mediante clique e confirmação, para mostrar os domicílios no mapa por
+  zona, a situação e os horários livres de cada zona, e a entrevista
+  agendada de cada domicílio — a resposta é processada localmente,
+  reduzida aos campos exibidos e mantida apenas em memória, e os links
+  para o Google Maps são links, não recursos carregados; e a
   exportação avançada do relatório Último Movimento (multi-agência), que
   só aparece quando o usuário ativa esse flag nas Opções da extensão e,
   quando usada, faz uma requisição por agência da UF atual (com 2 segundos
   de intervalo entre elas) para montar um único CSV. Fora essas três
-  funcionalidades opcionais, o código não contém chamadas de rede nem
-  carrega recursos externos — uma verificação automática do repositório
-  (scripts/check-privacy.sh) confere, a cada alteração, que requisições só
-  existem nesses três módulos e só para a própria origem, complementando a
-  auditoria do código aberto. Não há telemetria, análise de uso ou
-  qualquer integração com serviços de terceiros.</p>
+  funcionalidades opcionais, o código não contém chamadas de rede — uma
+  verificação automática do repositório (scripts/check-privacy.sh) confere,
+  a cada alteração, que requisições só existem nesses três módulos e só
+  para a própria origem, complementando a auditoria do código aberto.</p>
+
+  <p>Há um único recurso externo em toda a extensão: as imagens de mapa
+  (tiles) do OpenStreetMap, usadas como fundo cartográfico do "Mapa-pro".
+  Elas só são buscadas após uma confirmação própria, separada da consulta
+  de dados — recusando, o painel continua funcionando (as abas Zonas e
+  Domicílios são tabelas, não dependem do mapa). Como toda requisição
+  web, o navegador informa ao servidor de tiles o seu endereço IP e quais
+  quadrículas do mapa foram pedidas; nenhum dado do SIGC — endereço,
+  morador, telefone, Controle, coordenada de domicílio — acompanha esse
+  pedido. A biblioteca de mapa (Leaflet) é distribuída dentro da própria
+  extensão, não carregada de um CDN. Não há telemetria, análise de uso
+  nem qualquer outra integração com serviços de terceiros.</p>
 
   <h2>3. Armazenamento</h2>
   <p>Um único valor local: o estado (ligado/desligado, desligado por

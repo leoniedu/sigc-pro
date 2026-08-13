@@ -3,9 +3,9 @@
 ## Short description (max 132 chars)
 
 ```
-Melhorias não oficiais para o SIGC (IBGE): PDF, KML e CSV da Lista de Endereços e ferramentas da Agenda, sem coleta de dados.
+Melhorias não oficiais para o SIGC (IBGE): PDF, KML e CSV dos relatórios, mapa de zonas e ferramentas da Agenda, sem coletar dados.
 ```
-(124 chars)
+(131 chars — limit is 132)
 
 ## Detailed description
 
@@ -21,12 +21,17 @@ Na Lista de Endereços:
 • KML-pro — exporta os endereços como KML para uso em Google Earth,
   Google Maps ou QGIS, com camadas separadas para domicílios
   selecionados e não selecionados (cores seguras para daltonismo).
-• Mapa-pro — no relatório de Último Movimento filtrado por uma agência,
-  abre um painel com três abas: o mapa dos domicílios por zona, uma aba
-  de Zonas com a situação de cada uma (incluindo as zonas ainda sem
-  coleta) e os horários livres dia a dia, e uma aba de Domicílios com a
-  entrevista agendada, a situação, o tipo e o entrevistador de cada um.
-  Tudo obtido do próprio servidor do SIGC mediante clique e confirmação.
+
+No relatório Último Movimento, filtrado por uma agência:
+• Mapa-pro — abre um painel com três abas. Mapa: os domicílios da
+  agência no mapa, agrupados e coloridos por zona, com a entrevista
+  agendada de cada um. Zonas: a situação de coleta de cada zona —
+  inclusive as que ainda não tiveram coleta — quantos domicílios estão
+  agendados e quantos não, e os horários ainda livres, listados dia a
+  dia. Domicílios: a lista completa, com zona, entrevista agendada,
+  situação, tipo e entrevistador, ordenável por qualquer coluna. As
+  coordenadas e a agenda vêm do próprio servidor do SIGC, mediante
+  clique e confirmação.
 
 Em qualquer relatório com tabela:
 • CSV-pro — exporta a tabela como CSV (todas as páginas, pronto para o
@@ -60,20 +65,25 @@ Em Administrar Agenda:
   consulta, o guia é gerado do mesmo jeito, sem esses dados extras.
 • Seletor de data — botão de calendário para pular direto a uma data.
 
-PRIVACIDADE: nenhum dado sai do circuito usuário–IBGE. A extensão
-solicita apenas a permissão "storage" do navegador, usada só para
-lembrar o estado do flag avançado acima (Opções da extensão); todos os
-arquivos são gerados localmente e salvos pelo mecanismo padrão de
-download do Chrome. As únicas chamadas de rede são as consultas
-opcionais do Guia do Dia, da anotação da Lista de Endereços e da
-exportação avançada do Último Movimento, todas ao próprio servidor do
-SIGC (mesma sessão do usuário), acionadas
-por clique e confirmação. Os arquivos gerados contêm links para o
-Google Maps nos endereços (quando há coordenadas), que são links, não
-recursos carregados — nada é buscado ao abrir o arquivo, e a navegação
-só ocorre ao clicar. Nada é enviado a terceiros nem ao desenvolvedor.
-Isso é verificado automaticamente a cada alteração no código-fonte
-(veja o repositório).
+PRIVACIDADE: nenhum dado do SIGC sai do circuito usuário–IBGE. A
+extensão solicita apenas a permissão "storage" do navegador, usada só
+para lembrar o estado do flag avançado acima (Opções da extensão); todos
+os arquivos são gerados localmente e salvos pelo mecanismo padrão de
+download do Chrome. As consultas de dados — Guia do Dia, Mapa-pro e
+exportação avançada do Último Movimento — vão todas ao próprio servidor
+do SIGC (mesma sessão do usuário), acionadas por clique e confirmação.
+
+O único recurso externo é o fundo cartográfico do Mapa-pro: as imagens
+de mapa (tiles) do OpenStreetMap, buscadas apenas após uma confirmação
+própria e separada — recusando, as abas Zonas e Domicílios continuam
+funcionando. Nenhum dado do SIGC acompanha esse pedido, e a biblioteca
+de mapa vem dentro da extensão, não de um CDN.
+
+Os arquivos gerados contêm links para o Google Maps nos endereços
+(quando há coordenadas), que são links, não recursos carregados — nada é
+buscado ao abrir o arquivo, e a navegação só ocorre ao clicar. Nada é
+enviado ao desenvolvedor, e não há telemetria. Isso é verificado
+automaticamente a cada alteração no código-fonte (veja o repositório).
 
 AVISO: projeto independente, sem vínculo oficial com o IBGE. Protótipo
 para uso e demonstração à equipe de desenvolvimento do SIGC. Use por sua
@@ -86,9 +96,10 @@ Código-fonte aberto: https://github.com/leoniedu/sigc-pro
 
 ```
 Adds unofficial productivity tools to SIGC (IBGE) pages: export buttons
-(PDF, KML, CSV) on report tables and Agenda helpers (CSV export, slot
-checks, open-slot capacity panel, printable day guide, date picker),
-without modifying the portal's native features.
+(PDF, KML, CSV) on report tables, a zone map and scheduling panel on the
+Último Movimento report, and Agenda helpers (CSV export, slot checks,
+open-slot capacity panel, printable day guide, date picker), without
+modifying the portal's native features.
 ```
 
 ## Host permission justification (dashboard field)
@@ -109,13 +120,16 @@ off-by-default flag (set on the extension's own Options page) that
 gates a bulk export feature; no other data is stored. The extension
 makes no network calls except three optional, click-and-confirm requests
 to the SIGC server itself (same origin, within the user's existing
-session): the "Guia do Dia" feature; the Lista de Endereços annotation,
-which fetches the UF's agenda slots and the último movimento report for
-the displayed Controle; and — only when the advanced flag above is
-enabled — a bulk "Último Movimento" report export that loops one
-request per agência in the current UF. The exported files may include
+session): the "Guia do Dia" feature; "Mapa-pro" on the Último Movimento
+report, which fetches the filtered agência's Lista de Endereços (for
+coordinates and zona) and the UF's agenda slots; and — only when the
+advanced flag above is enabled — a bulk "Último Movimento" report export
+that loops one request per agência in the current UF. The exported files may include
 Google Maps links (not loaded resources — nothing is fetched until
-clicked). Nothing is ever sent to third parties or the developer.
+clicked). The one external resource is the map background in "Mapa-pro":
+OpenStreetMap tiles, fetched only after a separate confirmation, carrying
+no SIGC data (the Leaflet library itself is bundled, not loaded from a
+CDN). Nothing is ever sent to the developer, and there is no telemetry.
 ```
 
 ## Storage permission justification (dashboard field)
@@ -141,11 +155,15 @@ Productivity (or "Tools" if available for the target region)
 
 1. Toolbar close-up: native buttons + PDF-pro/KML-pro/CSV-pro side by side
    (already captured informally during development — recreate cleanly).
-2. PDF-pro output: listagem-style PDF page.
-3. KML-pro output: opened in Google Earth showing colored placemarks.
-4. (optional) CSV-pro output opened in Excel/Sheets.
-5. (optional) Agenda toolbar with CSV-PRO / Verificar Slots / Guia do
-   Dia buttons, or the generated day guide with its tabs.
+2. Mapa-pro: the panel's Mapa tab, domicílios coloured by zona.
+3. PDF-pro output: listagem-style PDF page.
+4. (optional) Mapa-pro: the Zonas tab, showing per-zona status and the
+   free slots listed day by day.
+5. (optional) KML-pro opened in Google Earth, or the Agenda's Guia do Dia
+   with its tabs.
+
+Screenshots must not show real respondent data (names, addresses,
+telephones) — use a test agência or blur them.
 
 ## Privacy policy URL
 
