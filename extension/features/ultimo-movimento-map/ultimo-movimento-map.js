@@ -275,7 +275,7 @@
     const esc = window.__sigcPro.escapeHtml;
     const dash = (v) => (v ? esc(v) : '—');
     const head =
-      '<tr><th>Controle</th><th>Domicílio</th><th>Agendado</th>' +
+      '<tr><th>Controle</th><th>Domicílio</th><th>Zona</th><th>Agendado</th>' +
       '<th>Situação</th><th>Tipo</th><th>Entrevistador</th><th>Data</th></tr>';
     const body = (rows || []).map((r) => {
       const agendadoCell = r.agendado
@@ -285,6 +285,10 @@
         '<tr>' +
         `<td>${dash(r.controle)}</td>` +
         `<td>${dash(r.domicilio)}</td>` +
+        // The zona ID alone, not the full "ID - nome" label: the Zonas tab
+        // carries the names, and this column exists to tell rows apart and
+        // to sort/filter by zona, which the short ID does in far less width.
+        `<td>${dash(r.idZona)}</td>` +
         `<td>${agendadoCell}</td>` +
         `<td>${dash(r.ultimaPosicao)}</td>` +
         `<td>${dash(r.tipoEntrevista)}</td>` +
@@ -359,11 +363,19 @@
     'agenda da UF. Nenhum dado sai do IBGE. Continuar?';
 
   // In-memory only (zero-storage guarantee): re-asked on every page
-  // load, but not on every click within one. Mirrors agenda-lookups.js's
-  // own consentGiven, and the tilesConsented flag below — the fetch
-  // prompt used to be the odd one out, re-asking on every Mapa click
-  // while the tile prompt asked once.
-  let fetchConsented = false;
+  // load, but not on every click within one.
+  //
+  // Parked on `window`, NOT in a plain closure variable: this file has no
+  // re-entry guard (only sigc-common.js has one), so if the content
+  // script is injected a second time into the same page — an extension
+  // reload with the tab open, or a SIGC re-render — a second copy of this
+  // IIFE runs with its own fresh `false`, and the user is asked to
+  // consent again despite having just agreed. Reported live 2026-08-12
+  // as "why do I have to click twice?". Shared state on window survives
+  // that, exactly as window.__sigcPro itself does.
+  const CONSENT_STATE_KEY = '__sigcProUltimoMovimentoMapConsent';
+  const consentState = window[CONSENT_STATE_KEY] ||
+    (window[CONSENT_STATE_KEY] = { fetch: false, tiles: false });
 
   const TILE_CONSENT_MSG =
     'SIGC-PRO: para desenhar o mapa, o navegador vai buscar imagens de ' +
@@ -595,7 +607,9 @@
   // spec §Consent gates). Declining leaves the Mapa tab showing an
   // explanatory message with a retry button; the Zonas tab is
   // unaffected.
-  let tilesConsented = false;
+  //
+  // Shared on window (see CONSENT_STATE_KEY above) so a second injection
+  // of this content script doesn't re-ask something already answered.
   let mapInitialized = false;
   // Guards against two calls in the same tick both passing the
   // mapInitialized check (mapInitialized only turns true AFTER the async
@@ -617,7 +631,7 @@
   // module-level tile/consent state survives between test cases, so each
   // one that exercises maybeLoadTiles needs a clean starting point.
   function resetTileState() {
-    tilesConsented = false;
+    consentState.tiles = false;
     mapInitialized = false;
     tileLoadInFlight = false;
     leafletLoadPromise = null;
@@ -627,7 +641,7 @@
     if (mapInitialized || tileLoadInFlight) return;
     const container = document.getElementById('sigc-pro-leaflet-map');
     if (!container) return;
-    if (!tilesConsented) {
+    if (!consentState.tiles) {
       if (!confirm(TILE_CONSENT_MSG)) {
         container.innerHTML =
           '<p class="sigc-pro-map-declined">Mapa não carregado (tiles ' +
@@ -636,7 +650,7 @@
         if (retry) retry.addEventListener('click', maybeLoadTiles);
         return;
       }
-      tilesConsented = true;
+      consentState.tiles = true;
     }
     tileLoadInFlight = true;
     try {
@@ -935,9 +949,9 @@
       return;
     }
 
-    if (!fetchConsented) {
+    if (!consentState.fetch) {
       if (!confirm(FETCH_CONSENT_MSG)) return;
-      fetchConsented = true;
+      consentState.fetch = true;
     }
 
     btn.disabled = true;

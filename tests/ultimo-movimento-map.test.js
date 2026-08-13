@@ -417,6 +417,46 @@ describe('buildDomiciliosTabHtml', () => {
 // finds, and this panel injects its tables into document.body — so they
 // were being paged at the library's 10-row default ("Showing 1 to 10 of
 // 90 entries", reported 2026-08-12).
+describe('Domicílios tab — Zona column', () => {
+  test('shows the zona id per household', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const html = I.buildDomiciliosTabHtml([{
+      controle: 'C1', domicilio: '1', idZona: '29JDM8', zona: '29JDM8 - Lauro',
+      agendado: '', futura: false, ultimaPosicao: 'TRANSMITIDO',
+      tipoEntrevista: 'Realizada', entrevistador: 'MARIA', data: '28/07/2026',
+    }]);
+    expect(html).toContain('<th>Zona</th>');
+    expect(html).toContain('29JDM8');
+    // The short ID, not the full "ID - nome" label the Zonas tab carries.
+    expect(html).not.toContain('29JDM8 - Lauro');
+  });
+
+  test('a household with no zona renders — rather than blank', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const html = I.buildDomiciliosTabHtml([{
+      controle: 'C1', domicilio: '1', idZona: '', zona: '',
+      agendado: '', futura: false, ultimaPosicao: '', tipoEntrevista: '',
+      entrevistador: '', data: '',
+    }]);
+    const row = html.split('<tbody>')[1];
+    expect((row.match(/—/g) || []).length).toBe(6);
+  });
+});
+
+describe('consent survives a second script injection', () => {
+  // The content script has no re-entry guard (only sigc-common.js does),
+  // so a second injection into the same page used to create a fresh
+  // `fetchConsented = false` closure and re-ask something already
+  // answered — reported live 2026-08-12 as "why do I have to click
+  // twice?". The flags live on window so they outlive the IIFE.
+  test('the consent flags are shared on window, not per-IIFE', () => {
+    const state = window.__sigcProUltimoMovimentoMapConsent;
+    expect(state).toBeDefined();
+    expect(typeof state.fetch).toBe('boolean');
+    expect(typeof state.tiles).toBe('boolean');
+  });
+});
+
 describe('setPanelPageLength', () => {
   const withJq = (isDt, record) => {
     const prev = window.jQuery;
