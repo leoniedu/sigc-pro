@@ -184,22 +184,161 @@ describe('aggregateZonas coverage and agenda stats', () => {
     expect(vazia.realizada).toBe(0);
   });
 
-  test('counts agendados and semAgendamento per zona', () => {
+  test('counts agendados, realizadas sem agendamento and pendentes per zona', () => {
     const I = window.__sigcProUltimoMovimentoMapInternals;
     const enderecos = new Map([
       ['C1|1', { lat: -12.9, lon: -38.5, zona: '29JDM8 - x', idZona: '29JDM8' }],
       ['C1|2', { lat: -12.9, lon: -38.5, zona: '29JDM8 - x', idZona: '29JDM8' }],
     ]);
+    const row = (domicilio, extra) => Object.assign({
+      controle: 'C1', domicilio, idZona: '29JDM8', zona: '29JDM8 - x',
+      temZona: true, temCoordenadas: true, agendado: '',
+    }, extra);
     const joined = [
-      { controle: 'C1', domicilio: '1', idZona: '29JDM8', zona: '29JDM8 - x',
-        temZona: true, temCoordenadas: true, tipoEntrevista: 'REALIZADA',
-        agendado: '01/09/2026 09:00' },
-      { controle: 'C1', domicilio: '2', idZona: '29JDM8', zona: '29JDM8 - x',
-        temZona: true, temCoordenadas: true, tipoEntrevista: 'REALIZADA', agendado: '' },
+      // Booked: counts as agendado, never as demand.
+      row('1', { tipoEntrevista: 'Realizada',
+        ultimaPosicao: 'Descarregado Parcialmente', agendado: '01/09/2026 09:00' }),
+      // Owed: interview in, biomarcador collection not, no slot.
+      row('2', { tipoEntrevista: 'Realizada',
+        ultimaPosicao: 'Descarregado Parcialmente' }),
+      // Pendente but not owed: in the field, owes no collection.
+      row('3', { tipoEntrevista: 'Recusa', ultimaPosicao: 'Descarregado' }),
+      // Neither: not yet field demand.
+      row('4', { tipoEntrevista: 'Não Iniciada', ultimaPosicao: 'Distribuido' }),
     ];
     const z = I.aggregateZonas(joined, enderecos).find((r) => r.idZona === '29JDM8');
     expect(z.agendados).toBe(1);
-    expect(z.semAgendamento).toBe(1);
+    expect(z.realizadasSemAgendamento).toBe(1);
+    // Realizadas sem agendamento is a SUBSET of pendentes: domicílio 2
+    // is counted in both, 3 only in pendentes, 1 and 4 in neither.
+    expect(z.pendentes).toBe(2);
+  });
+});
+
+// The demand rules, exhaustively. These two predicates decide what a
+// supervisor is told is owed, so every combination that behaves
+// differently gets its own case.
+//
+// Every ultimaPosicao used below is a REAL value, measured against
+// 26.203 rows of BA movimento.parquet (pns.zonas, 2026-08-14). The full
+// domain is exactly these five. An earlier version of these tests
+// asserted on 'Transmitido', which does not exist in the live data.
+const POSICOES_REAIS = [
+  'Distribuido', 'Enviado para Carga', 'Descarregado',
+  'Descarregado Parcialmente', 'Reentrevista',
+];
+
+describe('isRealizadaSemAgendamento', () => {
+  const I = () => window.__sigcProUltimoMovimentoMapInternals;
+  const row = (extra) => Object.assign(
+    { tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado Parcialmente',
+      agendado: '' }, extra);
+
+  // The key state: interview in, biomarcador collection not.
+  test('counts Realizada + Descarregado Parcialmente', () => {
+    expect(I().isRealizadaSemAgendamento(row())).toBe(true);
+  });
+
+  // Reentrevista tracks the partial state (53% still pending in
+  // biomarcadores) far more closely than the completed one (32%), so it
+  // owes a collection too.
+  test('counts Realizada + Reentrevista', () => {
+    expect(I().isRealizadaSemAgendamento(row({ ultimaPosicao: 'Reentrevista' }))).toBe(true);
+  });
+
+  test('a fully descarregada realizada is closed', () => {
+    expect(I().isRealizadaSemAgendamento(row({ ultimaPosicao: 'Descarregado' }))).toBe(false);
+  });
+
+  // Matched positively on the two owing states: anything else — present
+  // or future — must not drift into the count.
+  test('no other real posição counts', () => {
+    POSICOES_REAIS
+      .filter((p) => p !== 'Descarregado Parcialmente' && p !== 'Reentrevista')
+      .forEach((p) => {
+        expect(I().isRealizadaSemAgendamento(row({ ultimaPosicao: p }))).toBe(false);
+      });
+    // A posição SIGC has not introduced yet must also stay out.
+    expect(I().isRealizadaSemAgendamento(row({ ultimaPosicao: 'Algo Novo' }))).toBe(false);
+  });
+
+  test('a booked household is never owed', () => {
+    expect(I().isRealizadaSemAgendamento(row({ agendado: '01/09/2026 09:00' }))).toBe(false);
+  });
+
+  test('only Realizada counts — other tipos owe no collection', () => {
+    expect(I().isRealizadaSemAgendamento(row({ tipoEntrevista: 'Recusa' }))).toBe(false);
+    expect(I().isRealizadaSemAgendamento(row({ tipoEntrevista: 'Não Iniciada' }))).toBe(false);
+  });
+});
+
+describe('isPendente', () => {
+  const I = () => window.__sigcProUltimoMovimentoMapInternals;
+  const row = (extra) => Object.assign(
+    { tipoEntrevista: 'Recusa', ultimaPosicao: 'Descarregado', agendado: '' }, extra);
+
+  // Not yet in the field: nothing is owed yet. "Não é fila intocada."
+  test('Distribuido and Enviado para Carga are not demand yet', () => {
+    expect(I().isPendente(row({ ultimaPosicao: 'Distribuido' }))).toBe(false);
+    expect(I().isPendente(row({ ultimaPosicao: 'Enviado para Carga' }))).toBe(false);
+  });
+
+  test('every other real posição counts when unscheduled', () => {
+    ['Descarregado', 'Descarregado Parcialmente', 'Reentrevista'].forEach((p) => {
+      expect(I().isPendente(row({ ultimaPosicao: p }))).toBe(true);
+    });
+  });
+
+  // Deliberately not tipo-filtered: the live table carries at least
+  // fifteen tipos, and a whitelist silently undercounts the long tail.
+  test('counts field tipos beyond the obvious four', () => {
+    ['Em condições de ser habitada', 'Uso Ocasional', 'Domicílio Vago',
+      'Em Ruínas', 'Não Residencial'].forEach((tipo) => {
+      expect(I().isPendente(row({ tipoEntrevista: tipo }))).toBe(true);
+    });
+  });
+
+  test('a booked household is never pending', () => {
+    expect(I().isPendente(row({ agendado: '01/09/2026 09:00' }))).toBe(false);
+  });
+
+  // The nesting the header tooltip promises: everything owed is pending.
+  test('every owed household is also pending', () => {
+    ['Descarregado Parcialmente', 'Reentrevista'].forEach((p) => {
+      const r = { tipoEntrevista: 'Realizada', ultimaPosicao: p, agendado: '' };
+      expect(I().isRealizadaSemAgendamento(r)).toBe(true);
+      expect(I().isPendente(r)).toBe(true);
+    });
+  });
+});
+
+describe('zonaSemCapacidade', () => {
+  const I = () => window.__sigcProUltimoMovimentoMapInternals;
+
+  test('flags a zona owing more than its free slots', () => {
+    expect(I().zonaSemCapacidade({ realizadasSemAgendamento: 3 },
+      { manha: 1, tarde: 1 })).toBe(true);
+  });
+
+  test('does not flag when capacity exactly meets what is owed', () => {
+    expect(I().zonaSemCapacidade({ realizadasSemAgendamento: 2 },
+      { manha: 1, tarde: 1 })).toBe(false);
+  });
+
+  // Zero demand needs zero capacity — a zona owing nothing must never
+  // flag, however empty its agenda is.
+  test('never flags a zona that owes nothing', () => {
+    expect(I().zonaSemCapacidade({ realizadasSemAgendamento: 0 },
+      { manha: 0, tarde: 0 })).toBe(false);
+  });
+
+  test('flags when there are no slots at all and something is owed', () => {
+    expect(I().zonaSemCapacidade({ realizadasSemAgendamento: 1 }, undefined)).toBe(true);
+  });
+
+  test('counts both turnos toward capacity', () => {
+    expect(I().zonaSemCapacidade({ realizadasSemAgendamento: 2 },
+      { manha: 0, tarde: 2 })).toBe(false);
   });
 });
 
@@ -466,6 +605,60 @@ describe('sort keys for the library-sorted columns', () => {
     }];
     const html = I.buildZonasTableHtml(rows, new Map());
     expect(html).toContain('data-order="0"');
+  });
+});
+
+describe('Zonas tab — turno columns and the capacity flag', () => {
+  const I = () => window.__sigcProUltimoMovimentoMapInternals;
+  const zonaRow = (extra) => Object.assign({
+    idZona: '29JDM8', nomeZona: 'Zona 1', realizada: 1, naoIniciada: 0,
+    domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 1,
+    semCoordenadas: 0, agendados: 0, realizadasSemAgendamento: 0, pendentes: 0,
+  }, extra);
+
+  test('renders the Manhã and Tarde headers and counts', () => {
+    const turnos = new Map([['29JDM8', { manha: 2, tarde: 3 }]]);
+    const html = I().buildZonasTableHtml([zonaRow()], new Map(), turnos);
+    expect(html).toContain('>Manhã</th>');
+    expect(html).toContain('>Tarde</th>');
+    expect(html).toContain('<td>2</td><td>3</td>');
+  });
+
+  test('a zona with no entry in the turno index renders zeros, not blanks', () => {
+    const html = I().buildZonasTableHtml([zonaRow()], new Map(), new Map());
+    expect(html).toContain('<td>0</td><td>0</td>');
+  });
+
+  test('flags the row when what is owed exceeds the free slots', () => {
+    const turnos = new Map([['29JDM8', { manha: 1, tarde: 0 }]]);
+    const html = I().buildZonasTableHtml(
+      [zonaRow({ realizadasSemAgendamento: 3 })], new Map(), turnos);
+    expect(html).toContain('sigc-pro-zona-sem-capacidade');
+    // Colour is not the only signal: the row states the shortfall.
+    expect(html).toContain('3 realizada(s) sem agendamento');
+  });
+
+  test('does not flag a zona whose capacity covers what it owes', () => {
+    const turnos = new Map([['29JDM8', { manha: 2, tarde: 2 }]]);
+    const html = I().buildZonasTableHtml(
+      [zonaRow({ realizadasSemAgendamento: 3 })], new Map(), turnos);
+    expect(html).not.toContain('sigc-pro-zona-sem-capacidade');
+  });
+
+  test('renders both demand columns', () => {
+    const html = I().buildZonasTableHtml(
+      [zonaRow({ realizadasSemAgendamento: 2, pendentes: 5 })], new Map(), new Map());
+    expect(html).toContain('>Realizadas sem agend.</th>');
+    expect(html).toContain('>Pendentes</th>');
+    expect(html).toContain('sigc-pro-devidas">2</td>');
+    expect(html).toContain('<td>5</td>');
+  });
+
+  // The two columns are nested, not disjoint — a reader who tries to add
+  // them gets a wrong total, so the header says so explicitly.
+  test('the Pendentes tooltip warns that the columns do not add up', () => {
+    const html = I().buildZonasTableHtml([zonaRow()], new Map(), new Map());
+    expect(html).toContain('não se somam');
   });
 });
 

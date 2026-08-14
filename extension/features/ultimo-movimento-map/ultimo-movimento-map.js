@@ -130,6 +130,82 @@
     'Recusa': 'recusa',
   };
 
+  // The real ultimaPosicao domain, measured against 26.203 rows of BA
+  // movimento.parquet (pns.zonas, 2026-08-14): Distribuido, Enviado para
+  // Carga, Descarregado, Descarregado Parcialmente, Reentrevista. There
+  // is NO 'Transmitido' — an earlier version of this rule was written
+  // against that assumed value.
+  const POSICAO_DISTRIBUIDO = 'Distribuido';
+
+  // Household demand, in two measures — deliberately not one.
+  //
+  // The operative one: 'Realizada' whose posição is 'Descarregado
+  // Parcialmente' or 'Reentrevista', with no agendamento. Both are
+  // states where the interview came through but the biomarcador
+  // collection did not — exactly the visit that still has to be
+  // scheduled.
+  //
+  // Matched POSITIVELY on those two states, never as "anything that
+  // isn't Descarregado": that negative form would also admit
+  // 'Distribuido' and 'Enviado para Carga', which are not owed anything
+  // yet, and would silently absorb any new posição SIGC introduces.
+  //
+  // Both states verified against biomarcadores.parquet (BA, 2026-08-14),
+  // scoring the share whose biomarcador status is still open (A agendar
+  // / Não iniciado / Agendado / Indefinido):
+  //
+  //   Descarregado Parcialmente  60% pending   <- owed
+  //   Reentrevista               53% pending   <- owed
+  //   Descarregado (completo)    32% pending   <- closed
+  //
+  // Reentrevista tracks the partial state, not the completed one, which
+  // is why it belongs here — an earlier version of this rule excluded it
+  // on the assumption that a re-interview owes no collection.
+  //
+  // Caveat worth knowing: biomarcadores.parquet, which carries an
+  // explicit "A agendar" status, is the authoritative source — but it
+  // covers only ~48% of these households and is a different SIGC report,
+  // not reachable from the Último Movimento page. This pair of posições
+  // is the best proxy available from the table on screen.
+  const POSICAO_BIOMARCADOR_DEVIDO = new Set(
+    ['Descarregado Parcialmente', 'Reentrevista']);
+
+  function isRealizadaSemAgendamento(r) {
+    return r.tipoEntrevista === 'Realizada' &&
+      POSICAO_BIOMARCADOR_DEVIDO.has(r.ultimaPosicao) &&
+      !r.agendado;
+  }
+
+  // The broader context column: unscheduled households already in the
+  // field, whatever their tipo. Kin to pns.zonas'
+  // scripts/relatorio_agenda.R `pendentes`, and useful as the backdrop
+  // the operative number sits against.
+  //
+  // Excluded, in both cases because nothing is owed YET rather than
+  // because the household is finished:
+  //   'Distribuido'        — handed to the device, not yet worked. The
+  //                          R script's "não é fila intocada".
+  //   'Enviado para Carga' — queued for loading, same reasoning
+  //                          (3.582 rows in BA, all Não Iniciada).
+  //
+  // Deliberately NOT filtered by tipo_entrevista. An earlier version
+  // whitelisted four tipos, which was written against an assumed domain:
+  // the live table carries at least fifteen, including 'Em condições de
+  // ser habitada' (152 unbooked in BA), 'Uso Ocasional', 'Domicílio
+  // Vago' and 'Em Ruínas'. Enumerating them invites exactly the silent
+  // undercount that whitelist produced.
+  //
+  // Every household in isRealizadaSemAgendamento is also in here (both
+  // its posições are past distribution), so the two columns are nested,
+  // never disjoint — the header tooltip says so, or a reader tries to
+  // add them up.
+  const POSICAO_NAO_EM_CAMPO = new Set([POSICAO_DISTRIBUIDO, 'Enviado para Carga']);
+
+  function isPendente(r) {
+    if (r.agendado) return false;
+    return !POSICAO_NAO_EM_CAMPO.has(r.ultimaPosicao);
+  }
+
   // joined: from joinAgenda (carries `agendado`). enderecosMap: the
   // agência-complete controle|domicilio -> {lat, lon, zona, idZona} map
   // (see joinEnderecos above) — seeded here FIRST, before folding in
@@ -150,7 +226,8 @@
     const novoBucket = (idZona, nomeZona) => ({
       idZona, nomeZona,
       realizada: 0, naoIniciada: 0, domicilioFechado: 0, recusa: 0, outros: 0,
-      totalDomicilios: 0, semCoordenadas: 0, agendados: 0, semAgendamento: 0,
+      totalDomicilios: 0, semCoordenadas: 0, agendados: 0,
+      realizadasSemAgendamento: 0, pendentes: 0,
     });
 
     (enderecosMap || new Map()).forEach((info) => {
@@ -171,7 +248,8 @@
       bucket.totalDomicilios += 1;
       if (!r.temCoordenadas) bucket.semCoordenadas += 1;
       if (r.agendado) bucket.agendados += 1;
-      else bucket.semAgendamento += 1;
+      if (isRealizadaSemAgendamento(r)) bucket.realizadasSemAgendamento += 1;
+      if (isPendente(r)) bucket.pendentes += 1;
     });
 
     return Array.from(byZona.values());
@@ -230,6 +308,25 @@
     return r.totalDomicilios > r.semCoordenadas;
   }
 
+  // The zona owes more biomarcador visits than it has bookable slots in
+  // the window — pns.zonas' relatorio_agenda.R `capacidade_ok`, with the
+  // tighter numerator (see isRealizadaSemAgendamento).
+  //
+  // Compared against manhã+tarde rather than against the day-by-day list
+  // so both come from indexZonaLivres' single selection — deriving the
+  // flag from a different count than the columns show is how a table
+  // ends up contradicting itself.
+  //
+  // A zona owing nothing never flags, however few slots it has: zero
+  // demand needs zero capacity. Only a shortfall against real, committed
+  // demand is worth a supervisor's attention.
+  function zonaSemCapacidade(r, turnos) {
+    const owed = r.realizadasSemAgendamento || 0;
+    if (owed === 0) return false;
+    const t = turnos || {};
+    return owed > (t.manha || 0) + (t.tarde || 0);
+  }
+
   // slotsPorZona: Map(idZona -> [{isoDate, horas}]) already grouped by
   // agruparPorDia — see the window today..+2 weeks computation at the
   // onMapaClick call site. Rendered in its own cell via <details>, kept
@@ -237,21 +334,51 @@
   // does something else (focus the map on this zona, wireZonaRowClicks),
   // and a <details> nested inside it would either steal that gesture or
   // silently do nothing when clicked.
-  function buildZonasTableHtml(zonaRows, slotsPorZona) {
+  // turnosPorZona: Map(idZona -> {manha, tarde, ...}) from
+  // agenda-lookups' indexZonaLivres — the SAME selection the day-by-day
+  // slots cell is built from, so the turno columns and the list under
+  // them can never disagree.
+  function buildZonasTableHtml(zonaRows, slotsPorZona, turnosPorZona) {
     const esc = window.__sigcPro.escapeHtml;
     const AM = window.__sigcProAgendaLookups;
     const slotsMap = slotsPorZona || new Map();
+    const turnosMap = turnosPorZona || new Map();
+    const TIP_REALIZADAS =
+      'Entrevistas realizadas ainda não descarregadas e sem agendamento — ' +
+      'a coleta de biomarcadores está devida e não tem horário marcado. ' +
+      'Transmitido ainda conta; só Descarregado encerra.';
+    const TIP_PENDENTES =
+      'Domicílios já em campo e sem agendamento (Fechado, Recusa, Realizada ' +
+      'ou Não Iniciada), exceto os já descarregados. Não inclui Distribuído. ' +
+      'Contém as Realizadas sem agend. — as duas colunas não se somam.';
+    const TIP_TURNO = 'Slots livres na janela (hoje até +2 semanas). Manhã antes das 13h.';
     const head =
       '<tr><th>Zona</th><th>Nome</th><th>Realizada</th><th>Não Iniciada</th>' +
       '<th>Dom. Fechado</th><th>Recusa</th><th>Outros</th><th>Total</th>' +
-      '<th>Sem coordenadas</th><th>Agendados</th><th>Sem agendamento</th>' +
+      '<th>Sem coordenadas</th><th>Agendados</th>' +
+      `<th title="${esc(TIP_REALIZADAS)}">Realizadas sem agend.</th>` +
+      `<th title="${esc(TIP_PENDENTES)}">Pendentes</th>` +
+      `<th title="${esc(TIP_TURNO)}">Manhã</th>` +
+      `<th title="${esc(TIP_TURNO)}">Tarde</th>` +
       '<th>Slots livres</th></tr>';
     const body = zonaRows.map((r) => {
       const clickable = zonaRowIsClickable(r);
       const zonaKey = r.idZona || '';
-      const rowAttrs = clickable
-        ? ` class="sigc-pro-zona-row-clickable" data-id-zona="${esc(zonaKey)}" title="Ver esta zona no mapa"`
-        : '';
+      const turnos = turnosMap.get(zonaKey) || { manha: 0, tarde: 0 };
+      const semCapacidade = zonaSemCapacidade(r, turnos);
+      const classes = [
+        clickable ? 'sigc-pro-zona-row-clickable' : '',
+        semCapacidade ? 'sigc-pro-zona-sem-capacidade' : '',
+      ].filter(Boolean).join(' ');
+      const titulo = semCapacidade
+        ? `${r.realizadasSemAgendamento} realizada(s) sem agendamento e apenas ` +
+          `${turnos.manha + turnos.tarde} slot(s) livre(s) na janela` +
+          (clickable ? ' — clique para ver no mapa' : '')
+        : (clickable ? 'Ver esta zona no mapa' : '');
+      const rowAttrs =
+        (classes ? ` class="${classes}"` : '') +
+        (clickable ? ` data-id-zona="${esc(zonaKey)}"` : '') +
+        (titulo ? ` title="${esc(titulo)}"` : '');
       // Link-style affordance for a clickable row's Zona cell — cursor:
       // pointer on the row alone wasn't a visible signal at rest, only
       // on hover.
@@ -274,7 +401,10 @@
         `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
         `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
         `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>` +
-        `<td>${r.agendados}</td><td>${r.semAgendamento}</td>` +
+        `<td>${r.agendados}</td>` +
+        `<td class="sigc-pro-devidas">${r.realizadasSemAgendamento}</td>` +
+        `<td>${r.pendentes}</td>` +
+        `<td>${turnos.manha || 0}</td><td>${turnos.tarde || 0}</td>` +
         `<td class="sigc-pro-slots-cell" data-order="${slotsCount}">${slotsCell}</td>` +
         '</tr>'
       );
@@ -347,6 +477,15 @@
     .sigc-pro-zonas-table th { background: #f4f4f4; }
     .sigc-pro-zonas-table tr.sigc-pro-zona-row-clickable { cursor: pointer; }
     .sigc-pro-zonas-table tr.sigc-pro-zona-row-clickable:hover { background: #eef6ff; }
+    /* Zona owing more biomarcador visits than it has bookable slots. Amber
+       wash plus a left rule — the row stays readable and still highlights
+       on hover, so the flag never fights the click affordance. Colour is
+       not the only signal: the row's title spells the shortfall out. */
+    .sigc-pro-zonas-table tr.sigc-pro-zona-sem-capacidade { background: #fff4e0; }
+    .sigc-pro-zonas-table tr.sigc-pro-zona-sem-capacidade:hover { background: #ffe9c7; }
+    .sigc-pro-zonas-table tr.sigc-pro-zona-sem-capacidade td:first-child {
+      box-shadow: inset 3px 0 0 #D55E00; }
+    .sigc-pro-zonas-table td.sigc-pro-devidas { font-weight: 700; }
     .sigc-pro-zona-link { color: #0645ad; text-decoration: none; }
     .sigc-pro-zona-link:hover { text-decoration: underline; }
     .sigc-pro-zonas-hint { margin: 0 0 8px; font-size: 12px; color: #555; }
@@ -460,13 +599,16 @@
       window.__sigcProUltimoMovimentoExportInternals.onUltimoMovimento();
   }
 
-  function buildPanelHtml(joined, zonaRows, slotsPorZona) {
-    const zonasTable = buildZonasTableHtml(zonaRows, slotsPorZona);
+  function buildPanelHtml(joined, zonaRows, slotsPorZona, turnosPorZona) {
+    const zonasTable = buildZonasTableHtml(zonaRows, slotsPorZona, turnosPorZona);
     const domiciliosTable = buildDomiciliosTabHtml(joined);
     // Only shown when at least one row is actually clickable — no point
     // telling the user to click a zona if none have mapped coordinates.
     const zonasHint = zonaRows.some(zonaRowIsClickable)
-      ? '<p class="sigc-pro-zonas-hint">Clique no nome de uma zona para vê-la no mapa.</p>'
+      ? '<p class="sigc-pro-zonas-hint">Clique no nome de uma zona para vê-la no mapa. ' +
+        'Linhas destacadas têm mais realizadas sem agendamento do que slots livres na janela. ' +
+        'As contagens de demanda excluem Distribuído (ainda não é demanda de campo) e ' +
+        'Realizada já descarregada (encerrada).</p>'
       : '';
     return [
       // data-sigc-pro marks the whole subtree as ours, so sigc-common.js's
@@ -1185,9 +1327,14 @@
         const livres = AM.slotsLivresDaJanela(agendaSlots, zonaKey, minDateIso, fimIso);
         slotsPorZona.set(zonaKey, AM.agruparPorDia(livres));
       });
+      // Manhã/Tarde counts over that same window, from the function the
+      // Agenda's own Slots Abertos panel uses — the 13:00 cut lives in
+      // one place (TARDE_FROM_MIN) or the two features drift apart.
+      const turnosPorZona = AM.indexZonaLivres(agendaSlots, minDateIso, fimIso);
 
       closePanel();
-      document.body.insertAdjacentHTML('beforeend', buildPanelHtml(comAgenda, zonaRows, slotsPorZona));
+      document.body.insertAdjacentHTML('beforeend',
+        buildPanelHtml(comAgenda, zonaRows, slotsPorZona, turnosPorZona));
       const panelEl = document.getElementById(PANEL_ID);
       wireTabs(panelEl);
       wireZonaRowClicks(panelEl, comAgenda);
@@ -1436,6 +1583,9 @@
     convexHull,
     controleCentroids,
     zonaRowIsClickable,
+    isRealizadaSemAgendamento,
+    isPendente,
+    zonaSemCapacidade,
     lerFiltro,
     filtroAtual,
     captureFiltro,
