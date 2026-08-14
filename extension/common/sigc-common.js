@@ -732,11 +732,16 @@
     // The native icon glyph is small/fixed-size; our two-line text label
     // is wider, so the class's width: auto grows to fit it. Pin box
     // dimensions only (not display/align-items, which broke vertical
-    // alignment before) to force the same square footprint as the icon
+    // alignment before) to keep a consistent footprint next to the icon
     // buttons.
-    btn.style.width = '36px';
-    btn.style.minWidth = '36px';
-    btn.style.maxWidth = '36px';
+    //
+    // 44px, not the original 36px: at 36 the widest label in use ("MAPA")
+    // ellipsised to "M…" while shorter ones like "CSV" still fit
+    // (reported 2026-08-14). Sized to the longest label rather than the
+    // shortest, since every caller shares this one box.
+    btn.style.width = '44px';
+    btn.style.minWidth = '44px';
+    btn.style.maxWidth = '44px';
     btn.style.borderRadius = '4px';
     btn.addEventListener('click', onClick);
     paintDisabledState(btn);

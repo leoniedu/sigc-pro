@@ -48,7 +48,7 @@ describe('makeDtProButton disabled styling', () => {
 });
 
 describe('makeDtProButton', () => {
-  test('produces a native-classed 36px toolbar button', () => {
+  test('produces a native-classed 44px toolbar button', () => {
     let clicked = 0;
     const btn = P.makeDtProButton({
       id: 'dt-x',
@@ -62,7 +62,9 @@ describe('makeDtProButton', () => {
     expect(btn.className).toBe('dt-button buttons-html5 dt-btn-icon');
     expect(btn.title).toBe('Exportar KML (SIGC-PRO)');
     expect(btn.querySelector('span').innerHTML).toBe('KML<br>PRO');
-    expect(btn.style.width).toBe('36px');
+    // Sized to the longest label in use ("MAPA"), which ellipsised to
+    // "M…" at the original 36px.
+    expect(btn.style.width).toBe('44px');
     expect(btn.style.background).toBe('#005a9c');
     btn.click();
     expect(clicked).toBe(1);
