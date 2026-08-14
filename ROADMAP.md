@@ -213,6 +213,22 @@ Working checklist; move items up/down freely. Specs live in
 
 ## Next
 
+- [x] **Mapa-pro scope gate**: the button gated on exactly one agência,
+      read off `#IdAgencia` — but most profiles have no agência selector
+      at all, so that select never held a single value for them and the
+      button was permanently disabled (the feature was unusable for the
+      majority). Now the filter SIGC assembles in `#filtroJson` is
+      captured whole on the Filtrar click and replayed onto the Lista de
+      Endereços lookup: both reports share IdUf/IdAgencia/IdMunicipio/
+      Controle with identical names and '*' wildcard semantics, so
+      agência, município and controle scopes each resolve in ONE request.
+      `IdMunicipio` with a real code verified against the live server
+      2026-08-14 (it had only ever been sent as '*' before). Only a
+      filter with no geographic scope is blocked — entrevistador and
+      tipo-acompanhamento ride along inside one, since they narrow the
+      report and the controle|domicilio join drops the surplus. The block
+      is painted rather than `disabled` (a disabled button swallows
+      clicks), so hover and click report the same sentence
 - [x] **Shared button layer**: `mountWidget(...)` + `makeDtProButton`/
       `makeFcProButton` factories in sigc-common; ONE shared
       MutationObserver on document.body dispatches to all registered

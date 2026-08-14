@@ -22,16 +22,17 @@ Na Lista de Endereços:
   Google Maps ou QGIS, com camadas separadas para domicílios
   selecionados e não selecionados (cores seguras para daltonismo).
 
-No relatório Último Movimento, filtrado por uma agência:
-• Mapa-pro — abre um painel com três abas. Mapa: os domicílios da
-  agência no mapa, agrupados e coloridos por zona, com a entrevista
-  agendada de cada um. Zonas: a situação de coleta de cada zona —
-  inclusive as que ainda não tiveram coleta — quantos domicílios estão
-  agendados e quantos não, e os horários ainda livres, listados dia a
-  dia. Domicílios: a lista completa, com zona, entrevista agendada,
+No relatório Último Movimento, filtrado por agência, município ou
+controle:
+• Mapa-pro — abre um painel com três abas. Mapa: os domicílios do
+  recorte filtrado no mapa, agrupados e coloridos por zona, com a
+  entrevista agendada de cada um. Zonas: a situação de coleta de cada
+  zona — inclusive as que ainda não tiveram coleta — quantos domicílios
+  estão agendados e quantos não, e os horários ainda livres, listados dia
+  a dia. Domicílios: a lista completa, com zona, entrevista agendada,
   situação, tipo e entrevistador, ordenável por qualquer coluna. As
   coordenadas e a agenda vêm do próprio servidor do SIGC, mediante
-  clique e confirmação.
+  clique e confirmação, no mesmo recorte filtrado na tela.
 
 Em qualquer relatório com tabela:
 • CSV-pro — exporta a tabela como CSV (todas as páginas, pronto para o
@@ -104,12 +105,12 @@ permissions and stores nothing.
 
 ## Host permission justification (dashboard field)
 
-Limit: 1000 characters. Current text is 975.
+Limit: 1000 characters. Current text is 982.
 
 ```
 The extension injects a content script only on SIGC portal pages (Sistema Integrado de Gestão da Coleta, IBGE), matched by the three specific hosts SIGC is served from — portalweb.ibge.gov.br, portalweb2.ibge.gov.br and w3sigcpns2025.ibge.gov.br — not the whole ibge.gov.br domain. It adds export buttons (PDF, KML, CSV), a zone map panel and Agenda helpers, reading data already on the page. No other site is accessed, no permission is declared, and nothing is stored.
 
-Network calls are three optional, click-and-confirm requests to the SIGC server itself, same origin, within the user's session: a printable day guide; a map panel fetching the agência's address list and the UF's agenda slots; and a bulk report export looping one request per agência.
+Network calls are three optional, click-and-confirm requests to the SIGC server itself, same origin, within the user's session: a printable day guide; a map panel fetching the filtered scope's address list and the UF's agenda slots; and a bulk report export looping one request per agência.
 
 The only external resource is that map's background: OpenStreetMap tiles, fetched after a separate confirmation and carrying no SIGC data. Leaflet is bundled, not from a CDN. Nothing goes to the developer; no telemetry.
 ```

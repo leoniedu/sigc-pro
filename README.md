@@ -33,15 +33,16 @@ Em **qualquer relatório do SIGC** com tabela (DataTables):
   da VPN — o CSV-pro lê os dados diretamente via API do DataTables, sem
   depender desses botões.
 
-No relatório **Último Movimento**, filtrado por **uma** agência:
+No relatório **Último Movimento**, filtrado por **agência, município ou
+controle** (qualquer um deles basta):
 
 - **MAPA-PRO** — abre um painel com três abas:
-  - **Mapa** — os domicílios da agência plotados e coloridos por zona
-    (cascos convexos por zona, cores seguras para daltonismo), com a
+  - **Mapa** — os domicílios do recorte filtrado plotados e coloridos por
+    zona (cascos convexos por zona, cores seguras para daltonismo), com a
     situação de coleta por marcador e, no popup de cada domicílio, a
     entrevista agendada quando existe. O fundo cartográfico
     (OpenStreetMap) só é carregado após uma confirmação própria.
-  - **Zonas** — uma linha por zona da agência, **inclusive as que ainda
+  - **Zonas** — uma linha por zona do recorte, **inclusive as que ainda
     não tiveram coleta** (semeadas a partir da Lista de Endereços, não do
     relatório): situação de coleta, quantos domicílios estão agendados e
     quantos não, e os horários ainda livres listados dia a dia. Clicar no
@@ -49,12 +50,17 @@ No relatório **Último Movimento**, filtrado por **uma** agência:
   - **Domicílios** — a lista completa, ordenável por qualquer coluna, com
     zona, entrevista agendada, situação, tipo e entrevistador.
 
-  As coordenadas (Lista de Endereços da agência) e a agenda da UF são
-  obtidas do próprio servidor do SIGC mediante clique e confirmação, em
-  uma requisição cada, com cache por página. Sem uma agência filtrada o
-  botão fica visível porém **desabilitado**, com a explicação no tooltip
-  — um relatório de estado inteiro é grande demais para buscar
-  coordenadas.
+  As coordenadas (Lista de Endereços do mesmo recorte) e a agenda da UF
+  são obtidas do próprio servidor do SIGC mediante clique e confirmação,
+  em uma requisição cada, com cache por página. O recorte usado é
+  exatamente o filtro que você submeteu no Filtrar — não é preciso ter
+  acesso ao seletor de agência.
+
+  Filtros por entrevistador ou tipo de acompanhamento não impedem o mapa,
+  desde que combinados com agência, município ou controle. Sem nenhum
+  desses três o botão fica visível porém **bloqueado**, com a explicação
+  no tooltip e também ao clicar — um relatório de estado inteiro é grande
+  demais para buscar coordenadas.
 
 No relatório **Último Movimento**:
 
@@ -159,8 +165,8 @@ Rscript scripts/gen-municipios.R
 **nenhuma permissão** do navegador — a lista `permissions` do manifesto
 está vazia — e não faz chamadas de rede, exceto três recursos opcionais, todos mediante clique e
 confirmação, todos apenas ao próprio servidor do SIGC: "Guia + Mapa"
-(coordenadas de endereços), "MAPA-PRO" (Lista de Endereços da agência
-filtrada + agenda da UF) e a exportação Último Movimento
+(coordenadas de endereços), "MAPA-PRO" (Lista de Endereços do recorte
+filtrado + agenda da UF) e a exportação Último Movimento
 multi-agência (que confirma, nomeando quantas agências serão consultadas). Fora esses três casos a extensão não tem
 código remoto — o arquivo KML, por exemplo, é gerado em memória e salvo
 localmente.
