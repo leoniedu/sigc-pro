@@ -890,40 +890,128 @@ describe('controleCentroids', () => {
   });
 });
 
-// The agency gate (2026-08-10). Mapa now issues ONE agency-scoped Lista
-// de Endereços call instead of one per Controle, so the on-screen report
-// must itself be scoped to exactly one agência — otherwise the fetched
-// coordinates wouldn't cover the rows being displayed.
-describe('selectedAgencia', () => {
-  function setAgencia(value) {
-    document.body.innerHTML = value === null
-      ? ''
-      : `<select id="IdAgencia"><option value="${value}" selected>x</option></select>`;
-  }
+// The scope gate (2026-08-14, replacing the agência-only gate of
+// 2026-08-10). Mapa replays the submitted filter onto ONE Lista de
+// Endereços call, so what matters is the filter the report was rendered
+// from — not one specific selector, which most profiles don't even have.
 
-  test('returns the selected agência code', () => {
-    setAgencia('0570');
-    expect(UM.selectedAgencia()).toBe('0570');
+// The real #filtroJson payload, captured live 2026-08-14 on the Último
+// Movimento page. Used verbatim as the fixture shape so these tests
+// can't drift from what SIGC actually emits.
+const FILTRO_REAL = {
+  IdFiltro: 'relatorio-ultimo-movimento',
+  IdUf: '29',
+  IdAgencia: '*',
+  IdMunicipio: '*',
+  Controle: '*',
+  IdEntrevistadores: '3424279',
+  IdTipoAcompanhamento: '*',
+};
+
+function setFiltroJson(obj) {
+  document.body.innerHTML =
+    `<input type="hidden" id="filtroJson" value='${JSON.stringify(obj)}'>`;
+}
+
+describe('lerFiltro', () => {
+  test('reads the whole filter out of #filtroJson', () => {
+    setFiltroJson(FILTRO_REAL);
+    expect(UM.lerFiltro()).toEqual(FILTRO_REAL);
   });
 
-  // "TODOS" is the all-agências state. The live select2 wrapper renders
-  // it as the text "TODOS", but the underlying <select> carries the
-  // codebase's usual '*' sentinel (buildAgenciaFilterBody's IdAgencia)
-  // — or a blank, the placeholder shape fetchAgenciaList already drops.
-  // Both must read as "not a single agência".
-  test('treats the * sentinel as no single agência', () => {
-    setAgencia('*');
-    expect(UM.selectedAgencia()).toBe('');
+  // #filtroJson is the primary source precisely because SIGC assembles it
+  // itself — but a page redesign could drop it, and the feature should
+  // degrade to the individual inputs rather than die.
+  test('falls back to the individual inputs when #filtroJson is absent', () => {
+    document.body.innerHTML =
+      '<select id="IdUf"><option value="29" selected>29</option></select>' +
+      '<select id="IdMunicipio"><option value="2927408" selected>x</option></select>' +
+      '<select id="IdAgencia"><option value="*" selected>TODOS</option></select>';
+    const f = UM.lerFiltro();
+    expect(f.IdUf).toBe('29');
+    expect(f.IdMunicipio).toBe('2927408');
+    expect(f.IdAgencia).toBe('*');
+    // Absent fields read as the wildcard: "the user did not filter by this".
+    expect(f.Controle).toBe('*');
+    expect(f.IdEntrevistadores).toBe('*');
   });
 
-  test('treats a blank value as no single agência', () => {
-    setAgencia('');
-    expect(UM.selectedAgencia()).toBe('');
+  // This runs inside a capture-phase listener on SIGC's own Filtrar
+  // button — throwing there would surface as the page's bug, not ours.
+  test('malformed JSON falls back instead of throwing', () => {
+    document.body.innerHTML =
+      '<input type="hidden" id="filtroJson" value="{not json">' +
+      '<select id="IdUf"><option value="29" selected>29</option></select>';
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      expect(UM.lerFiltro().IdUf).toBe('29');
+    } finally {
+      console.warn = warn;
+    }
   });
 
-  test('treats a missing select as no single agência', () => {
-    setAgencia(null);
-    expect(UM.selectedAgencia()).toBe('');
+  test('returns null when there is no UF anywhere', () => {
+    document.body.innerHTML = '';
+    expect(UM.lerFiltro()).toBe(null);
+  });
+});
+
+describe('motivoBloqueio', () => {
+  const base = { ...FILTRO_REAL, IdEntrevistadores: '*' };
+
+  test('allows an agência-scoped filter', () => {
+    expect(UM.motivoBloqueio({ ...base, IdAgencia: '0570' })).toBe('');
+  });
+
+  // The whole point of this change: município scopes used to be blocked
+  // because #IdAgencia never held a value for most profiles.
+  test('allows a município-scoped filter with no agência', () => {
+    expect(UM.motivoBloqueio({ ...base, IdMunicipio: '2927408' })).toBe('');
+  });
+
+  test('allows a Controle-scoped filter', () => {
+    expect(UM.motivoBloqueio({ ...base, Controle: '292740805220571' })).toBe('');
+  });
+
+  // Entrevistador and tipo-de-acompanhamento have no analogue in Lista de
+  // Endereços, but they only narrow the report WITHIN a geographic scope.
+  // Given one, the coordinate response is a superset of the rows on
+  // screen and the controle|domicilio join drops the surplus — so these
+  // must NOT block on their own account.
+  test('allows an entrevistador filter inside a município', () => {
+    expect(UM.motivoBloqueio({
+      ...FILTRO_REAL, IdMunicipio: '2927408',
+    })).toBe('');
+  });
+
+  test('allows a tipo-de-acompanhamento filter inside an agência', () => {
+    expect(UM.motivoBloqueio({
+      ...base, IdAgencia: '0570', IdTipoAcompanhamento: '7',
+    })).toBe('');
+  });
+
+  // What actually can't be served: no geographic scope at all, so the
+  // coordinate request would fall back to the whole UF. An entrevistador
+  // filter alone lands here — not because of the field, but because its
+  // implicit scope is the entire state.
+  test('blocks an entrevistador filter with no geographic scope', () => {
+    expect(UM.motivoBloqueio(FILTRO_REAL)).toContain('estado inteiro');
+  });
+
+  test('blocks a whole-UF filter', () => {
+    expect(UM.motivoBloqueio(base)).toContain('estado inteiro');
+  });
+
+  test('blocks when no Filtrar has been captured yet', () => {
+    expect(UM.motivoBloqueio(null)).toContain('Filtrar');
+  });
+
+  // A blank is the select2 placeholder shape; it means the same as '*'.
+  test('treats a blank field as the wildcard', () => {
+    expect(UM.isWildcard('')).toBe(true);
+    expect(UM.isWildcard('*')).toBe(true);
+    expect(UM.isWildcard('0570')).toBe(false);
   });
 });
 
@@ -952,137 +1040,157 @@ describe('coverage warning', () => {
 // Changing the agência dropdown without clicking Filtrar leaves the old
 // report on screen: the rendered rows still belong to the previously
 // submitted agência, so that is what the coordinate fetch must use.
-describe('filteredAgencia', () => {
-  function setSelect(value) {
-    document.body.innerHTML = value === null
-      ? '<button id="btnFiltrar">Filtrar</button>'
-      : `<select id="IdAgencia"><option value="${value}" selected>x</option></select>` +
-        '<button id="btnFiltrar">Filtrar</button>';
+describe('filtroAtual', () => {
+  function setFiltro(obj) {
+    setFiltroJson(obj);
+    document.body.insertAdjacentHTML('beforeend', '<button id="btnFiltrar">Filtrar</button>');
   }
 
-  test('is empty before any Filtrar, even with an agência selected', () => {
-    setSelect('0570');
-    UM.resetFilteredAgencia();
-    expect(UM.filteredAgencia()).toBe('');
+  const AGENCIA = { ...FILTRO_REAL, IdAgencia: '0570', IdEntrevistadores: '*' };
+
+  test('is null before any Filtrar, even with a filter on the form', () => {
+    setFiltro(AGENCIA);
+    UM.resetFiltroCapturado();
+    expect(UM.filtroAtual()).toBe(null);
   });
 
-  test('captures the selected agência when Filtrar is clicked', () => {
-    setSelect('0570');
-    UM.resetFilteredAgencia();
-    UM.captureFilteredAgencia();
-    expect(UM.filteredAgencia()).toBe('0570');
+  test('captures the whole filter when Filtrar is clicked', () => {
+    setFiltro(AGENCIA);
+    UM.resetFiltroCapturado();
+    UM.captureFiltro();
+    expect(UM.filtroAtual().IdAgencia).toBe('0570');
   });
 
-  // The core of this change: the captured value must NOT follow a later
-  // dropdown change, because the table on screen didn't change either.
-  test('does not follow the selector after Filtrar', () => {
-    setSelect('0570');
-    UM.resetFilteredAgencia();
-    UM.captureFilteredAgencia();
-    document.getElementById('IdAgencia').value = '*';
-    expect(UM.filteredAgencia()).toBe('0570');
+  // The core of the older gate, preserved: the captured filter must NOT
+  // follow a later form change, because the table on screen didn't
+  // change either. Scoping the fetch to a filter whose rows aren't
+  // displayed is a silent wrong-data join, not a visible error.
+  test('does not follow the form after Filtrar', () => {
+    setFiltro(AGENCIA);
+    UM.resetFiltroCapturado();
+    UM.captureFiltro();
+    document.getElementById('filtroJson').value =
+      JSON.stringify({ ...FILTRO_REAL, IdAgencia: '9999' });
+    expect(UM.filtroAtual().IdAgencia).toBe('0570');
   });
 
-  test('a Filtrar on TODOS clears a previously captured agência', () => {
-    setSelect('0570');
-    UM.resetFilteredAgencia();
-    UM.captureFilteredAgencia();
-    document.getElementById('IdAgencia').value = '*';
-    UM.captureFilteredAgencia();
-    expect(UM.filteredAgencia()).toBe('');
+  test('a Filtrar on TODOS replaces a previously captured scope', () => {
+    setFiltro(AGENCIA);
+    UM.resetFiltroCapturado();
+    UM.captureFiltro();
+    document.getElementById('filtroJson').value =
+      JSON.stringify({ ...FILTRO_REAL, IdEntrevistadores: '*' });
+    UM.captureFiltro();
+    expect(UM.motivoBloqueio(UM.filtroAtual())).toContain('estado inteiro');
   });
 });
 
-// The "button doesn't show up until a reload" bug (2026-08-10).
-// filteredAgencia was only ever set by a Filtrar CLICK, so a report
-// already rendered at page-load time — SIGC restoring state, a back
-// navigation, or a Filtrar that happened before the listener bound —
-// left it empty forever and the button never mounted.
-describe('adoptRenderedAgencia', () => {
-  function setSelect(value) {
-    document.body.innerHTML =
-      `<select id="IdAgencia"><option value="${value}" selected>x</option></select>` +
-      '<button id="btnFiltrar">Filtrar</button>';
-  }
+// The "button doesn't show up until a reload" bug (2026-08-10). The
+// capture only ever ran on a Filtrar CLICK, so a report already rendered
+// at page-load time — SIGC restoring state, a back navigation, or a
+// Filtrar that happened before the listener bound — left it empty
+// forever and the button never enabled.
+describe('adoptRenderedFiltro', () => {
+  const AGENCIA = { ...FILTRO_REAL, IdAgencia: '0570', IdEntrevistadores: '*' };
 
-  test('adopts the selector when a table is already rendered', () => {
-    setSelect('0570');
-    UM.resetFilteredAgencia();
-    UM.adoptRenderedAgencia(true);
-    expect(UM.filteredAgencia()).toBe('0570');
+  test('adopts the form filter when a table is already rendered', () => {
+    setFiltroJson(AGENCIA);
+    UM.resetFiltroCapturado();
+    UM.adoptRenderedFiltro(true);
+    expect(UM.filtroAtual().IdAgencia).toBe('0570');
   });
 
   test('does nothing when no table is rendered yet', () => {
-    setSelect('0570');
-    UM.resetFilteredAgencia();
-    UM.adoptRenderedAgencia(false);
-    expect(UM.filteredAgencia()).toBe('');
+    setFiltroJson(AGENCIA);
+    UM.resetFiltroCapturado();
+    UM.adoptRenderedFiltro(false);
+    expect(UM.filtroAtual()).toBe(null);
   });
 
   // Adoption is a one-time seed for the pre-existing report. Once a
-  // Filtrar has been observed, the captured value is authoritative and
-  // must keep winning over a drifting selector — the whole point of the
-  // earlier filteredAgencia fix.
-  test('does not overwrite an already-captured agência', () => {
-    setSelect('0570');
-    UM.resetFilteredAgencia();
-    UM.captureFilteredAgencia();
-    document.getElementById('IdAgencia').value = '*';
-    UM.adoptRenderedAgencia(true);
-    expect(UM.filteredAgencia()).toBe('0570');
-  });
-
-  // A TODOS report on arrival must stay ungated, not get adopted as ''
-  // and then re-adopted later from a changed selector.
-  test('adopting TODOS leaves the gate closed', () => {
-    setSelect('*');
-    UM.resetFilteredAgencia();
-    UM.adoptRenderedAgencia(true);
-    expect(UM.filteredAgencia()).toBe('');
+  // Filtrar has been observed, the captured filter is authoritative and
+  // must keep winning over a drifting form.
+  test('does not overwrite an already-captured filter', () => {
+    setFiltroJson(AGENCIA);
+    UM.resetFiltroCapturado();
+    UM.captureFiltro();
+    document.getElementById('filtroJson').value =
+      JSON.stringify({ ...FILTRO_REAL, IdAgencia: '9999' });
+    UM.adoptRenderedFiltro(true);
+    expect(UM.filtroAtual().IdAgencia).toBe('0570');
   });
 });
 
 describe('MAPA PRO button state', () => {
-  test('disabled with an explanatory tooltip when no single agência is filtered', () => {
-    const I = window.__sigcProUltimoMovimentoMapInternals;
-    // A prior describe block (adoptRenderedAgencia) leaves a stray
-    // #IdAgencia in document.body; clear it so this test's own
-    // getElementById('IdAgencia') lookups aren't shadowed by it.
-    document.body.innerHTML = '';
-    I.resetFilteredAgencia();
+  function mkBtn() {
     const btn = document.createElement('button');
     btn.id = 'sigc-pro-ultimo-movimento-map-btn';
     document.body.appendChild(btn);
+    return btn;
+  }
+
+  test('blocked with an explanatory tooltip when the whole UF is filtered', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    setFiltroJson({ ...FILTRO_REAL, IdEntrevistadores: '*' });
+    I.resetFiltroCapturado();
+    I.captureFiltro();
+    const btn = mkBtn();
     try {
       I.atualizarEstadoBotaoMapa();
-      expect(btn.disabled).toBe(true);
-      expect(btn.title).toContain('agência');
+      expect(btn.getAttribute('aria-disabled')).toBe('true');
+      expect(btn.title).toContain('estado inteiro');
     } finally {
       btn.remove();
     }
   });
 
-  test('enabled once a single agência is filtered', () => {
+  // Deliberately NOT btn.disabled: a disabled button swallows clicks, so
+  // the click-to-explain path (onMapaClick's motivoBloqueio guard) would
+  // never fire. The block is painted, and the button stays clickable.
+  test('a blocked button stays clickable so the click can explain', () => {
     const I = window.__sigcProUltimoMovimentoMapInternals;
-    document.body.innerHTML = '';
-    I.resetFilteredAgencia();
-    const sel = document.createElement('select');
-    sel.id = 'IdAgencia';
-    const opt = document.createElement('option');
-    opt.value = 'AG1';
-    sel.appendChild(opt);
-    sel.value = 'AG1';
-    document.body.appendChild(sel);
-    const btn = document.createElement('button');
-    btn.id = 'sigc-pro-ultimo-movimento-map-btn';
-    document.body.appendChild(btn);
+    setFiltroJson({ ...FILTRO_REAL, IdEntrevistadores: '*' });
+    I.resetFiltroCapturado();
+    I.captureFiltro();
+    const btn = mkBtn();
     try {
-      I.captureFilteredAgencia();
       I.atualizarEstadoBotaoMapa();
       expect(btn.disabled).toBe(false);
     } finally {
       btn.remove();
-      sel.remove();
+    }
+  });
+
+  // The reported bug: these profiles have no agência selector at all, so
+  // the old gate left the button permanently dead for them.
+  test('enabled for a município filter with no agência', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    setFiltroJson({ ...FILTRO_REAL, IdMunicipio: '2927408', IdEntrevistadores: '*' });
+    I.resetFiltroCapturado();
+    I.captureFiltro();
+    const btn = mkBtn();
+    try {
+      I.atualizarEstadoBotaoMapa();
+      expect(btn.getAttribute('aria-disabled')).toBe('false');
+      expect(btn.disabled).toBe(false);
+    } finally {
+      btn.remove();
+    }
+  });
+
+  // Hover text and click text must be the same sentence — one source of
+  // truth (motivoBloqueio), so they can't drift apart.
+  test('the tooltip is exactly the reason the click would report', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    setFiltroJson(FILTRO_REAL); // entrevistador filter
+    I.resetFiltroCapturado();
+    I.captureFiltro();
+    const btn = mkBtn();
+    try {
+      I.atualizarEstadoBotaoMapa();
+      expect(btn.title).toBe(I.motivoBloqueio(I.filtroAtual()));
+    } finally {
+      btn.remove();
     }
   });
 });
@@ -1104,6 +1212,11 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
 
   function setUpDom({ header, rows }) {
     document.body.innerHTML =
+      // The filter SIGC assembles for its own POST — the Mapa's primary
+      // source of scope. An agência-scoped filter here, so the gate is open.
+      `<input type="hidden" id="filtroJson" value='${JSON.stringify({
+        ...FILTRO_REAL, IdAgencia: '0570', IdEntrevistadores: '*',
+      })}'>` +
       '<select id="IdUf"><option value="29" selected>29</option></select>' +
       '<select id="IdAgencia"><option value="0570" selected>0570</option></select>' +
       '<button id="btnFiltrar">Filtrar</button>' +
@@ -1125,15 +1238,15 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
   test('the map panel still renders when the agenda fetch rejects', async () => {
     const I = window.__sigcProUltimoMovimentoMapInternals;
     setUpDom({ header: HEADER, rows: ROWS });
-    I.resetFilteredAgencia();
-    I.captureFilteredAgencia();
+    I.resetFiltroCapturado();
+    I.captureFiltro();
 
     const originalConfirm = window.confirm;
     const originalAM = window.__sigcProAgendaLookups;
     window.confirm = () => true;
     window.__sigcProAgendaLookups = {
       ...originalAM,
-      fetchEnderecosByAgencia: async () => new Map([
+      fetchEnderecosPorFiltro: async () => new Map([
         ['C1|1', { lat: -8.5, lon: -63.8, zona: 'Z1', idZona: 'Z1' }],
       ]),
       fetchAgendaSlots: async () => { throw new Error('network down'); },
@@ -1172,7 +1285,7 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
       delete document.documentElement.dataset.sigcProLeafletJsUrl;
       delete document.documentElement.dataset.sigcProLeafletCssUrl;
       document.getElementById('sigc-pro-ultimo-movimento-map-panel')?.remove();
-      I.resetFilteredAgencia();
+      I.resetFiltroCapturado();
       I.resetTileState();
     }
   });
@@ -1186,16 +1299,16 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
   test('a resolving agenda fetch joins a matching scheduled visit onto its household, visible in the Domicílios tab', async () => {
     const I = window.__sigcProUltimoMovimentoMapInternals;
     setUpDom({ header: HEADER, rows: ROWS });
-    I.resetFilteredAgencia();
+    I.resetFiltroCapturado();
     I.resetTileState();
-    I.captureFilteredAgencia();
+    I.captureFiltro();
 
     const originalConfirm = window.confirm;
     const originalAM = window.__sigcProAgendaLookups;
     window.confirm = () => true;
     window.__sigcProAgendaLookups = {
       ...originalAM,
-      fetchEnderecosByAgencia: async () => new Map([
+      fetchEnderecosPorFiltro: async () => new Map([
         ['C1|1', { lat: -8.5, lon: -63.8, zona: 'Z1', idZona: 'Z1' }],
       ]),
       // Realistic shape: fetchAgendaSlots resolves { dados, em, cache },
@@ -1242,7 +1355,7 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
       delete document.documentElement.dataset.sigcProLeafletJsUrl;
       delete document.documentElement.dataset.sigcProLeafletCssUrl;
       document.getElementById('sigc-pro-ultimo-movimento-map-panel')?.remove();
-      I.resetFilteredAgencia();
+      I.resetFiltroCapturado();
       I.resetTileState();
     }
   });
@@ -1278,9 +1391,9 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
   test('two concurrent maybeLoadTiles() calls (via two rapid Mapa-tab clicks) construct the Leaflet map only once', async () => {
     const I = window.__sigcProUltimoMovimentoMapInternals;
     setUpDom({ header: HEADER, rows: ROWS });
-    I.resetFilteredAgencia();
+    I.resetFiltroCapturado();
     I.resetTileState();
-    I.captureFilteredAgencia();
+    I.captureFiltro();
 
     const originalConfirm = window.confirm;
     const originalAM = window.__sigcProAgendaLookups;
@@ -1288,7 +1401,7 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
     window.confirm = () => true;
     window.__sigcProAgendaLookups = {
       ...originalAM,
-      fetchEnderecosByAgencia: async () => new Map([
+      fetchEnderecosPorFiltro: async () => new Map([
         ['C1|1', { lat: -8.5, lon: -63.8, zona: 'Z1', idZona: 'Z1' }],
       ]),
       fetchAgendaSlots: async () => { throw new Error('network down'); },
@@ -1326,7 +1439,7 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
       delete window.jQuery;
       delete window.$;
       document.getElementById('sigc-pro-ultimo-movimento-map-panel')?.remove();
-      I.resetFilteredAgencia();
+      I.resetFiltroCapturado();
       I.resetTileState();
     }
   });
@@ -1334,9 +1447,9 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
   test('the "Tentar novamente" retry button still recovers the map after a failed tile load', async () => {
     const I = window.__sigcProUltimoMovimentoMapInternals;
     setUpDom({ header: HEADER, rows: ROWS });
-    I.resetFilteredAgencia();
+    I.resetFiltroCapturado();
     I.resetTileState();
-    I.captureFilteredAgencia();
+    I.captureFiltro();
 
     const originalConfirm = window.confirm;
     const originalAM = window.__sigcProAgendaLookups;
@@ -1353,7 +1466,7 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
     };
     window.__sigcProAgendaLookups = {
       ...originalAM,
-      fetchEnderecosByAgencia: async () => new Map([
+      fetchEnderecosPorFiltro: async () => new Map([
         ['C1|1', { lat: -8.5, lon: -63.8, zona: 'Z1', idZona: 'Z1' }],
       ]),
       fetchAgendaSlots: async () => { throw new Error('network down'); },
@@ -1389,7 +1502,7 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
       delete window.jQuery;
       delete window.$;
       document.getElementById('sigc-pro-ultimo-movimento-map-panel')?.remove();
-      I.resetFilteredAgencia();
+      I.resetFiltroCapturado();
       I.resetTileState();
     }
   });

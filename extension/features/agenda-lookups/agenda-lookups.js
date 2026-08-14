@@ -54,17 +54,20 @@
       : `${origin}${f5.prefix}/relatorio/f5-h-$$/relatorio/filtrar?slug=${slug};F5_origin=${f5.hex}&F5CH=I`;
   }
 
-  // '*' is SIGC's "all" wildcard for a filtro field, so scoping by
-  // Controle and scoping by agência are the same request with the two
-  // fields swapped: the Agenda path pins Controle and wildcards
-  // IdAgencia, the Mapa path does the reverse (one call for a whole
-  // agência instead of one per Controle).
-  function filtroBody(uf, controle, idFiltro, agencia) {
+  // '*' is SIGC's "all" wildcard for a filtro field, so every scope is
+  // the same request with different fields pinned: the Agenda path pins
+  // Controle and wildcards the rest, the Mapa path pins whichever of
+  // agência/município/Controle the user actually filtered by (one call
+  // for the whole scope instead of one per Controle).
+  //
+  // municipio is last and optional so the Agenda call sites, which never
+  // scope by it, keep working unchanged.
+  function filtroBody(uf, controle, idFiltro, agencia, municipio) {
     return 'filtro=' + encodeURIComponent(JSON.stringify({
       IdFiltro: idFiltro,
       IdUf: String(uf),
       IdAgencia: agencia ? String(agencia) : '*',
-      IdMunicipio: '*',
+      IdMunicipio: municipio ? String(municipio) : '*',
       Controle: String(controle),
       TipoVisualizacao: 'S',
     }));
@@ -575,13 +578,37 @@
     enderecosAgenciaCache.clear();
   }
 
-  function fetchEnderecosByAgencia(uf, agencia) {
-    const chave = `${uf}|${agencia}`;
+  // Lista de Endereços scoped by an Último Movimento filter, replayed
+  // field-for-field. The two reports share IdUf/IdAgencia/IdMunicipio/
+  // Controle with identical names and identical '*' wildcard semantics,
+  // so "scope the coordinates the way the report was scoped" needs no
+  // translation table. The two Último Movimento-only fields
+  // (IdEntrevistadores, IdTipoAcompanhamento) are dropped: they narrow
+  // the report WITHIN the geographic scope, so the response is a
+  // superset of the rows on screen and the caller's controle|domicilio
+  // join discards the surplus. Callers must still refuse a filter with
+  // no geographic scope at all, which would fetch the whole UF (see
+  // ultimo-movimento-map.js's motivoBloqueio).
+  //
+  // One request per scope, agência or município or Controle alike:
+  // fetchEnderecos' per-Controle loop would be dozens of POSTs for a
+  // município-wide report, which is a typical view.
+  //
+  // Cached by the full scope for the page's lifetime (in-memory only),
+  // no TTL — coordinates don't go stale within a page's life the way
+  // free-slot counts do.
+  function fetchEnderecosPorFiltro(filtro) {
+    const f = filtro || {};
+    const uf = String(f.IdUf || '');
+    const agencia = String(f.IdAgencia || '*');
+    const municipio = String(f.IdMunicipio || '*');
+    const controle = String(f.Controle || '*');
+    const chave = `${uf}|${agencia}|${municipio}|${controle}`;
     const hit = enderecosAgenciaCache.get(chave);
     if (hit) return hit;
     const p = postRelatorio({
       slug: 'ListaEnderecos',
-      body: filtroBody(uf, '*', 'ListaEnderecos', agencia),
+      body: filtroBody(uf, controle, 'ListaEnderecos', agencia, municipio),
       parse: parseEnderecosHtml,
     }).catch((err) => {
       // A failed fetch must not poison the cache — the next click retries.
@@ -590,6 +617,12 @@
     });
     enderecosAgenciaCache.set(chave, p);
     return p;
+  }
+
+  // Kept as a thin wrapper: agência is just the scope with the other two
+  // fields wildcarded, and existing callers/tests name it directly.
+  function fetchEnderecosByAgencia(uf, agencia) {
+    return fetchEnderecosPorFiltro({ IdUf: uf, IdAgencia: agencia });
   }
 
   const ULTIMO_MOVIMENTO_SLUG = 'relatorio-ultimo-movimento';
@@ -807,7 +840,8 @@
   // rather than re-diverging a second copy of this fold.
   window.__sigcProAgendaLookups = {
     parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl,
-    fetchEnderecos, fetchEnderecosByAgencia, resetEnderecosAgenciaCache, stripAccents, stripHeaderMarker,
+    fetchEnderecos, fetchEnderecosByAgencia, fetchEnderecosPorFiltro,
+    resetEnderecosAgenciaCache, stripAccents, stripHeaderMarker,
     parseSlots, zonaIdOf, chaveDomicilio, indexByControle, pickAgendado, fmtAgendado, horaDoStart, horaDeIso,
     slotsLivresDaJanela, agruparPorDia, buildSlotsLivresHtml, TARDE_FROM_MIN, indexZonaLivres,
     fetchAgendaSlots, resetAgendaCache,

@@ -2,10 +2,23 @@
 // the sibling feature this reuses the join pattern from (opt-in
 // same-origin fetch of Lista de Endereços, controle|domicilio keying).
 //
-// Agência-only (2026-08-10): the button mounts, and the click proceeds,
-// only when the report is filtered to exactly ONE agência. That gate is
-// what lets the coordinate lookup be a single agência-scoped request
-// instead of one per Controle — see filteredAgencia and onMapaClick.
+// Scope gate (2026-08-14, replacing the agência-only gate of
+// 2026-08-10): the filter the user submitted is captured whole from
+// #filtroJson on the Filtrar click, then replayed field-for-field onto
+// the Lista de Endereços lookup — so agência, município and Controle
+// scopes all resolve in ONE request, never one per Controle.
+//
+// The agência-only gate this replaces made the feature unusable for most
+// profiles, which have no agência selector at all: #IdAgencia never held
+// a single value for them, so the button was permanently disabled.
+// Reading the submitted filter instead of one specific selector removes
+// that whole class of profile difference.
+//
+// The only blocked case is a filter with NO geographic scope, whose
+// coordinate lookup would fall back to the entire UF. Entrevistador and
+// tipo-de-acompanhamento filters ride along fine inside a scope — they
+// just narrow the rows further, and the join drops the surplus — but
+// alone they mean the whole state, hence blocked. See motivoBloqueio.
 // Spec: docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md
 (function () {
   'use strict';
@@ -376,8 +389,8 @@
 
   const FETCH_CONSENT_MSG =
     'SIGC-PRO: isto fará duas consultas ao próprio servidor do SIGC — a ' +
-    'Lista de Endereços (coordenadas e zona) da agência filtrada e a ' +
-    'agenda da UF. Nenhum dado sai do IBGE. Continuar?';
+    'Lista de Endereços (coordenadas e zona) do mesmo recorte filtrado no ' +
+    'relatório e a agenda da UF. Nenhum dado sai do IBGE. Continuar?';
 
   // In-memory only (zero-storage guarantee): re-asked on every page
   // load, but not on every click within one.
@@ -931,50 +944,88 @@
     return parseUltimoMovimentoRows(result.header, result.rows);
   }
 
-  // The agência currently SELECTED in the filter form. Read off the same
-  // kind of select2-dressed <select> ultimo-movimento-export.js reads
-  // IdUf from: select2 keeps the real element in the DOM (visually
-  // hidden, the "TODOS" text being a select2-rendered span), so .value
-  // still works.
-  //
-  // '*' is the codebase's all-agências wildcard (buildAgenciaFilterBody)
-  // and a blank is the placeholder shape fetchAgenciaList already drops;
-  // both mean "not a single agência".
-  //
-  // This is the form's state, NOT the report's — see filteredAgencia.
-  function selectedAgencia() {
-    const s = document.getElementById('IdAgencia');
-    const v = s ? String(s.value || '').trim() : '';
-    return v === '*' ? '' : v;
+  // '*' is SIGC's "all" wildcard for a filtro field; a blank is the
+  // select2 placeholder shape fetchAgenciaList already drops. Both mean
+  // "not filtered by this field".
+  const WILDCARD = '*';
+
+  function isWildcard(v) {
+    const s = String(v == null ? '' : v).trim();
+    return s === '' || s === WILDCARD;
   }
 
-  // The agência the table ON SCREEN was actually filtered by, captured
-  // when Filtrar is clicked. '' when the last Filtrar was a TODOS run,
-  // or when no Filtrar has happened yet in this page's lifetime.
-  //
-  // Gating on this rather than on selectedAgencia() is the whole point:
-  // changing the dropdown does NOT re-run the report, so the rendered
-  // rows still belong to the previously submitted agência. Gating on
-  // the live selector would show the button for an agência whose data
-  // isn't on screen (and hide it for one whose data is), and Mapa's
-  // single agência-scoped coordinate fetch would then be scoped to the
-  // wrong agência entirely — a silent wrong-data join, not a visible
-  // error.
-  let filteredAgenciaValue = '';
+  // The six filtro fields the Último Movimento form submits. Named
+  // exactly as both the form inputs and the request body name them
+  // (confirmed live 2026-08-14), so no translation table is needed
+  // between reading them and sending them back.
+  const FILTRO_FIELDS = [
+    'IdUf', 'IdAgencia', 'IdMunicipio', 'Controle',
+    'IdEntrevistadores', 'IdTipoAcompanhamento',
+  ];
 
-  function filteredAgencia() {
-    return filteredAgenciaValue;
+  // The whole filter the form currently holds, NOT just the agência.
+  //
+  // Primary source is #filtroJson, a hidden input where SIGC keeps the
+  // filtro object it posts, already assembled (confirmed live
+  // 2026-08-14). Reading it beats rebuilding the object from the six
+  // individual selects: there is no chance of our reconstruction
+  // disagreeing with what the server was actually given.
+  //
+  // Falls back to those individual inputs when #filtroJson is missing or
+  // unparseable, so a page redesign that drops it degrades the feature
+  // instead of killing it. Returns null only when neither source yields
+  // a UF — the one field every scope needs.
+  //
+  // Never throws: this runs inside a capture-phase listener on SIGC's
+  // own Filtrar button, where an exception would surface as the page's
+  // bug, not ours.
+  function lerFiltro() {
+    const el = document.getElementById('filtroJson');
+    if (el && String(el.value || '').trim()) {
+      try {
+        const parsed = JSON.parse(el.value);
+        if (parsed && typeof parsed === 'object' && !isWildcard(parsed.IdUf)) return parsed;
+      } catch (err) {
+        console.warn(`${TAG} #filtroJson inválido, lendo os campos individuais:`, err);
+      }
+    }
+    const out = {};
+    FILTRO_FIELDS.forEach((f) => {
+      const input = document.getElementById(f);
+      // An absent field is "not filtered by this", i.e. the wildcard —
+      // the same thing SIGC itself sends for an untouched filter. IdUf is
+      // the exception: it names the UF every scope is relative to, so a
+      // wildcard there is not a scope at all and must read as absent.
+      const raw = input ? String(input.value || '').trim() : '';
+      out[f] = raw || WILDCARD;
+    });
+    return isWildcard(out.IdUf) ? null : out;
   }
 
-  function captureFilteredAgencia() {
-    filteredAgenciaValue = selectedAgencia();
+  // The filter the table ON SCREEN was actually rendered from, captured
+  // when Filtrar is clicked. null when no Filtrar has happened yet in
+  // this page's lifetime.
+  //
+  // Gating on this rather than on the live form is the whole point:
+  // changing a dropdown does NOT re-run the report, so the rendered rows
+  // still belong to the previously submitted filter. Gating on the live
+  // form would scope the coordinate fetch to a filter whose data isn't
+  // on screen — a silent wrong-data join, not a visible error.
+  let filtroCapturado = null;
+
+  function filtroAtual() {
+    return filtroCapturado;
+  }
+
+  function captureFiltro() {
+    filtroCapturado = lerFiltro();
   }
 
   // Test-only seam: the module-level capture survives between test
   // cases, so each one needs a clean starting point.
-  function resetFilteredAgencia() {
-    filteredAgenciaValue = '';
-    agenciaAdopted = false;
+  function resetFiltroCapturado() {
+    filtroCapturado = null;
+    filtroAdotado = false;
   }
 
   // Filtrar is a plain form-action button that re-renders the table in
@@ -992,38 +1043,37 @@
     if (filtrarBound) return;
     const btn = document.getElementById('btnFiltrar');
     if (!btn) return;
-    btn.addEventListener('click', captureFilteredAgencia, true);
+    btn.addEventListener('click', captureFiltro, true);
     filtrarBound = true;
   }
 
-  // Seeds the captured value from the selector when a report is ALREADY
+  // Seeds the captured filter from the form when a report is ALREADY
   // rendered but no Filtrar click was ever observed.
   //
   // Without this the button silently never appeared (reported live
-  // 2026-08-10: "doesn't show up until a reload"). captureFilteredAgencia
-  // only ever ran on a click, so any report that was on screen before
-  // this file's listener existed — SIGC restoring filter state, a back
+  // 2026-08-10: "doesn't show up until a reload"). captureFiltro only
+  // ever runs on a click, so any report that was on screen before this
+  // file's listener existed — SIGC restoring filter state, a back
   // navigation, or simply a Filtrar during the extension's own startup
-  // — left filteredAgencia empty for the page's whole lifetime. The
+  // — left the capture empty for the page's whole lifetime. The
   // "reload" that appeared to fix it actually just gave the user a
   // reason to click Filtrar again.
   //
   // Safe because it's a one-time seed: once anything has been captured
-  // it never overwrites, so a Filtrar-captured value still wins over a
-  // drifting selector, which is the property the gate exists for. On
-  // arrival at a TODOS report it adopts '', leaving the gate closed.
-  let agenciaAdopted = false;
+  // it never overwrites, so a Filtrar-captured filter still wins over a
+  // drifting form, which is the property the gate exists for.
+  let filtroAdotado = false;
 
-  function adoptRenderedAgencia(hasTable) {
-    if (agenciaAdopted || !hasTable) return;
-    agenciaAdopted = true;
-    if (!filteredAgenciaValue) filteredAgenciaValue = selectedAgencia();
+  function adoptRenderedFiltro(hasTable) {
+    if (filtroAdotado || !hasTable) return;
+    filtroAdotado = true;
+    if (!filtroCapturado) filtroCapturado = lerFiltro();
   }
 
   // How many on-screen households the Lista de Endereços call returned
   // no entry for. Non-zero is not necessarily an error — a household can
-  // legitimately lack coordinates — but a LARGE count after an
-  // agência-scoped fetch suggests a truncated or paginated response,
+  // legitimately lack coordinates — but a LARGE count after a
+  // scope-matched fetch suggests a truncated or paginated response,
   // which would otherwise be indistinguishable from ordinary missing
   // geocoding once joinEnderecos folds both into temCoordenadas:false.
   function missingEnderecoCount(movimentoMap, enderecosMap) {
@@ -1035,39 +1085,39 @@
   }
 
   // Lista de Endereços cross-fetch — delegates entirely to
-  // agenda-lookups.js's fetchEnderecosByAgencia(uf, agencia): ONE
-  // request covering the whole agência, replacing the per-Controle loop
-  // this used to make (one POST per Controle on screen, dozens on a
-  // real report). The report here is always agência-scoped, so the
-  // server can scope the same way — see the filteredAgencia gate.
-  // This file never issues that request itself: the network call stays
-  // inside agenda-lookups.js, the directory check-privacy.sh's
+  // agenda-lookups.js's fetchEnderecosPorFiltro(filtro): ONE request
+  // matching whatever scope the report on screen was filtered by,
+  // replacing the per-Controle loop this used to make (one POST per
+  // Controle on screen, dozens on a real report). The captured filter is
+  // exactly what SIGC itself was given, so the server can scope the
+  // coordinates identically — see motivoBloqueio for the scopes it
+  // can't. This file never issues that request itself: the network call
+  // stays inside agenda-lookups.js, the directory check-privacy.sh's
   // FETCH_DIRS already sanctions for it.
   async function onMapaClick(btn) {
+    // The gated state is painted, not `disabled` (see pintarBloqueio), so
+    // this handler DOES run when blocked — which is the point: the click
+    // is what delivers the explanation on touch devices and to anyone who
+    // never hovers. Checked first, and re-checked here rather than only at
+    // mount, since a Filtrar can change the scope between the mount tick
+    // and the click.
+    const motivo = motivoBloqueio(filtroAtual());
+    if (motivo) {
+      alert(`SIGC-PRO: ${motivo}`);
+      return;
+    }
     ensureCss();
     const movimentoMap = readUltimoMovimentoTable();
     if (!movimentoMap || movimentoMap.size === 0) {
       alert('SIGC-PRO: nenhum dado encontrado no relatório — rode um Filtrar primeiro.');
       return;
     }
-    // Both preconditions are checked BEFORE the consent prompt: asking
+    // Preconditions are checked BEFORE the consent prompt: asking
     // permission for a request that then can't be made would train the
     // user to click through a prompt that didn't mean anything.
     const AM = window.__sigcProAgendaLookups;
-    const uf = window.__sigcProUltimoMovimentoExportInternals &&
-      window.__sigcProUltimoMovimentoExportInternals.getCurrentUf();
-    if (!uf) {
-      alert('SIGC-PRO: não foi possível identificar a UF atual.');
-      return;
-    }
-    // Re-checked here, not just at mount: a Filtrar on TODOS clears this
-    // between the mount tick and the click.
-    const agencia = filteredAgencia();
-    if (!agencia) {
-      alert('SIGC-PRO: o Mapa só funciona com uma agência selecionada — ' +
-        'escolha uma agência no filtro e rode Filtrar novamente.');
-      return;
-    }
+    const filtro = filtroAtual();
+    const uf = filtro.IdUf;
 
     if (!consentState.fetch) {
       if (!confirm(FETCH_CONSENT_MSG)) return;
@@ -1076,12 +1126,15 @@
 
     btn.disabled = true;
     try {
-      // ONE call for the whole agência, not one per Controle: the report
-      // is agência-scoped (guaranteed by the mount gate below), so the
-      // server can scope the Lista de Endereços the same way.
+      // ONE call, whatever the scope: the captured filter is replayed
+      // onto Lista de Endereços field-for-field, so the server scopes the
+      // coordinates exactly the way it scoped the report on screen —
+      // agência, município or Controle alike. Never a loop per Controle,
+      // which for a município-wide report (a typical view) would be
+      // dozens of POSTs.
       let enderecosMap = new Map();
       try {
-        enderecosMap = await AM.fetchEnderecosByAgencia(uf, agencia);
+        enderecosMap = await AM.fetchEnderecosPorFiltro(filtro);
       } catch (err) {
         console.warn(`${TAG} Lista de Endereços fetch failed:`, err);
         alert(`SIGC-PRO: não foi possível obter coordenadas (${err && err.message}); ` +
@@ -1241,21 +1294,78 @@
   }
 
   const TITLE_MAPA_ATIVO = 'Mapa de domicílios por zona (SIGC-PRO)';
-  const TITLE_MAPA_SEM_AGENCIA =
-    'Filtre por uma agência (e clique em Filtrar) para ver o mapa — ' +
-    'um relatório de estado inteiro é grande demais para buscar coordenadas.';
+
+  // Why the Mapa can't run for the filter on screen, or '' when it can.
+  //
+  // ONE source of truth for both the hover tooltip and the click alert,
+  // so the two can never drift apart — the reason the button explains
+  // itself identically either way.
+  //
+  // Lista de Endereços accepts IdUf/IdAgencia/IdMunicipio/Controle, so
+  // those four translate field-for-field into the coordinate lookup.
+  //
+  // The two Último Movimento-only fields (IdEntrevistadores,
+  // IdTipoAcompanhamento) have no analogue there, but they are NOT
+  // blocking on their own: they only narrow the report further WITHIN
+  // whatever geographic scope is set. The coordinate response then covers
+  // a superset of the rows on screen, and joinEnderecos' controle|
+  // domicilio join discards the surplus — the same thing it already does
+  // for any household with no endereços entry.
+  //
+  // What actually can't be served is a filter with NO geographic scope at
+  // all: the coordinate request would fall back to the entire UF. So an
+  // entrevistador filter alone is blocked (its implicit scope is the
+  // whole state), while município+entrevistador is fine.
+  function motivoBloqueio(filtro) {
+    if (!filtro) {
+      return 'Rode um Filtrar primeiro para o Mapa saber qual recorte buscar.';
+    }
+    if (isWildcard(filtro.IdUf)) {
+      return 'Não foi possível identificar a UF atual.';
+    }
+    if (isWildcard(filtro.IdAgencia) && isWildcard(filtro.IdMunicipio) &&
+        isWildcard(filtro.Controle)) {
+      return 'Filtre por agência, município ou controle (e clique em Filtrar) ' +
+        'para ver o mapa — um relatório de estado inteiro é grande demais ' +
+        'para buscar coordenadas.';
+    }
+    return '';
+  }
 
   // Button stays VISIBLE either way — an absent button is
   // indistinguishable from a broken extension, the same rule
   // lista-agenda.js states. Now that Último Movimento is the only home
   // for this feature, "the button disappeared" is a worse failure than
   // it was when Lista de Endereços still carried AGENDA PRO.
+  //
+  // Deliberately NOT btn.disabled: a disabled <button> swallows click
+  // events, so the explanation could only ever be a hover tooltip —
+  // invisible on touch, and easy to miss. Instead the button stays
+  // clickable and is painted in the disabled colours (the same wash
+  // paintDisabledState applies), with the click showing the reason. The
+  // busy state during a fetch still uses real `disabled`, which is what
+  // that flag should mean.
+  const BLOQUEADO_ATTR = 'data-sigc-pro-bloqueado';
+
+  function pintarBloqueio(btn, motivo) {
+    btn.setAttribute('aria-disabled', motivo ? 'true' : 'false');
+    if (motivo) btn.setAttribute(BLOQUEADO_ATTR, '1');
+    else btn.removeAttribute(BLOQUEADO_ATTR);
+    btn.style.background = motivo ? PRO_BLUE_BLOQUEADO : PRO_BLUE;
+    btn.style.borderColor = motivo ? PRO_BLUE_BLOQUEADO : PRO_BLUE;
+    btn.style.cursor = motivo ? 'help' : '';
+    btn.title = motivo || TITLE_MAPA_ATIVO;
+  }
+
+  // Same pair sigc-common.js's paintDisabledState uses, repeated here
+  // because this is the gated (not busy) state and must look identical.
+  const PRO_BLUE = '#005a9c';
+  const PRO_BLUE_BLOQUEADO = '#7fb3d3';
+
   function atualizarEstadoBotaoMapa() {
     const btn = document.getElementById(BUTTON_ID);
     if (!btn) return;
-    const ok = !!filteredAgencia();
-    btn.disabled = !ok;
-    btn.title = ok ? TITLE_MAPA_ATIVO : TITLE_MAPA_SEM_AGENCIA;
+    pintarBloqueio(btn, motivoBloqueio(filtroAtual()));
   }
 
   // Anchored to the DataTables toolbar (.dt-buttons), alongside CSV-pro
@@ -1282,7 +1392,7 @@
       if (!onUltimoMovimento()) return false;
       bindFiltrarCapture();
       const hasTable = !!window.__sigcPro.getDataTable();
-      adoptRenderedAgencia(hasTable);
+      adoptRenderedFiltro(hasTable);
       if (hasTable) atualizarEstadoBotaoMapa();
       return hasTable;
     },
@@ -1302,9 +1412,7 @@
       // set the initial state on btn directly instead of through that
       // lookup, or a freshly-mounted button would flash as enabled until
       // the next mount tick corrected it.
-      const ok = !!filteredAgencia();
-      btn.disabled = !ok;
-      btn.title = ok ? TITLE_MAPA_ATIVO : TITLE_MAPA_SEM_AGENCIA;
+      pintarBloqueio(btn, motivoBloqueio(filtroAtual()));
       return btn;
     },
   });
@@ -1328,12 +1436,14 @@
     convexHull,
     controleCentroids,
     zonaRowIsClickable,
-    selectedAgencia,
-    filteredAgencia,
-    captureFilteredAgencia,
-    resetFilteredAgencia,
+    lerFiltro,
+    filtroAtual,
+    captureFiltro,
+    resetFiltroCapturado,
     resetTileState,
-    adoptRenderedAgencia,
+    adoptRenderedFiltro,
+    motivoBloqueio,
+    isWildcard,
     missingEnderecoCount,
     atualizarEstadoBotaoMapa,
   };
