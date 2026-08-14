@@ -41,6 +41,13 @@ erradas. As retratações estão registradas na seção 6 — deliberadamente, p
 um parecer que só acumula objeções é menos útil que um que mostra quais não
 sobreviveram ao contraditório.
 
+> **Emenda de 2026-08-14.** O autor observou no DevTools que o **próprio SIGC
+> usa Leaflet e busca tiles do OpenStreetMap**. Isso retirou a objeção sobre
+> contato com terceiros (nova 6.5), rebaixou o risco 3.6 e eliminou a
+> recomendação 7 (basemap interno), transferindo a preocupação com revelação
+> da área geográfica para a seção 5, como achado contra o SIGC. O restante do
+> parecer permanece como emitido em 0.2.174.
+
 ---
 
 ## 1. Sumário executivo
@@ -203,19 +210,37 @@ que nenhuma ação nativa isolada produz. É questão de governança de dados (q
 deve possuir um extrato estadual), não de carga (ver 6.2). O flag desligado por
 padrão é o controle adequado.
 
-### 3.6 Tiles do OpenStreetMap
+### 3.6 Tiles do OpenStreetMap — RISCO REBAIXADO
 
-Único recurso de terceiros. Buscado apenas após confirmação própria e separada;
-recusando, as abas Zonas e Domicílios continuam funcionando. Nenhum dado do SIGC
-acompanha o pedido.
+Único recurso de terceiros **da extensão**. Buscado apenas após confirmação
+própria e separada; recusando, as abas Zonas e Domicílios continuam
+funcionando. Nenhum dado do SIGC acompanha o pedido.
 
-**Ressalva que a documentação não faz:** o padrão de quadrículas requisitadas
-**revela a área geográfica sob levantamento**, com IP institucional
-identificável. Irrelevante na maioria dos casos; não em setores sensíveis. Um
-basemap servido internamente eliminaria a questão.
+**Fato que muda o enquadramento deste item:** o **próprio SIGC usa Leaflet e
+busca tiles do OpenStreetMap** — requisições observadas diretamente no
+DevTools, no navegador, a partir de páginas do próprio sistema. O contato do
+navegador institucional com o OpenStreetMap **já é comportamento nativo do
+SIGC**, não algo que a extensão introduza.
+
+Consequências:
+
+- A extensão **não cria** o contato com terceiro nem o IP institucional
+  exposto ao OSM: replica um padrão que o SIGC já pratica — e, ao contrário
+  do nativo, **mediante confirmação explícita do usuário**, que pode recusar
+  sem perder as demais abas.
+- A ressalva de que o padrão de quadrículas **revela a área geográfica sob
+  levantamento** permanece verdadeira, mas **não é atribuível à extensão**:
+  vale igualmente para o mapa nativo. Se isso for problema em setores
+  sensíveis, é problema do SIGC, e a extensão apenas o herda.
+- A recomendação de basemap interno (antiga rec. 7) **foi retirada**: exigi-la
+  da extensão enquanto o sistema hospedeiro faz o mesmo pedido ao mesmo
+  terceiro é incoerente — a mesma incoerência já reconhecida em 6.1 quanto à
+  exportação de dados pessoais. Se um basemap interno for desejável, é decisão
+  de arquitetura do SIGC, e a extensão o adotaria de graça.
 
 *(A documentação da v0.2.174 já corrigiu a afirmação anterior de que nenhum
-terceiro era contatado — ver 6.4.)*
+terceiro era contatado — ver 6.4. Essa correção continua correta e necessária:
+que o SIGC também contate o OSM não dispensa a extensão de declarar que o faz.)*
 
 ### 3.7 Institucional
 
@@ -246,7 +271,11 @@ terceiro era contatado — ver 6.4.)*
 5. Delegação `(...args)` no wrapper do pdfMake e documentação do
    `__sigcProPdfTweak` (3.3).
 6. Renomear para algo que não use "SIGC" como prefixo de produto (3.7).
-7. Basemap interno em vez de OpenStreetMap (3.6).
+
+~~7. Basemap interno em vez de OpenStreetMap.~~ **RETIRADA** — o próprio SIGC
+usa Leaflet com tiles do OpenStreetMap (ver 3.6 e 6.5). A extensão não
+introduz esse contato; apenas o repete, e com confirmação prévia que o
+nativo não pede.
 
 **Encaminhamento preferível:** várias funções — exportação utilizável, mapa por
 zona, painel de agendamento — cobrem lacunas legítimas do SIGC. O caminho
@@ -266,6 +295,13 @@ Registrada como achado contra o SIGC, não contra a extensão:
 - **Os botões nativos de CSV/Excel quebram fora da VPN** (erro `MouseEvent` da
   proteção anti-bot F5). O `CSV-pro` existe por causa disso — restaura uma
   capacidade que o SIGC pretendia oferecer e não entrega.
+- **O mapa nativo do SIGC contata o OpenStreetMap.** O sistema usa Leaflet e
+  busca tiles do OSM (observado no DevTools). Isso expõe o IP institucional a
+  um terceiro e, pelo padrão de quadrículas requisitadas, **revela a área
+  geográfica sob levantamento** — sem confirmação do usuário. Irrelevante na
+  maioria dos casos; não em setores sensíveis. Se essa exposição for
+  inaceitável, a decisão (basemap interno) é de arquitetura do SIGC: a
+  extensão herda o que o sistema já faz (ver 3.6 e 6.5).
 
 ---
 
@@ -338,7 +374,29 @@ Corrigido no commit `772248d`: a afirmação foi delimitada a *dados do SIGC*, c
 a requisição de tiles divulgada em `README.md`, `LEIA-ME.txt`,
 `docs/store-listing.md` e `docs/PRIVACY_POLICY.html`.
 
-### 6.5 Sobre a aprovação na Chrome Web Store
+### 6.5 "Os tiles do OpenStreetMap são exposição a terceiro criada pela extensão" — RETIRADA
+
+**Objeção original:** o mapa da extensão contata um terceiro (OpenStreetMap)
+com IP institucional, e o padrão de quadrículas revela a área sob levantamento;
+recomendava-se basemap interno.
+
+**Refutação do autor:** *o próprio SIGC usa Leaflet e busca tiles do
+OpenStreetMap* — requisições observadas diretamente no DevTools, a partir de
+páginas do sistema.
+
+**Aceita.** O contato com o OSM é **pré-existente e nativo**. A extensão não o
+introduz: replica um comportamento que o sistema hospedeiro já tem, e o faz
+**atrás de uma confirmação explícita** que o mapa nativo não pede — ou seja,
+neste ponto específico a extensão é *mais* conservadora que o SIGC.
+
+É a mesma estrutura de 6.1: exigir da extensão um cuidado que o sistema
+hospedeiro não pratica, no mesmo dado e com o mesmo terceiro, é incoerente. A
+preocupação com a revelação da área geográfica **permanece legítima**, mas
+como achado **contra o SIGC** (soma-se à seção 5), não contra a extensão.
+
+Consequência: risco 3.6 rebaixado, recomendação 7 retirada.
+
+### 6.6 Sobre a aprovação na Chrome Web Store
 
 O revisor da Google verifica políticas de plataforma. **Não avalia sigilo
 estatístico, LGPD ou o contexto da PNS.** Aprovação da Google não constitui aval
