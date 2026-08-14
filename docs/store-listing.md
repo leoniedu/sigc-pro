@@ -127,8 +127,8 @@ the permission.
 
 "Collect" here means Google's definition: **transmitting data off the user's
 machine**. Reading data already on the page, showing it, and saving a file
-locally are not collection. Every answer below is No, and none of them changed
-between 0.2.124 and 0.2.174.
+locally are not collection. Every answer below is No, and none of them has
+changed through 0.2.178.
 
 | Data type | Answer | Why |
 |---|---|---|
@@ -148,32 +148,48 @@ Required certifications — all three can be affirmed:
 - [x] Not being used or transferred for purposes unrelated to the item's core functionality
 - [x] Not being used or transferred to determine creditworthiness or for lending purposes
 
+### What changed since the published 0.2.176
+
+Nothing here affects privacy, permissions or the set of hosts contacted —
+the answers in the table above are unchanged.
+
+- **0.2.177** — Mapa-pro works on more reports. It used to require the
+  Último Movimento report to be filtered to exactly one agência, read off
+  that filter's own selector; most user profiles have no agência selector
+  at all, so the button was permanently disabled for them. It now reuses
+  whatever filter the user submitted (agência, município or controle), so
+  the address-list request is scoped exactly as the on-screen report is.
+  Same endpoint, same origin, same click-and-confirm, one request — only
+  the scoping fields differ.
+- **0.2.178** — the toolbar buttons are 8px wider so the longest label
+  ("MAPA") is not truncated. Cosmetic.
+
 ### If a reviewer asks about network activity
 
-Two things are worth having ready, because they are the only outbound requests
-and one of them is new since 0.2.124:
+These are the only outbound requests. Both were already present in the
+published 0.2.176 and are unchanged in this version:
 
 1. **Same-origin SIGC requests** (Guia do Dia, Mapa-pro, CSV TODAS) — all to the
    IBGE server the user is already on, inside their authenticated session, each
    behind a click and a confirmation. These fetch *from* the origin; nothing is
    sent to anyone else.
 2. **OpenStreetMap tiles** (`https://{s}.tile.openstreetmap.org/...`) — the map
-   background in Mapa-pro, **new in this version**. It is an image request
-   behind its own separate confirmation. No user or SIGC data is attached: the
-   URL carries only zoom/x/y indices of map squares. Declining leaves the
-   Zonas and Domicílios tabs fully functional.
+   background in Mapa-pro. It is an image request behind its own separate
+   confirmation. No user or SIGC data is attached: the URL carries only
+   zoom/x/y indices of map squares. Declining leaves the Zonas and Domicílios
+   tabs fully functional.
 
-Related points a reviewer may raise about this version:
+Related points a reviewer may raise:
 
 - **Leaflet is bundled** in `extension/vendor/leaflet/` and declared in
-  `web_accessible_resources` (new since 0.2.124), loaded via
-  `chrome.runtime.getURL`. It is not fetched from a CDN — MV3 forbids remote
-  code, and this is the compliant arrangement. Map *imagery* cannot be bundled,
-  which is why tiles are external.
+  `web_accessible_resources`, loaded via `chrome.runtime.getURL`. It is not
+  fetched from a CDN — MV3 forbids remote code, and this is the compliant
+  arrangement. Map *imagery* cannot be bundled, which is why tiles are
+  external.
 - **No permissions at all.** The `permissions` list is empty and there are no
-  `host_permissions`. Its
-  requests run in the page's own context (MAIN world), so they are same-origin
-  to the page rather than cross-origin extension requests.
+  `host_permissions`. Its requests run in the page's own context (MAIN world),
+  so they are same-origin to the page rather than cross-origin extension
+  requests.
 - **Nothing is persisted at all.** The `permissions` list is empty; there is
   no `chrome.storage`, `localStorage`, cookie or IndexedDB use anywhere.
   Consent flags and caches live in memory and are gone on reload.
