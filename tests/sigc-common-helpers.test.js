@@ -207,3 +207,71 @@ describe('toMin / fmtMin', () => {
     expect(window.__sigcPro.fmtMin(window.__sigcPro.toMin('14:45'))).toBe('14:45');
   });
 });
+
+// A page whose report failed to render (proxy timeout, partial HTML) can
+// leave a malformed table behind. getDataTable() used to call .DataTable()
+// on it, which INITIALIZES an uninitialized table — and DataTables reports
+// a column-count mismatch through its own alert(), not a thrown error, so
+// no try/catch could contain it. The user got an undismissable modal on
+// every mount tick.
+describe('getDataTable never initializes a table', () => {
+  const fixture = () =>
+    (document.body.innerHTML =
+      '<table id="tableRelatorio"><thead><tr><th>A</th><th>B</th></tr></thead>' +
+      '<tbody><tr><td>quebrado</td></tr></tbody></table>');
+
+  test('an uninitialized page table is left alone', () => {
+    fixture();
+    const prev = window.jQuery;
+    let construiu = false;
+    const fake = () => ({
+      DataTable: () => { construiu = true; return null; },
+    });
+    fake.fn = { dataTable: { isDataTable: () => false } };
+    window.jQuery = window.$ = fake;
+    try {
+      expect(P.getDataTable()).toBeNull();
+      expect(construiu).toBe(false);
+    } finally {
+      window.jQuery = window.$ = prev;
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('an already-initialized page table is still returned', () => {
+    fixture();
+    const prev = window.jQuery;
+    const tabela = { table: () => ({ node: () => document.getElementById('tableRelatorio') }) };
+    const fake = () => ({ DataTable: () => tabela });
+    fake.fn = { dataTable: { isDataTable: () => true } };
+    window.jQuery = window.$ = fake;
+    try {
+      expect(P.getDataTable()).toBe(tabela);
+    } finally {
+      window.jQuery = window.$ = prev;
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('with several page tables, only the initialized ones are read', () => {
+    document.body.innerHTML =
+      '<table id="a"><tbody><tr><td>1</td></tr></tbody></table>' +
+      '<table id="b"><tbody><tr><td>2</td></tr></tbody></table>';
+    const prev = window.jQuery;
+    const vistos = [];
+    const tabela = { table: () => ({ node: () => document.getElementById('b') }) };
+    const fake = (sel) => {
+      vistos.push(Array.from(sel).map((t) => t.id));
+      return { DataTable: () => tabela };
+    };
+    fake.fn = { dataTable: { isDataTable: (t) => t.id === 'b' } };
+    window.jQuery = window.$ = fake;
+    try {
+      expect(P.getDataTable()).toBe(tabela);
+      expect(vistos).toEqual([['b']]);
+    } finally {
+      window.jQuery = window.$ = prev;
+      document.body.innerHTML = '';
+    }
+  });
+});

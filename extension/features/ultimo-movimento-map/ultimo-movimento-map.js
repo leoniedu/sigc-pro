@@ -1430,17 +1430,45 @@
     paginate: { first: 'Primeira', last: 'Última', next: 'Próxima', previous: 'Anterior' },
   };
 
+  // Every body row must have as many cells as the header has columns.
+  // An empty table passes: no rows, nothing to disagree.
+  function colunasBatem(tabela) {
+    const nCols = tabela.querySelectorAll('thead th').length;
+    if (nCols === 0) return false;
+    return [...tabela.querySelectorAll('tbody tr')].every(
+      (tr) => tr.querySelectorAll('td').length === nCols);
+  }
+
   function initPanelTables(panelEl) {
     const jq = window.jQuery || window.$;
     if (!jq || !jq.fn || !jq.fn.dataTable || !panelEl) return;
     panelEl.querySelectorAll('table').forEach((tbl) => {
+      // DataTables reports a column-count mismatch through its own
+      // alert(), NOT a thrown error, so the try/catch below cannot
+      // contain it — the user just gets a modal. The only defence is
+      // never handing it a table whose body disagrees with its header.
+      //
+      // Our builders keep the two in step by construction (each column is
+      // gated by the same flag in header and body, and there are tests
+      // for that), so this is a backstop against a future edit, not a
+      // known case. Refusing to initialize costs sorting and paging;
+      // showing an undismissable dialog costs the whole page.
       try {
         // Initialize deliberately rather than inheriting whatever SIGC's
         // own auto-init would do: that gave a 10-row default and no say
         // over sorting. Already-claimed tables (SIGC got there first) are
         // adjusted in place instead — re-initializing throws.
+        //
+        // The column check guards CONSTRUCTION only: an already-claimed
+        // table has been through DataTables' validation once, and
+        // adjusting its page length cannot raise the mismatch alert.
         if (jq.fn.dataTable.isDataTable(tbl)) {
           jq(tbl).DataTable().page.len(PANEL_PAGE_LENGTH).draw(false);
+          return;
+        }
+        if (!colunasBatem(tbl)) {
+          console.warn(`${TAG} tabela com contagem de colunas inconsistente; ` +
+            'não inicializada no DataTables.');
           return;
         }
         jq(tbl).DataTable({
@@ -2393,6 +2421,7 @@
     joinEnderecos,
     joinAgenda,
     initPanelTables,
+    colunasBatem,
     PANEL_PAGE_LENGTH,
     aggregateZonas,
     zonaColor,

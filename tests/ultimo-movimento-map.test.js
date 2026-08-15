@@ -742,7 +742,11 @@ describe('initPanelTables', () => {
     return record;
   };
 
-  const DOMICILIOS = '<table class="sigc-pro-domicilios-table"><tbody></tbody></table>';
+  // A real panel table always has a header: initPanelTables refuses to
+  // initialize a table whose body disagrees with its header (see
+  // colunasBatem), and "no header at all" is that same disagreement.
+  const DOMICILIOS = '<table class="sigc-pro-domicilios-table">' +
+    '<thead><tr><th>A</th></tr></thead><tbody></tbody></table>';
 
   test('initializes an unclaimed table with 50 rows per page', () => {
     const I = window.__sigcProUltimoMovimentoMapInternals;
@@ -2997,6 +3001,70 @@ describe('the prazo travels with the cell, not just its attribute', () => {
       expect(celula.textContent).toContain('Vencido');
       expect(celula.querySelector('.sigc-pro-prazo-num').textContent).toBe('-21');
     } finally {
+      document.body.innerHTML = '';
+    }
+  });
+});
+
+describe('initPanelTables refuses malformed tables', () => {
+  test('a table whose body does not match its header is never initialized', () => {
+    // DataTables reports a column-count mismatch through alert(), not a
+    // thrown error, so the try/catch around the init cannot contain it.
+    // The only defence is not handing it such a table.
+    document.body.innerHTML =
+      '<div id="p" data-sigc-pro>' +
+      '<table><thead><tr><th>A</th><th>B</th></tr></thead>' +
+      '<tbody><tr><td>so-uma</td></tr></tbody></table></div>';
+    const prev = window.jQuery;
+    let iniciou = 0;
+    const fake = () => ({ DataTable: () => { iniciou += 1; return { page: () => ({ len: () => ({ draw: () => {} }) }) }; } });
+    fake.fn = { dataTable: { isDataTable: () => false } };
+    window.jQuery = window.$ = fake;
+    const warnSpy = console.warn;
+    console.warn = () => {};
+    try {
+      UM.initPanelTables(document.getElementById('p'));
+      expect(iniciou).toBe(0);
+    } finally {
+      console.warn = warnSpy;
+      window.jQuery = window.$ = prev;
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('a well-formed table is still initialized', () => {
+    document.body.innerHTML =
+      '<div id="p" data-sigc-pro>' +
+      '<table><thead><tr><th>A</th><th>B</th></tr></thead>' +
+      '<tbody><tr><td>1</td><td>2</td></tr></tbody></table></div>';
+    const prev = window.jQuery;
+    let iniciou = 0;
+    const fake = () => ({ DataTable: () => { iniciou += 1; return {}; } });
+    fake.fn = { dataTable: { isDataTable: () => false } };
+    window.jQuery = window.$ = fake;
+    try {
+      UM.initPanelTables(document.getElementById('p'));
+      expect(iniciou).toBe(1);
+    } finally {
+      window.jQuery = window.$ = prev;
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('an empty table is fine — no rows means no mismatch', () => {
+    document.body.innerHTML =
+      '<div id="p" data-sigc-pro>' +
+      '<table><thead><tr><th>A</th></tr></thead><tbody></tbody></table></div>';
+    const prev = window.jQuery;
+    let iniciou = 0;
+    const fake = () => ({ DataTable: () => { iniciou += 1; return {}; } });
+    fake.fn = { dataTable: { isDataTable: () => false } };
+    window.jQuery = window.$ = fake;
+    try {
+      UM.initPanelTables(document.getElementById('p'));
+      expect(iniciou).toBe(1);
+    } finally {
+      window.jQuery = window.$ = prev;
       document.body.innerHTML = '';
     }
   });

@@ -150,8 +150,21 @@
     const jq = window.jQuery || window.$;
     if (!jq || !jq.fn || !jq.fn.dataTable) return null;
     const ours = Array.from(document.querySelectorAll('table')).filter((t) => !isSigcProTable(t));
-    if (ours.length === 0) return null;
-    const table = jq(ours).DataTable();
+    // ONLY tables DataTables already owns. Calling .DataTable() on an
+    // uninitialized table CONSTRUCTS one, and a page whose report failed
+    // to render (proxy timeout, partial HTML) can leave a malformed table
+    // behind — DataTables then reports "Incorrect column count" through
+    // its own alert(), not a thrown error, so no try/catch here could
+    // contain it. Because this runs on every mount tick, the user got an
+    // undismissable modal over and over (reported 2026-08-15).
+    //
+    // Reading is this function's whole job: nothing here wants to create
+    // a DataTable, and initPanelTables owns that for our own tables.
+    const prontas = typeof jq.fn.dataTable.isDataTable === 'function'
+      ? ours.filter((t) => jq.fn.dataTable.isDataTable(t))
+      : ours;
+    if (prontas.length === 0) return null;
+    const table = jq(prontas).DataTable();
     if (!table || !table.table || table.table().node() == null) return null;
     return table;
   }
