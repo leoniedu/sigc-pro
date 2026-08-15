@@ -1279,7 +1279,13 @@
       // The collection outcome, which the marker colour now encodes and
       // "Tipo" alone actively hides: a refused COLLECTION reads as
       // "Realizada" here, because the interview did succeed.
-      (m.comDemanda ? `Coleta: ${esc(r.status || '—')}<br>` : '') +
+      //
+      // Named "Biomarcadores", not "Coleta": this line sits right under
+      // "Tipo", both are outcomes, and the whole confusion being fixed is
+      // that two different things get refused. A bare "Coleta" leaves the
+      // reader to infer which one — the same reason the Zonas tooltip
+      // spells out "recusa da coleta de biomarcador".
+      (m.comDemanda ? `Biomarcadores: ${esc(r.status || '—')}<br>` : '') +
       `Zona: ${esc(r.idZona || 'Sem zona')}` +
       agendadoLinha +
       gmapsLine
@@ -1425,7 +1431,9 @@
       ['Coletado', BIO_COLETADO],
       ['Agendado', BIO_AGENDADO],
       ['A agendar / vencido', BIO_ACAO],
-      ['Recusa da coleta', BIO_RECUSA_COLETA],
+      // "do biomarcador", not "da coleta": it sits directly above "Recusa
+      // da entrevista", and the pair is the whole point of the split.
+      ['Recusa do biomarcador', BIO_RECUSA_COLETA],
       ['Recusa da entrevista', BIO_RECUSA_ENTREVISTA],
       ['Outro motivo', BIO_OUTRO_MOTIVO],
       ['Não elegível', BIO_NAO_ELEGIVEL],

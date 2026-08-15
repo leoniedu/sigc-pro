@@ -2207,7 +2207,7 @@ describe('legend follows the scale actually drawn', () => {
     const entradas = UM.legendEntries(UM.MODO_BIOMARCADORES);
     const labels = entradas.map(([l]) => l);
     expect(labels).toContain('Coletado');
-    expect(labels).toContain('Recusa da coleta');
+    expect(labels).toContain('Recusa do biomarcador');
     expect(labels).toContain('Recusa da entrevista');
     // A legend must not promise a colour the scale never emits.
     expect(labels).not.toContain('Inativo (Distribuído)');
@@ -2236,13 +2236,12 @@ describe('popup shows the collection status', () => {
     const html = UM.buildPopupHtml(row, UM.MODO_BIOMARCADORES);
     // Without this the popup says "Tipo: Realizada" and nothing else —
     // exactly the reading that hides a refused collection.
-    expect(html).toContain('Coleta');
-    expect(html).toContain('Recusa');
+    expect(html).toContain('Biomarcadores: Recusa');
   });
 
   test('movimento popup does not invent a status line', () => {
     const html = UM.buildPopupHtml({ ...row, status: '' }, UM.MODO_MOVIMENTO);
-    expect(html).not.toContain('Coleta:');
+    expect(html).not.toContain('Biomarcadores:');
   });
 });
 
