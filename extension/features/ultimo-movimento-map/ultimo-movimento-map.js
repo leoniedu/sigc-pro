@@ -262,6 +262,7 @@
     const novoBucket = (idZona, nomeZona) => ({
       idZona, nomeZona,
       realizada: 0, naoIniciada: 0, domicilioFechado: 0, recusa: 0, outros: 0,
+      naoDistribuida: 0,
       totalDomicilios: 0, semCoordenadas: 0, agendados: 0,
       realizadasSemAgendamento: 0, pendentes: 0,
     });
@@ -279,7 +280,16 @@
           r.temZona ? r.zona : 'Sem zona'));
       }
       const bucket = byZona.get(key);
-      const coluna = TIPO_COLUNA[r.tipoEntrevista] || 'outros';
+      // Posição wins over tipo for the untouched states. A household that
+      // is merely 'Distribuido' or 'Enviado para Carga' carries
+      // tipo_entrevista 'Não Iniciada' — measured in BA, ALL of them do —
+      // so counting by tipo filed 4.909 households (69% of the state)
+      // beside the 366 that actually started and stalled mid-collection.
+      // "Nobody has been there yet" and "someone went and it did not
+      // finish" are different problems, and only the second is a backlog.
+      const coluna = POSICAO_NAO_EM_CAMPO.has(r.ultimaPosicao)
+        ? 'naoDistribuida'
+        : (TIPO_COLUNA[r.tipoEntrevista] || 'outros');
       bucket[coluna] += 1;
       bucket.totalDomicilios += 1;
       if (!r.temCoordenadas) bucket.semCoordenadas += 1;
@@ -375,7 +385,11 @@
   function statusColor(row, modo, hojeIso) {
     const m = modo || MODO_MOVIMENTO;
     if (!m.comDemanda) {
-      if (row.ultimaPosicao === 'Distribuido') return STATUS_INATIVO;
+      // Both untouched states, not just Distribuido: 'Enviado para
+      // Carga' is 850 households in BA that nobody has visited either,
+      // and colouring them as worked was the same conflation the Zonas
+      // column had.
+      if (POSICAO_NAO_EM_CAMPO.has(row.ultimaPosicao)) return STATUS_INATIVO;
       return STATUS_TIPO_COLOR[row.tipoEntrevista] || STATUS_OUTROS;
     }
     const s = (row && row.status) || '';
@@ -726,6 +740,13 @@
     // column indices at all (order: []), so nothing else has to be
     // renumbered when a column is added — which is exactly the trap a
     // positional config would have set here.
+    // Separated from "Não Iniciada" because they answer different
+    // questions. Both carry tipo_entrevista 'Não Iniciada', so counting
+    // by tipo put 69% of BA's households (4.909 of 7.140) in the same
+    // column as the 366 that started and stalled.
+    const TIP_NAO_DISTRIBUIDA =
+      'Ainda não chegou ao entrevistador (Distribuído ou Enviado para Carga). ' +
+      'Ninguém esteve lá ainda — não é atraso de campo.';
     const TIP_PIN = 'Ver esta zona no mapa';
     // Header and body segments are gated by the SAME flags, so a column
     // can never appear in one and not the other — the failure mode that
@@ -733,7 +754,11 @@
     const head =
       '<tr>' +
       `<th class="sigc-pro-zona-pin-col" data-orderable="false" title="${esc(TIP_PIN)}"></th>` +
-      '<th>Zona</th><th>Nome</th><th>Realizada</th><th>Não Iniciada</th>' +
+      '<th>Zona</th><th>Nome</th>' +
+      // First among the status columns: it is the state BEFORE fieldwork,
+      // so the row reads left-to-right as a progression.
+      `<th title="${esc(TIP_NAO_DISTRIBUIDA)}">Não distribuída</th>` +
+      '<th>Realizada</th><th>Não Iniciada</th>' +
       '<th>Dom. Fechado</th>' +
       `<th title="${esc(TIP_RECUSA)}">Recusa entrev.</th>` +
       '<th>Outros</th><th>Total</th>' +
@@ -801,6 +826,7 @@
         `<td class="sigc-pro-zona-pin-col">${pinCell}</td>` +
         `<td>${zonaLabel}</td>` +
         `<td>${esc(r.nomeZona)}</td>` +
+        `<td>${r.naoDistribuida || 0}</td>` +
         `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
         `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
         `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>` +
@@ -865,7 +891,16 @@
       // Sorted by the recomputed day count, so overdue rows (negative)
       // lead an ascending sort. A household with no deadline gets an empty
       // key and sorts last either way — it is not "due today".
-      const dias = m.comDemanda ? diasParaPrazo(r, hoje) : null;
+      // Only while the deadline still means something. A finished
+      // household keeps its prazo in the data, and printing "Vencido"
+      // for work that is DONE reads as a missed deadline — the clock
+      // stopped when the collection did.
+      //
+      // 'Recusa' keeps it, for the same reason it still alerts (see
+      // emAlertaDePrazo): reverting a refusal is work the clock threatens.
+      const prazoRelevante = m.comDemanda &&
+        (coletaEmAberto(r, hoje) || (r && r.status) === 'Recusa');
+      const dias = prazoRelevante ? diasParaPrazo(r, hoje) : null;
       const alerta = m.comDemanda && emAlertaDePrazo(r, hoje);
       // sigc-pro-prazo-cell marks this cell as "export the sort key, not
       // the text" — see celulaParaTexto, which needs the bare number so a
@@ -873,7 +908,7 @@
       const prazoCell = dias === null
         ? '<td>—</td>'
         : `<td class="sigc-pro-prazo-cell${alerta ? ' sigc-pro-prazo-alerta' : ''}"` +
-          ` data-order="${dias}">${dias < 0 ? `${dias} (vencido)` : dias}</td>`;
+          ` data-order="${dias}">${dias < 0 ? 'Vencido' : dias}</td>`;
       return (
         `<tr${alerta ? ' class="sigc-pro-prazo-alerta-row"' : ''}>` +
         `<td>${dash(r.controle)}</td>` +
@@ -1197,10 +1232,10 @@
 
   function celulaParaTexto(td) {
     // Cells that opt in export their sort key instead of their text.
-    // "Prazo" renders "-22 (vencido)", which is not a plain number, so
-    // buildCsv's formula-injection guard quotes it as text — and a
-    // spreadsheet then cannot sort exactly the overdue rows that matter
-    // most. The suffix is display sugar; the number is the data.
+    // "Prazo" renders the WORD "Vencido" once the deadline has passed —
+    // how long ago changes nothing about what to do — but a spreadsheet
+    // cannot sort on a word mixed into a column of day counts. The
+    // export carries the number, so sorting survives the round trip.
     //
     // Opt-in by class, NOT "any numeric data-order": the Slots livres
     // cell also carries a numeric key (its slot COUNT), and substituting
@@ -1719,7 +1754,7 @@
     const m = modo || MODO_MOVIMENTO;
     if (!m.comDemanda) {
       return [
-        ['Inativo (Distribuído)', STATUS_INATIVO],
+        ['Não distribuída', STATUS_INATIVO],
         ['Realizada', STATUS_REALIZADA],
         // Named in full: on the map there is no header tooltip to carry
         // the distinction (see TIP_RECUSA).

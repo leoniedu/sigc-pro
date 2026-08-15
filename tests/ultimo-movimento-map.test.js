@@ -2212,7 +2212,7 @@ describe('legend follows the scale actually drawn', () => {
     expect(labels).toContain('Recusa do biomarcador');
     expect(labels).toContain('Recusa da entrevista');
     // A legend must not promise a colour the scale never emits.
-    expect(labels).not.toContain('Inativo (Distribuído)');
+    expect(labels).not.toContain('Não distribuída');
     // Every colour on the legend is one statusColor can actually return.
     const cores = new Set(entradas.map(([, c]) => c));
     expect(cores.has('#009E73')).toBe(true);
@@ -2221,7 +2221,7 @@ describe('legend follows the scale actually drawn', () => {
 
   test('MODO_MOVIMENTO legend is the interview scale', () => {
     const labels = UM.legendEntries(UM.MODO_MOVIMENTO).map(([l]) => l);
-    expect(labels).toContain('Inativo (Distribuído)');
+    expect(labels).toContain('Não distribuída');
     expect(labels).toContain('Recusa da entrevista');
     expect(labels).not.toContain('Coletado');
   });
@@ -2751,5 +2751,142 @@ describe('CSV keeps the slots list intact', () => {
     } finally {
       document.body.innerHTML = '';
     }
+  });
+});
+
+describe('untouched households get their own column', () => {
+  const linha = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', zona: 'Z1', temZona: true,
+    temCoordenadas: true, tipoEntrevista: 'Não Iniciada',
+    ultimaPosicao: 'Distribuido', agendado: '', ...over,
+  });
+
+  test('Distribuido and Enviado para Carga count as não distribuída work', () => {
+    // Measured in BA: 4.059 Distribuido + 850 Enviado para Carga = 69% of
+    // every household, all carrying tipo_entrevista 'Não Iniciada'. They
+    // were landing in the same column as the 366 households that DID
+    // start and stalled mid-collection, which is the distinction a
+    // supervisor actually needs.
+    const zonas = UM.aggregateZonas([
+      linha({ domicilio: '1', ultimaPosicao: 'Distribuido' }),
+      linha({ domicilio: '2', ultimaPosicao: 'Enviado para Carga' }),
+      linha({ domicilio: '3', ultimaPosicao: 'Descarregado Parcialmente' }),
+    ], new Map(), UM.MODO_MOVIMENTO);
+    expect(zonas[0].naoDistribuida).toBe(2);
+    // Only the genuinely stalled one is left in Não Iniciada.
+    expect(zonas[0].naoIniciada).toBe(1);
+  });
+
+  test('the total still accounts for every household exactly once', () => {
+    const zonas = UM.aggregateZonas([
+      linha({ domicilio: '1', ultimaPosicao: 'Distribuido' }),
+      linha({ domicilio: '2', tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado' }),
+      linha({ domicilio: '3', tipoEntrevista: 'Uso Ocasional', ultimaPosicao: 'Descarregado' }),
+    ], new Map(), UM.MODO_MOVIMENTO);
+    const z = zonas[0];
+    const soma = z.realizada + z.naoIniciada + z.domicilioFechado +
+      z.recusa + z.outros + z.naoDistribuida;
+    expect(soma).toBe(z.totalDomicilios);
+    expect(z.totalDomicilios).toBe(3);
+  });
+
+  test('Outros keeps the worked-but-uninterviewable tipos', () => {
+    // Outros was never the problem: in BA its 148 households are all
+    // already descarregado (Domicílio Vago, Uso Ocasional, Demolida...).
+    const zonas = UM.aggregateZonas([
+      linha({ tipoEntrevista: 'Domicílio Vago', ultimaPosicao: 'Descarregado' }),
+    ], new Map(), UM.MODO_MOVIMENTO);
+    expect(zonas[0].outros).toBe(1);
+    expect(zonas[0].naoDistribuida).toBe(0);
+  });
+
+  test('the column shows in both variants', () => {
+    const zonaRow = {
+      idZona: 'Z1', nomeZona: 'Z1', realizada: 0, naoIniciada: 0,
+      domicilioFechado: 0, recusa: 0, outros: 0, naoDistribuida: 4,
+      totalDomicilios: 4, semCoordenadas: 0, agendados: 0,
+      realizadasSemAgendamento: 0, pendentes: 0,
+    };
+    [UM.MODO_MOVIMENTO, UM.MODO_BIOMARCADORES].forEach((modo) => {
+      const html = UM.buildZonasTableHtml([zonaRow], new Map(), new Map(), modo);
+      expect(html).toContain('Não distribuída');
+      // Header and body still agree.
+      const ths = (html.match(/<th[ >]/g) || []).length;
+      const tds = (html.match(/<td[ >]/g) || []).length;
+      expect(tds).toBe(ths);
+    });
+  });
+});
+
+describe('the map treats both untouched states alike', () => {
+  test('Enviado para Carga is inactive on the map, like Distribuido', () => {
+    // 850 households in BA. Colouring only Distribuido grey rendered
+    // these as if someone had already been there — the same conflation
+    // the Zonas column had, on the other surface.
+    const cor = (ultimaPosicao) => UM.statusColor(
+      { ultimaPosicao, tipoEntrevista: 'Não Iniciada' }, UM.MODO_MOVIMENTO, '2026-08-15');
+    expect(cor('Enviado para Carga')).toBe(cor('Distribuido'));
+  });
+
+  test('the legend says so', () => {
+    const labels = UM.legendEntries(UM.MODO_MOVIMENTO).map(([l]) => l);
+    expect(labels).toContain('Não distribuída');
+    expect(labels).not.toContain('Inativo (Distribuído)');
+  });
+});
+
+describe('a finished household has no deadline to miss', () => {
+  const linha = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', entrevistador: 'F',
+    tipoEntrevista: 'Realizada', status: 'A agendar', agendado: '',
+    dataAgendada: '', dataFinalColeta: '24/07/2026', data: '', ...over,
+  });
+  const hoje = '2026-08-14';
+
+  test('a collected household shows no prazo at all', () => {
+    // It kept its deadline in the data, and printing "-22 (vencido)" for
+    // work that is DONE reads as a missed deadline. The deadline stopped
+    // meaning anything the moment the collection happened.
+    const html = UM.buildDomiciliosTabHtml(
+      [linha({ status: 'Coletado Sangue e Urina' })], UM.MODO_BIOMARCADORES, hoje);
+    // Scoped to the body: the Prazo header tooltip legitimately explains
+    // what "vencido" means, so the whole-HTML check would never pass.
+    const corpo = html.split('<tbody>')[1];
+    expect(corpo).not.toContain('Vencido');
+    expect(corpo).not.toContain('-21');
+  });
+
+  test('the same is true of the closed-without-collection outcomes', () => {
+    // Nothing left to do before the deadline, so the deadline is moot.
+    ['Outro Motivo', 'Não elegível'].forEach((status) => {
+      const html = UM.buildDomiciliosTabHtml([linha({ status })], UM.MODO_BIOMARCADORES, hoje);
+      expect(html.split('<tbody>')[1]).not.toContain('Vencido');
+    });
+  });
+
+  test('Recusa still shows it — reverting is still on the clock', () => {
+    const html = UM.buildDomiciliosTabHtml(
+      [linha({ status: 'Recusa' })], UM.MODO_BIOMARCADORES, hoje);
+    expect(html.split('<tbody>')[1]).toContain('Vencido');
+  });
+
+  test('overdue reads "Vencido", never a negative number', () => {
+    // A negative number is noise in a column of day counts: how long ago
+    // it lapsed changes nothing about what to do. The word says the one
+    // thing that matters, and data-order keeps the sort numeric so
+    // overdue rows still lead.
+    const corpo = UM.buildDomiciliosTabHtml(
+      [linha()], UM.MODO_BIOMARCADORES, hoje).split('<tbody>')[1];
+    expect(corpo).toContain('>Vencido<');
+    expect(corpo).not.toContain('-21 (');
+    expect(corpo).toContain('data-order="-21"');
+  });
+
+  test('a prazo still running shows the day count', () => {
+    const corpo = UM.buildDomiciliosTabHtml(
+      [linha({ dataFinalColeta: '20/08/2026' })], UM.MODO_BIOMARCADORES, hoje)
+      .split('<tbody>')[1];
+    expect(corpo).toContain('>6<');
+    expect(corpo).not.toContain('Vencido');
   });
 });
