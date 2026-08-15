@@ -893,6 +893,27 @@
     return `<table class="sigc-pro-domicilios-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
   }
 
+  // Names the report each variant was built from, and — for the one that
+  // cannot answer it — says so on the visible label rather than only in a
+  // tooltip nobody hovers over.
+  //
+  // MODO_MOVIMENTO renders NO demand column (comDemanda is false), so the
+  // honest caveat is not "the number is estimated" but "there is no
+  // number here": this page cannot tell who still owes a biomarcador.
+  const FONTE_LABEL = {
+    biomarcadores: 'Biomarcadores',
+    movimento: 'Último Movimento (sem demanda estimada)',
+  };
+  const FONTE_TIP = {
+    biomarcadores:
+      'Dados do Relatório de Acompanhamento de Biomarcadores: a situação de ' +
+      'cada domicílio vem do status informado pelo SIGC.',
+    movimento:
+      'Dados do Último Movimento, que não informa a situação do biomarcador. ' +
+      'Sem consulta à agenda: sem agendamentos, slots livres nem demanda. ' +
+      'Para isso, abra o Relatório de Acompanhamento de Biomarcadores.',
+  };
+
   const BUTTON_ID = 'sigc-pro-ultimo-movimento-map-btn';
   const PANEL_ID = 'sigc-pro-ultimo-movimento-map-panel';
 
@@ -904,6 +925,11 @@
       font-family: system-ui, sans-serif; font-size: 13px; }
     #${PANEL_ID} .sigc-pro-panel-bar { display: flex; gap: 4px; background: #f4f4f4;
       border-bottom: 1px solid #ccc; padding: 4px; align-items: center; }
+    /* Source label: reads as a caption, not as a tab — it is the one item
+       in this bar that is not clickable, so it must not look like one. */
+    #${PANEL_ID} .sigc-pro-panel-fonte { padding: 0 10px 0 6px; font-size: 12px;
+      color: #555; border-right: 1px solid #ccc; margin-right: 4px;
+      white-space: nowrap; cursor: help; }
     #${PANEL_ID} .sigc-pro-tab-btn { padding: 8px 16px; border: 0; background: transparent;
       cursor: pointer; border-bottom: 3px solid transparent; }
     #${PANEL_ID} .sigc-pro-tab-active { background: #fff; border-bottom-color: #005a9c; font-weight: 600; }
@@ -1061,6 +1087,7 @@
 
   function buildPanelHtml(joined, zonaRows, slotsPorZona, turnosPorZona, modo, hojeIso) {
     const m = modo || MODO_BIOMARCADORES;
+    const esc = window.__sigcPro.escapeHtml;
     const hoje = hojeIso || new Date().toISOString().slice(0, 10);
     const zonasTable = buildZonasTableHtml(zonaRows, slotsPorZona, turnosPorZona, m);
     const domiciliosTable = buildDomiciliosTabHtml(joined, m, hoje);
@@ -1092,6 +1119,11 @@
       `<div id="${PANEL_ID}" class="sigc-pro-panel-overlay" data-sigc-pro>`,
       '  <div class="sigc-pro-panel-box">',
       '    <div class="sigc-pro-panel-bar">',
+      // Which report the panel was built from, stated rather than left to
+      // be inferred. The two variants differ mostly in which columns are
+      // ABSENT, and a reader who has only ever seen one has nothing to
+      // compare against — so the one that runs on a proxy says so.
+      `      <span class="sigc-pro-panel-fonte" title="${esc(FONTE_TIP[m.id])}">${esc(FONTE_LABEL[m.id])}</span>`,
       '      <button type="button" class="sigc-pro-tab-btn sigc-pro-tab-active" data-tab="mapa">Mapa</button>',
       `      <button type="button" class="sigc-pro-tab-btn" data-tab="zonas">Zonas (${zonaRows.length})</button>`,
       `      <button type="button" class="sigc-pro-tab-btn" data-tab="domicilios">Domicílios (${joined.length})${alertaLabel}</button>`,
@@ -1587,7 +1619,10 @@
       // da entrevista", and the pair is the whole point of the split.
       ['Recusa do biomarcador', BIO_RECUSA_COLETA],
       ['Recusa da entrevista', BIO_RECUSA_ENTREVISTA],
-      ['Outro motivo', BIO_OUTRO_MOTIVO],
+      // Qualified for the same reason as the two Recusas: 'Outro Motivo'
+      // is also a tipoEntrevista value, and a household can carry one in
+      // each field (BA: 12 biomarcador against 2 interview, no overlap).
+      ['Outro motivo (biomarcador)', BIO_OUTRO_MOTIVO],
       ['Não elegível', BIO_NAO_ELEGIVEL],
       ['Sem entrevista (reversível)', BIO_BLOQUEADO],
       ['Não iniciado', BIO_NAO_INICIADO],

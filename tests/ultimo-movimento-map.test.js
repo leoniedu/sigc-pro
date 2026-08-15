@@ -2451,3 +2451,91 @@ describe('prazo alert is discoverable', () => {
     expect(html).not.toContain('com prazo');
   });
 });
+
+describe('zonas with no fieldwork yet', () => {
+  test('a zona present only in endereços still gets a row', () => {
+    // The zona where work has not started is precisely where it needs to
+    // start, and the R's map dropped exactly those (25 zonas, ~705
+    // households in BA). Here enderecosMap seeds the buckets BEFORE the
+    // movimento rows fold in, so a zona with addresses and zero movimento
+    // rows survives as an all-zeros row.
+    const enderecos = new Map([
+      ['C1|1', { lat: -12, lon: -38, zona: 'Zona Nova', idZona: 'ZNOVA' }],
+    ]);
+    const zonas = UM.aggregateZonas([], enderecos, UM.MODO_MOVIMENTO);
+    const nova = zonas.find((z) => z.idZona === 'ZNOVA');
+    expect(nova).toBeDefined();
+    expect(nova.nomeZona).toBe('Zona Nova');
+    expect(nova.totalDomicilios).toBe(0);
+  });
+
+  test('it survives alongside zonas that do have movimento', () => {
+    const enderecos = new Map([
+      ['C1|1', { lat: -12, lon: -38, zona: 'Zona Nova', idZona: 'ZNOVA' }],
+      ['C1|2', { lat: -12, lon: -38, zona: 'Zona Velha', idZona: 'ZVELHA' }],
+    ]);
+    const joined = [{
+      controle: 'C1', domicilio: '2', idZona: 'ZVELHA', zona: 'Zona Velha',
+      temZona: true, temCoordenadas: true, tipoEntrevista: 'Realizada',
+      ultimaPosicao: 'Descarregado', agendado: '',
+    }];
+    const zonas = UM.aggregateZonas(joined, enderecos, UM.MODO_MOVIMENTO);
+    expect(zonas.map((z) => z.idZona).sort()).toEqual(['ZNOVA', 'ZVELHA']);
+    expect(zonas.find((z) => z.idZona === 'ZNOVA').totalDomicilios).toBe(0);
+    expect(zonas.find((z) => z.idZona === 'ZVELHA').totalDomicilios).toBe(1);
+  });
+});
+
+describe('Outro Motivo is disambiguated too', () => {
+  test('the legend names which Outro Motivo it means', () => {
+    // Same trap as Recusa: 'Outro Motivo' exists in BOTH tipoEntrevista
+    // and status, meaning different things. In BA there are 12 of the
+    // biomarcador kind against 2 of the interview kind, and zero overlap.
+    const labels = UM.legendEntries(UM.MODO_BIOMARCADORES).map(([l]) => l);
+    expect(labels).toContain('Outro motivo (biomarcador)');
+  });
+
+  test('the popup labels the status line as the biomarcador outcome', () => {
+    // Already covered by the "Biomarcadores:" prefix — asserted here so
+    // the disambiguation is pinned for this value specifically.
+    const html = UM.buildPopupHtml({
+      controle: 'C1', domicilio: '1', entrevistador: 'F', idZona: 'Z1',
+      tipoEntrevista: 'Outro Motivo', status: 'Outro Motivo',
+      lat: -12, lon: -38, agendado: '', coLocated: 1,
+    }, UM.MODO_BIOMARCADORES);
+    expect(html).toContain('Biomarcadores: Outro Motivo');
+    expect(html).toContain('Tipo: Outro Motivo');
+  });
+});
+
+describe('the panel names its own source', () => {
+  const zonaRows = [{
+    idZona: 'Z1', nomeZona: 'Z1', realizada: 1, naoIniciada: 0,
+    domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 1,
+    semCoordenadas: 0, agendados: 0, realizadasSemAgendamento: 0, pendentes: 0,
+  }];
+  const joined = [{
+    controle: 'C1', domicilio: '1', idZona: 'Z1', temZona: true,
+    temCoordenadas: true, tipoEntrevista: 'Realizada', status: 'A agendar',
+    ultimaPosicao: '', agendado: '', dataAgendada: '', dataFinalColeta: '',
+  }];
+
+  test('biomarcadores panel says so', () => {
+    // Two variants that differ in which columns exist are otherwise told
+    // apart only by what is MISSING — a reader who never saw the other
+    // one has nothing to compare against.
+    const html = UM.buildPanelHtml(
+      joined, zonaRows, new Map(), new Map(), UM.MODO_BIOMARCADORES, '2026-08-14');
+    expect(html).toContain('sigc-pro-panel-fonte');
+    expect(html).toContain('Biomarcadores');
+  });
+
+  test('movimento panel names its source and its limitation', () => {
+    const html = UM.buildPanelHtml(
+      joined, zonaRows, new Map(), new Map(), UM.MODO_MOVIMENTO, '2026-08-14');
+    expect(html).toContain('Último Movimento');
+    // MODO_MOVIMENTO renders no demand column at all, so the label says
+    // the number is ABSENT — not that it is estimated.
+    expect(html).toContain('sem demanda estimada');
+  });
+});
