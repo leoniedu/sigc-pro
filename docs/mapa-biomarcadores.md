@@ -268,16 +268,27 @@ dias do prazo (ou vencido).
 
 Volumes: BA 39 (10 vencidos), PE 25 (**17 vencidos**), MA 38 (12), RJ 63 (5).
 
-**Slot que já não dá tempo de agendar não é capacidade.** Hoje, amanhã e
-depois de amanhã não são agendáveis, e numa SEXTA o dia+3 (segunda) também
-não — o fim de semana não conta como prazo. Contar essas vagas inflava a
-capacidade com slot morto: no R, corrigir isso levou as zonas com gap
-negativo de 6 para 9 na BA. A janela de capacidade é de 17 dias corridos a
-partir de hoje (~duas semanas de vagas preenchíveis: 9 dias úteis numa
-sexta, 12 numa segunda). A extensão **conta slots livres hoje** (ver
-`capacidade`/`indexZonaLivres` em `ultimo-movimento-map.js:311`), então
-aplicar o mesmo piso não é opcional — é onde as duas ferramentas divergem
-agora.
+**Slot que já não dá tempo de agendar não é capacidade.** ✅ **Feito** —
+`primeiroDiaAgendavel()` / `fimDaJanela()` em `ultimo-movimento-map.js`.
+
+Hoje, amanhã e depois de amanhã não são agendáveis, e numa SEXTA o dia+3
+(segunda) também não — o fim de semana não é tempo útil para arranjar nada.
+Contar essas vagas inflava a capacidade com slot morto: no R, corrigir isso
+levou as zonas com gap negativo de 6 para 9 na BA. A janela é de 17 dias
+corridos **a partir de hoje** (não do primeiro dia agendável: a cabeça morta
+come a janela de propósito — é "o curto prazo", não "os próximos N dias
+agendáveis"), o que deixa ~duas semanas de vagas preenchíveis.
+
+A extensão contava a partir de hoje até +14; agora usa o mesmo piso e a
+mesma janela do R (`primeiro_dia_agendavel()`, `sigc_biomarcadores.R:442`;
+`JANELA_DIAS`, `relatorio_agenda.R:92`).
+
+> **O fim de semana é prazo, não filtro.** O R restringe a janela a seg-sex
+> porque hoje não existe slot de sábado no SIGC. A extensão
+> **deliberadamente não** replica esse recorte: nada proíbe um slot de fim
+> de semana, e um sábado daqui a três semanas é capacidade real. Excluí-lo
+> subestimaria a zona — o erro oposto ao que este piso conserta. O fim de
+> semana entra só no cálculo do prazo (a sexta que vira +4).
 
 Cobertura: só ~14% dos domicílios têm prazo (BA: 253 de 1.860), porque ele
 nasce da resposta ao 25A.01. **`Não iniciado` nunca tem prazo** — o prazo só
@@ -568,9 +579,9 @@ então não vale poli-lo antes.
    `isRealizadaSemAgendamento`. A zona vem do próprio relatório
    (`id_zona`/`nome_zona`), o que dispensa o join com a Lista de Endereços
    **para agrupar** — mas não para coordenadas.
-3. **Alerta de prazo** (§5), incluindo o piso da janela de agendamento nos
-   slots livres. É o que o proxy nunca conseguiu fazer, porque
-   `data_final_coleta` só existe neste relatório.
+3. **Alerta de prazo** (§5). É o que o proxy nunca conseguiu fazer, porque
+   `data_final_coleta` só existe neste relatório. (O piso da janela de
+   agendamento, que era parte deste passo, já foi feito à parte.)
 4. **Cor por status de biomarcador** e as duas recusas separadas (§11, §4).
    Sai como consequência do passo 2.
 5. **Decidir o destino do mapa do Último Movimento** (§10.4). Se aposentado,
@@ -591,9 +602,7 @@ hoje afirmam coisas falsas com aparência de medição.
   extensão só enxerga essa recusa; nomeá-la evita que seja lida como recusa
   da coleta. Mesmo cuidado com `Outro Motivo`.
 - **Alfinete no lugar do clique na linha** — incômodo real em uso.
-- **Piso da janela de agendamento** nos slots livres (§5). Não depende do
-  relatório de biomarcadores: é aritmética de calendário sobre os slots que
-  a extensão já lê, e hoje é uma divergência silenciosa com o R.
+- ~~**Piso da janela de agendamento**~~ ✅ feito (§5).
 
 ## Como verificar
 

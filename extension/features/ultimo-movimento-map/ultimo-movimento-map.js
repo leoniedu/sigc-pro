@@ -308,6 +308,49 @@
     return r.totalDomicilios > r.semCoordenadas;
   }
 
+  // A slot needs lead time to be filled: the lab has to be arranged and
+  // the household contacted, so today and the next two days are already
+  // spoken for. On a FRIDAY the third day is out too — it lands on Monday,
+  // and the weekend is not working time to arrange anything in.
+  //
+  // Ports pns.zonas' primeiro_dia_agendavel() (R/sigc_biomarcadores.R:442)
+  // exactly, including the Friday case. Counting the dead head as capacity
+  // is how a zona looks able to absorb its demand when the bookable slots
+  // are already gone: in BA, applying this floor took the zonas with a
+  // negative gap from 6 to 9.
+  //
+  // Note this is the only place the weekend matters. It is lead TIME, not
+  // a filter on which slots count: SIGC has no weekend slots today, but
+  // nothing forbids them, and a Saturday slot three weeks out is real
+  // capacity. Excluding it would understate the zona — the opposite of the
+  // bug this fixes.
+  //
+  // Dates are handled as ISO strings via UTC to match every other date in
+  // this file (todayIso and the report's own columns), where a local-time
+  // Date would shift the day across the timezone boundary.
+  const SEXTA = 5; // getUTCDay(): 0=domingo … 5=sexta
+
+  function isoMaisDias(isoDate, dias) {
+    const d = new Date(`${isoDate}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + dias);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function primeiroDiaAgendavel(hojeIso) {
+    const dow = new Date(`${hojeIso}T00:00:00Z`).getUTCDay();
+    return isoMaisDias(hojeIso, dow === SEXTA ? 4 : 3);
+  }
+
+  // 17 calendar days from TODAY, not from the first bookable day — the
+  // dead head deliberately eats into it (relatorio_agenda.R:86-92). The
+  // window is "the short term", not "the next N bookable days", so what
+  // is left is ~two weeks of fillable slots.
+  const JANELA_DIAS = 17;
+
+  function fimDaJanela(hojeIso) {
+    return isoMaisDias(hojeIso, JANELA_DIAS);
+  }
+
   // The zona owes more biomarcador visits than it has bookable slots in
   // the window — pns.zonas' relatorio_agenda.R `capacidade_ok`, with the
   // tighter numerator (see isRealizadaSemAgendamento).
@@ -351,7 +394,10 @@
       'Domicílios já em campo e sem agendamento (Fechado, Recusa, Realizada ' +
       'ou Não Iniciada), exceto os já descarregados. Não inclui Distribuído. ' +
       'Contém as Realizadas sem agend. — as duas colunas não se somam.';
-    const TIP_TURNO = 'Slots livres na janela (hoje até +2 semanas). Manhã antes das 13h.';
+    const TIP_TURNO =
+      'Slots livres na janela: do primeiro dia ainda agendável (hoje, amanhã ' +
+      'e depois de amanhã não dá mais tempo; na sexta, nem a segunda) até ' +
+      '+17 dias. Manhã antes das 13h.';
     const head =
       '<tr><th>Zona</th><th>Nome</th><th>Realizada</th><th>Não Iniciada</th>' +
       '<th>Dom. Fechado</th><th>Recusa</th><th>Outros</th><th>Total</th>' +
@@ -1313,14 +1359,13 @@
       pendingJoined = comAgenda;
       const zonaRows = aggregateZonas(comAgenda, enderecosMap);
 
-      // "Bookable now": today through +2 weeks, the same window
-      // lista-agenda.js's own Slots Abertos treats as realistically
-      // fillable — a slot months out would overstate capacity a zona
-      // actually has.
-      const minDateIso = todayIso;
-      const fimDate = new Date();
-      fimDate.setDate(fimDate.getDate() + 14);
-      const fimIso = fimDate.toISOString().slice(0, 10);
+      // "Bookable now": from the first day still worth booking (see
+      // primeiroDiaAgendavel — today and the next two days are dead
+      // capacity) through +17 days. A slot months out would overstate the
+      // capacity a zona actually has; a slot tomorrow overstates it too,
+      // for the opposite reason.
+      const minDateIso = primeiroDiaAgendavel(todayIso);
+      const fimIso = fimDaJanela(todayIso);
       const slotsPorZona = new Map();
       zonaRows.forEach((z) => {
         const zonaKey = z.idZona || '';
@@ -1586,6 +1631,8 @@
     isRealizadaSemAgendamento,
     isPendente,
     zonaSemCapacidade,
+    primeiroDiaAgendavel,
+    fimDaJanela,
     lerFiltro,
     filtroAtual,
     captureFiltro,

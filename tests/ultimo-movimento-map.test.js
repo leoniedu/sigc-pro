@@ -1700,3 +1700,58 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
     }
   });
 });
+
+describe('janelaAgendavel', () => {
+  // pns.zonas' primeiro_dia_agendavel(): a slot needs lead time, so today
+  // and the next two days are never bookable; on a Friday the third day is
+  // out too, because the weekend is not working time.
+  test('skips today and the next two days', () => {
+    // 2026-08-11 is a Tuesday.
+    expect(UM.primeiroDiaAgendavel('2026-08-11')).toBe('2026-08-14');
+  });
+
+  test('on a Friday the lead time stretches to four days', () => {
+    // 2026-08-14 is a Friday: +3 lands on Monday, still too soon.
+    expect(UM.primeiroDiaAgendavel('2026-08-14')).toBe('2026-08-18');
+  });
+
+  test('crosses month and year boundaries', () => {
+    expect(UM.primeiroDiaAgendavel('2026-12-30')).toBe('2027-01-02');
+  });
+
+  test('every weekday lands on a bookable weekday', () => {
+    // Mon 2026-08-10 through Sun 2026-08-16.
+    const esperado = {
+      '2026-08-10': '2026-08-13', // Mon -> Thu
+      '2026-08-11': '2026-08-14', // Tue -> Fri
+      '2026-08-12': '2026-08-15', // Wed -> Sat
+      '2026-08-13': '2026-08-16', // Thu -> Sun
+      '2026-08-14': '2026-08-18', // Fri -> Tue (weekend skipped)
+      '2026-08-15': '2026-08-18', // Sat -> Tue
+      '2026-08-16': '2026-08-19', // Sun -> Wed
+    };
+    Object.entries(esperado).forEach(([hoje, primeiro]) => {
+      expect(UM.primeiroDiaAgendavel(hoje)).toBe(primeiro);
+    });
+  });
+
+  test('window ends 17 days from today, not from the first bookable day', () => {
+    // JANELA_DIAS is counted from HOJE (pns.zonas relatorio_agenda.R:430):
+    // the dead head eats into it, which is the point — the window is "the
+    // short term", not "the next N bookable days".
+    expect(UM.fimDaJanela('2026-08-11')).toBe('2026-08-28');
+  });
+
+  // The weekend is lead TIME, not a filter on which slots count. SIGC has
+  // no weekend slots today, but nothing forbids them — a Saturday slot
+  // three weeks out is real capacity, and dropping it would understate the
+  // zona instead of overstating it. Only the dead head is excluded.
+  test('does not exclude weekend slots from the window', () => {
+    const sabado = '2026-08-22';
+    const domingo = '2026-08-23';
+    const primeiro = UM.primeiroDiaAgendavel('2026-08-11');
+    const fim = UM.fimDaJanela('2026-08-11');
+    expect(sabado >= primeiro && sabado <= fim).toBe(true);
+    expect(domingo >= primeiro && domingo <= fim).toBe(true);
+  });
+});
