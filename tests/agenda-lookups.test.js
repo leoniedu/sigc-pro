@@ -393,3 +393,48 @@ describe('biomarcadores report', () => {
     expect(filtro).not.toHaveProperty('IdTipoAcompanhamento');
   });
 });
+
+describe('Último Movimento by filter scope', () => {
+  const HEADERS = ['Controle', 'Domicilio', 'Entrevistador', 'Tipo Entrevista',
+    'Última Posição', 'Data'];
+  const html = (rows) => {
+    const th = HEADERS.map((h) => `<th>${h}</th>`).join('');
+    const trs = rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('');
+    return `<table id="tableRelatorio"><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
+  };
+
+  test('parses ultimaPosicao, which the per-Controle parser drops', () => {
+    // The biomarcadores report has no Última Posição column at all, so
+    // this is the only way that page can tell a distributed household
+    // from one nobody has reached yet.
+    const map = AM.parsePosicoesHtml(html([
+      ['C1', '1', 'Fulano', 'Realizada', 'Descarregado Parcialmente', '01/08/2026'],
+      ['C1', '2', '', '', 'Distribuido', ''],
+    ]));
+    expect(map.get('C1|1').ultimaPosicao).toBe('Descarregado Parcialmente');
+    expect(map.get('C1|2').ultimaPosicao).toBe('Distribuido');
+  });
+
+  test('the filtro replays the page scope instead of pinning a Controle', () => {
+    // One request for the whole scope, like the other two reports — not
+    // one per Controle, which for a município-wide report is dozens.
+    const body = AM.filtroBodyUltimoMovimentoPorFiltro({
+      IdUf: '29', IdAgencia: '*', IdMunicipio: '2927408', Controle: '*',
+    });
+    const filtro = JSON.parse(decodeURIComponent(body.replace(/^filtro=/, '')));
+    expect(filtro.IdFiltro).toBe('relatorio-ultimo-movimento');
+    expect(filtro.IdMunicipio).toBe('2927408');
+    expect(filtro.Controle).toBe('*');
+    // This report's field set, not the biomarcadores one.
+    expect(filtro.IdTipoAcompanhamento).toBe('*');
+    expect(filtro).not.toHaveProperty('IdZona');
+  });
+
+  test('fails closed when Última Posição is missing', () => {
+    const semPosicao = HEADERS.filter((h) => h !== 'Última Posição');
+    const th = semPosicao.map((h) => `<th>${h}</th>`).join('');
+    expect(AM.parsePosicoesHtml(
+      `<table id="tableRelatorio"><thead><tr>${th}</tr></thead><tbody></tbody></table>`
+    )).toBeNull();
+  });
+});

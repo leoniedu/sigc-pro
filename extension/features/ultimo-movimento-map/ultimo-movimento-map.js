@@ -262,9 +262,10 @@
     const novoBucket = (idZona, nomeZona) => ({
       idZona, nomeZona,
       realizada: 0, naoIniciada: 0, domicilioFechado: 0, recusa: 0, outros: 0,
-      naoDistribuida: 0,
+      naoDistribuida: 0, semDesfecho: 0,
       totalDomicilios: 0, semCoordenadas: 0, agendados: 0,
       realizadasSemAgendamento: 0, pendentes: 0,
+      aAgendar: 0, jaAgendados: 0,
     });
 
     (enderecosMap || new Map()).forEach((info) => {
@@ -287,9 +288,17 @@
       // beside the 366 that actually started and stalled mid-collection.
       // "Nobody has been there yet" and "someone went and it did not
       // finish" are different problems, and only the second is a backlog.
-      const coluna = POSICAO_NAO_EM_CAMPO.has(r.ultimaPosicao)
-        ? 'naoDistribuida'
-        : (TIPO_COLUNA[r.tipoEntrevista] || 'outros');
+      // Three-way, because "no interview outcome" has two very different
+      // causes. The biomarcadores report leaves tipo_entrevista blank
+      // until the interview concludes — 1.416 of 1.860 rows in BA — and
+      // those split into households nobody has reached yet (1.192) and
+      // households already worked whose interview produced no outcome
+      // (224). Filing both under one label hides which of the two a zona
+      // is actually made of.
+      let coluna;
+      if (POSICAO_NAO_EM_CAMPO.has(r.ultimaPosicao)) coluna = 'naoDistribuida';
+      else if (!r.tipoEntrevista) coluna = 'semDesfecho';
+      else coluna = TIPO_COLUNA[r.tipoEntrevista] || 'outros';
       bucket[coluna] += 1;
       bucket.totalDomicilios += 1;
       if (!r.temCoordenadas) bucket.semCoordenadas += 1;
@@ -302,6 +311,19 @@
       }
       if (m.comDemanda ? coletaEmAberto(r, hojeIso) : isPendente(r)) {
         bucket.pendentes += 1;
+      }
+      // The two columns the biomarcadores table actually shows, split so
+      // they are DISJOINT and therefore add up: "a agendar" needs action
+      // now, "já agendados" is on its way. Nested measures (the pair
+      // above) always need a "do not sum these" warning, and that warning
+      // is the part a reader skips.
+      //
+      // A lapsed booking is in the first, not the second: coletaEmAberto
+      // reopens it once the date passes, so a stale Data Agendada can
+      // never read as work in progress.
+      if (m.comDemanda) {
+        if (coletaEmAberto(r, hojeIso)) bucket.aAgendar += 1;
+        else if (r.status === STATUS_AGENDADO) bucket.jaAgendados += 1;
       }
     });
 
@@ -763,8 +785,12 @@
   // A zona owing nothing never flags, however few slots it has: zero
   // demand needs zero capacity. Only a shortfall against real, committed
   // demand is worth a supervisor's attention.
+  // Compared against "A agendar", which is the number the table shows —
+  // aAgendar on the biomarcadores page, the proxy count on Último
+  // Movimento. Flagging from a count the reader cannot see is how a row
+  // ends up highlighted while its own numbers say otherwise.
   function zonaSemCapacidade(r, turnos) {
-    const owed = r.realizadasSemAgendamento || 0;
+    const owed = r.aAgendar != null ? r.aAgendar : (r.realizadasSemAgendamento || 0);
     if (owed === 0) return false;
     const t = turnos || {};
     return owed > (t.manha || 0) + (t.tarde || 0);
@@ -836,6 +862,19 @@
     const TIP_NAO_DISTRIBUIDA =
       'Ainda não chegou ao entrevistador (Distribuído ou Enviado para Carga). ' +
       'Ninguém esteve lá ainda — não é atraso de campo.';
+    // Both are "no interview outcome recorded", and the report leaves
+    // tipo blank for 76% of households — but one group has been visited
+    // and the other has not, which is the difference between a stalled
+    // zona and one that has not started.
+    const TIP_SEM_DESFECHO =
+      'Já distribuído, mas a entrevista ainda não concluiu — sem tipo ' +
+      'registrado. Alguém já esteve lá; o desfecho é que não veio.';
+    const TIP_A_AGENDAR =
+      'Biomarcador em aberto e sem horário marcado — inclui agendamento ' +
+      'vencido sem coleta. É o que precisa de ação.';
+    const TIP_JA_AGENDADOS =
+      'Biomarcador em aberto com data futura marcada. Somado a "A agendar" ' +
+      'dá a carga em aberto da zona.';
     const TIP_PIN = 'Ver esta zona no mapa';
     // Header and body segments are gated by the SAME flags, so a column
     // can never appear in one and not the other — the failure mode that
@@ -847,7 +886,9 @@
       // First among the status columns: it is the state BEFORE fieldwork,
       // so the row reads left-to-right as a progression.
       `<th title="${esc(TIP_NAO_DISTRIBUIDA)}">Não distribuída</th>` +
-      '<th>Realizada</th><th>Não Iniciada</th>' +
+      (m.comDemanda ? `<th title="${esc(TIP_SEM_DESFECHO)}">Sem desfecho</th>` : '') +
+      '<th>Realizada</th>' +
+      (m.comDemanda ? '' : '<th>Não Iniciada</th>') +
       '<th>Dom. Fechado</th>' +
       `<th title="${esc(TIP_RECUSA)}">Recusa entrev.</th>` +
       '<th>Outros</th><th>Total</th>' +
@@ -859,12 +900,12 @@
       // literally IS "Realizada sem agendamento", so that name is the
       // honest one — it says what was measured, proxy and all.
       (m.comDemanda
-        ? `<th title="${esc(TIP_REALIZADAS)}">Biomarc. devidos</th>` +
-          `<th title="${esc(TIP_PENDENTES)}">Pendentes</th>`
+        ? `<th title="${esc(TIP_A_AGENDAR)}">A agendar</th>` +
+          `<th title="${esc(TIP_JA_AGENDADOS)}">Já agendados</th>`
         : '') +
       (m.comSlots
-        ? `<th title="${esc(TIP_TURNO)}">Manhã</th>` +
-          `<th title="${esc(TIP_TURNO)}">Tarde</th>` +
+        ? `<th title="${esc(TIP_TURNO)}">Slots manhã</th>` +
+          `<th title="${esc(TIP_TURNO)}">Slots tarde</th>` +
           '<th>Slots livres</th>'
         : '') +
       '</tr>';
@@ -884,7 +925,7 @@
       // target, so telling the user to click it pointed at a gesture that
       // does nothing. The pin carries its own tooltip.
       const titulo = semCapacidade
-        ? `Deve ${r.realizadasSemAgendamento} biomarcador(es) e tem ` +
+        ? `Deve ${r.aAgendar != null ? r.aAgendar : r.realizadasSemAgendamento} biomarcador(es) e tem ` +
           `${turnos.manha + turnos.tarde} slot(s) livre(s) na janela`
         : '';
       // No data-id-zona on the <tr> any more — the pin owns the gesture.
@@ -916,13 +957,15 @@
         `<td>${zonaLabel}</td>` +
         `<td>${esc(r.nomeZona)}</td>` +
         `<td>${r.naoDistribuida || 0}</td>` +
-        `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
+        (m.comDemanda ? `<td>${r.semDesfecho || 0}</td>` : '') +
+        `<td>${r.realizada}</td>` +
+        (m.comDemanda ? '' : `<td>${r.naoIniciada}</td>`) +
         `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
         `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>` +
         (m.comAgenda ? `<td>${r.agendados}</td>` : '') +
         (m.comDemanda
-          ? `<td class="sigc-pro-devidas">${r.realizadasSemAgendamento}</td>` +
-            `<td>${r.pendentes}</td>`
+          ? `<td class="sigc-pro-devidas">${r.aAgendar || 0}</td>` +
+            `<td>${r.jaAgendados || 0}</td>`
           : '') +
         (m.comSlots
           ? `<td>${turnos.manha || 0}</td><td>${turnos.tarde || 0}</td>` +
@@ -2269,6 +2312,32 @@
         console.warn(`${TAG} ${missing}/${movimentoMap.size} domicílio(s) sem entrada na Lista de Endereços.`);
         alert(`SIGC-PRO: ${missing} de ${movimentoMap.size} domicílio(s) não retornaram ` +
           'endereço na consulta e ficarão sem coordenadas/zona.');
+      }
+      // The biomarcadores report has no Última Posição column, so without
+      // this every household there looked equally untouched: the "Não
+      // distribuída" column read 0 and all 1.416 blank-tipo households in
+      // BA fell into "Outros". One extra request against the same scope
+      // fills it in.
+      //
+      // Enrichment, so it fails soft: without it the split simply is not
+      // available, which is exactly where the page stood before.
+      if (modo.comDemanda) {
+        try {
+          const posicoes = await AM.fetchPosicoesPorFiltro(filtro);
+          if (posicoes) {
+            movimentoMap.forEach((r, key) => {
+              const p = posicoes.get(key);
+              if (!p) return;
+              r.ultimaPosicao = p.ultimaPosicao;
+              // tipoEntrevista too: the biomarcadores report leaves it
+              // blank until the interview concludes, while Último
+              // Movimento already carries the outcome.
+              if (!r.tipoEntrevista) r.tipoEntrevista = p.tipoEntrevista;
+            });
+          }
+        } catch (err) {
+          console.warn(`${TAG} Último Movimento (posições) fetch failed:`, err);
+        }
       }
       const joined = joinEnderecos(movimentoMap, enderecosMap);
 

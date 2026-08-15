@@ -766,6 +766,86 @@
 
   const ULTIMO_MOVIMENTO_SLUG = 'relatorio-ultimo-movimento';
 
+  // --- Último Movimento by page scope ----------------------------------
+  //
+  // The biomarcadores report carries no Última Posição column, so on that
+  // page there is no way to tell a household nobody has reached yet from
+  // one already worked — every one of them looked the same. This fetch
+  // fills that in: same report, same generic endpoint, but scoped by the
+  // page's own submitted filtro (one request) rather than pinned to a
+  // Controle (one request each).
+  //
+  // Reads a different set of columns than parseUltimoMovimentoTable,
+  // which keeps only `entrevistador` for the Agenda guide.
+  const POSICAO_LABELS = {
+    controle: 'Controle',
+    domicilio: 'Domicilio',
+    ultimaPosicao: 'Última Posição',
+    tipoEntrevista: 'Tipo Entrevista',
+  };
+
+  function tableToPosicoesMap(headers, rows) {
+    const idx = resolveColumns(headers, POSICAO_LABELS, foldLive);
+    if (!idx) return null;
+    const map = new Map();
+    (rows || []).forEach((cells) => {
+      const controle = String(cells[idx.controle] || '').trim();
+      const domicilio = String(cells[idx.domicilio] || '').trim();
+      if (!controle || !domicilio) return;
+      map.set(`${controle}|${domicilio}`, {
+        ultimaPosicao: String(cells[idx.ultimaPosicao] || '').trim(),
+        tipoEntrevista: String(cells[idx.tipoEntrevista] || '').trim(),
+      });
+    });
+    return map;
+  }
+
+  function parsePosicoesHtml(html) {
+    const table = readReportTable(html, '#tableRelatorio');
+    return table ? tableToPosicoesMap(table.headers, table.rows) : null;
+  }
+
+  function filtroBodyUltimoMovimentoPorFiltro(filtro) {
+    const f = filtro || {};
+    const w = (v) => {
+      const s = String(v == null ? '' : v).trim();
+      return s === '' ? '*' : s;
+    };
+    return 'filtro=' + encodeURIComponent(JSON.stringify({
+      IdFiltro: ULTIMO_MOVIMENTO_SLUG,
+      IdUf: String(f.IdUf || ''),
+      IdAgencia: w(f.IdAgencia),
+      IdMunicipio: w(f.IdMunicipio),
+      Controle: w(f.Controle),
+      IdEntrevistadores: w(f.IdEntrevistadores),
+      IdTipoAcompanhamento: '*',
+    }));
+  }
+
+  const posicoesCache = new Map();
+
+  function fetchPosicoesPorFiltro(filtro) {
+    const f = filtro || {};
+    const chave = [f.IdUf, f.IdAgencia, f.IdMunicipio, f.Controle,
+      f.IdEntrevistadores].map((v) => String(v == null ? '*' : v)).join('|');
+    const hit = posicoesCache.get(chave);
+    if (hit) return hit;
+    const p = postRelatorio({
+      slug: ULTIMO_MOVIMENTO_SLUG,
+      body: filtroBodyUltimoMovimentoPorFiltro(f),
+      parse: parsePosicoesHtml,
+    }).catch((err) => {
+      posicoesCache.delete(chave);
+      throw err;
+    });
+    posicoesCache.set(chave, p);
+    return p;
+  }
+
+  function resetPosicoesCache() {
+    posicoesCache.clear();
+  }
+
   function filtroBodyUltimoMovimento(uf, controle) {
     return 'filtro=' + encodeURIComponent(JSON.stringify({
       IdFiltro: ULTIMO_MOVIMENTO_SLUG,
@@ -981,6 +1061,8 @@
     parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl,
     fetchEnderecos, fetchEnderecosByAgencia, fetchEnderecosPorFiltro,
     resetEnderecosAgenciaCache, stripAccents, stripHeaderMarker,
+    filtroBodyUltimoMovimentoPorFiltro, parsePosicoesHtml, tableToPosicoesMap,
+    fetchPosicoesPorFiltro, resetPosicoesCache,
     filtroBodyBiomarcadores, parseBiomarcadoresHtml, tableToBiomarcadoresMap,
     fetchBiomarcadoresPorFiltro, resetBiomarcadoresCache, BIOMARCADORES_SLUG,
     parseSlots, zonaIdOf, chaveDomicilio, indexByControle, pickAgendado, fmtAgendado, horaDoStart, horaDeIso,

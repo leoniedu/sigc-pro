@@ -620,11 +620,13 @@ describe('Zonas tab — turno columns and the capacity flag', () => {
     semCoordenadas: 0, agendados: 0, realizadasSemAgendamento: 0, pendentes: 0,
   }, extra);
 
-  test('renders the Manhã and Tarde headers and counts', () => {
+  test('renders the turno headers and counts', () => {
     const turnos = new Map([['29JDM8', { manha: 2, tarde: 3 }]]);
     const html = I().buildZonasTableHtml([zonaRow()], new Map(), turnos);
-    expect(html).toContain('>Manhã</th>');
-    expect(html).toContain('>Tarde</th>');
+    // "Slots" in the header: these are counts of FREE agenda slots, which
+    // a bare "Manhã" does not say.
+    expect(html).toContain('>Slots manhã</th>');
+    expect(html).toContain('>Slots tarde</th>');
     expect(html).toContain('<td>2</td><td>3</td>');
   });
 
@@ -651,18 +653,19 @@ describe('Zonas tab — turno columns and the capacity flag', () => {
 
   test('renders both demand columns', () => {
     const html = I().buildZonasTableHtml(
-      [zonaRow({ realizadasSemAgendamento: 2, pendentes: 5 })], new Map(), new Map());
-    expect(html).toContain('>Biomarc. devidos</th>');
-    expect(html).toContain('>Pendentes</th>');
+      [zonaRow({ aAgendar: 2, jaAgendados: 5 })], new Map(), new Map());
+    expect(html).toContain('>A agendar</th>');
+    expect(html).toContain('>Já agendados</th>');
     expect(html).toContain('sigc-pro-devidas">2</td>');
     expect(html).toContain('<td>5</td>');
   });
 
-  // The two columns are nested, not disjoint — a reader who tries to add
-  // them gets a wrong total, so the header says so explicitly.
-  test('the Pendentes tooltip warns that the columns do not add up', () => {
+  // Superseded the nested pair: the columns are now disjoint, so they
+  // ADD UP and the "do not sum these" warning is gone — that warning was
+  // the part a reader skipped.
+  test('the demand columns no longer warn against summing', () => {
     const html = I().buildZonasTableHtml([zonaRow()], new Map(), new Map());
-    expect(html).toContain('não se somam');
+    expect(html).not.toContain('não se somam');
   });
 });
 
@@ -3310,5 +3313,134 @@ describe('renderLeafletMap wires the three map features', () => {
     expect(rec.camadas).toEqual([
       'Agência 290570100 (2)', 'Agência 292740800 (1)',
     ]);
+  });
+});
+
+describe('biomarcadores zonas columns after the posição join', () => {
+  const linha = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', zona: 'Z1', temZona: true,
+    temCoordenadas: true, tipoEntrevista: '', ultimaPosicao: 'Distribuido',
+    status: 'Não iniciado', agendado: '', dataAgendada: '', ...over,
+  });
+  const agg = (rows) => UM.aggregateZonas(rows, new Map(), UM.MODO_BIOMARCADORES, '2026-08-15')[0];
+
+  test('untouched and visited-without-outcome are separate columns', () => {
+    // In BA the 1.416 blank-tipo households split 1.192 untouched against
+    // 224 already worked. Both have no interview outcome, but only the
+    // second has had a field visit.
+    const z = agg([
+      linha({ domicilio: '1', ultimaPosicao: 'Distribuido' }),
+      linha({ domicilio: '2', ultimaPosicao: 'Enviado para Carga' }),
+      linha({ domicilio: '3', ultimaPosicao: 'Descarregado Parcialmente' }),
+      linha({ domicilio: '4', ultimaPosicao: 'Reentrevista' }),
+    ]);
+    expect(z.naoDistribuida).toBe(2);
+    expect(z.semDesfecho).toBe(2);
+    expect(z.outros).toBe(0);
+  });
+
+  test('a real tipo still lands in its own column, not Sem desfecho', () => {
+    const z = agg([
+      linha({ domicilio: '1', tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado' }),
+      linha({ domicilio: '2', tipoEntrevista: 'Domicílio Vago', ultimaPosicao: 'Descarregado' }),
+    ]);
+    expect(z.realizada).toBe(1);
+    expect(z.outros).toBe(1);
+    expect(z.semDesfecho).toBe(0);
+  });
+
+  test('every household lands in exactly one column', () => {
+    const z = agg([
+      linha({ domicilio: '1', ultimaPosicao: 'Distribuido' }),
+      linha({ domicilio: '2', ultimaPosicao: 'Reentrevista' }),
+      linha({ domicilio: '3', tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado' }),
+      linha({ domicilio: '4', tipoEntrevista: 'Recusa', ultimaPosicao: 'Descarregado' }),
+      linha({ domicilio: '5', tipoEntrevista: 'Demolida', ultimaPosicao: 'Descarregado' }),
+    ]);
+    const soma = z.naoDistribuida + z.semDesfecho + z.realizada +
+      z.naoIniciada + z.domicilioFechado + z.recusa + z.outros;
+    expect(soma).toBe(z.totalDomicilios);
+    expect(z.totalDomicilios).toBe(5);
+  });
+});
+
+describe('demand columns are disjoint and add up', () => {
+  const linha = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', temZona: true,
+    temCoordenadas: true, tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado',
+    status: 'A agendar', agendado: '', dataAgendada: '', ...over,
+  });
+  const agg = (rows) => UM.aggregateZonas(rows, new Map(), UM.MODO_BIOMARCADORES, '2026-08-15')[0];
+
+  test('a agendar and ja agendados never overlap', () => {
+    const z = agg([
+      linha({ domicilio: '1', status: 'A agendar' }),
+      linha({ domicilio: '2', status: 'Agendado', dataAgendada: '31/12/2099' }),
+    ]);
+    expect(z.aAgendar).toBe(1);
+    expect(z.jaAgendados).toBe(1);
+  });
+
+  test('a lapsed booking counts as a agendar, not as agendado', () => {
+    // The date passed with no collection, so it is demand again — the
+    // booking on file is stale.
+    const z = agg([linha({ status: 'Agendado', dataAgendada: '01/01/2020' })]);
+    expect(z.aAgendar).toBe(1);
+    expect(z.jaAgendados).toBe(0);
+  });
+
+  test('closed households are in neither', () => {
+    const z = agg([
+      linha({ domicilio: '1', status: 'Coletado Sangue e Urina' }),
+      linha({ domicilio: '2', status: 'Recusa' }),
+      linha({ domicilio: '3', status: 'Não elegível' }),
+    ]);
+    expect(z.aAgendar).toBe(0);
+    expect(z.jaAgendados).toBe(0);
+  });
+
+  test('the headers say what they count', () => {
+    const zonaRow = { ...agg([linha()]) };
+    const html = UM.buildZonasTableHtml([zonaRow], new Map(), new Map(), UM.MODO_BIOMARCADORES);
+    expect(html).toContain('A agendar');
+    expect(html).toContain('Já agendados');
+    expect(html).toContain('Sem desfecho');
+    // The slot columns say they are FREE slots.
+    expect(html).toContain('Slots manhã');
+    expect(html).toContain('Slots tarde');
+    // Gone: the names nobody could decode.
+    expect(html).not.toContain('Biomarc. devidos');
+    expect(html).not.toContain('>Pendentes<');
+  });
+});
+
+describe('the capacity flag matches the column on screen', () => {
+  test('flags against A agendar, the number the table shows', () => {
+    // Deriving the flag from a different count than the visible column is
+    // how a table ends up contradicting itself: the row would be
+    // highlighted while its own numbers say there is no shortfall.
+    const zona = {
+      idZona: 'Z1', nomeZona: 'Z1', realizada: 0, naoIniciada: 0,
+      domicilioFechado: 0, recusa: 0, outros: 0, naoDistribuida: 0,
+      semDesfecho: 0, totalDomicilios: 5, semCoordenadas: 0, agendados: 0,
+      aAgendar: 5, jaAgendados: 0, realizadasSemAgendamento: 0, pendentes: 0,
+    };
+    const turnos = new Map([['Z1', { manha: 1, tarde: 1 }]]);
+    const html = UM.buildZonasTableHtml([zona], new Map(), turnos, UM.MODO_BIOMARCADORES);
+    // 5 to schedule against 2 free slots — a real shortfall.
+    expect(html).toContain('sigc-pro-zona-sem-capacidade');
+    expect(html).toContain('Deve 5 biomarcador(es)');
+  });
+
+  test('enough slots means no flag', () => {
+    const zona = {
+      idZona: 'Z1', nomeZona: 'Z1', realizada: 0, naoIniciada: 0,
+      domicilioFechado: 0, recusa: 0, outros: 0, naoDistribuida: 0,
+      semDesfecho: 0, totalDomicilios: 2, semCoordenadas: 0, agendados: 0,
+      aAgendar: 1, jaAgendados: 0, realizadasSemAgendamento: 0, pendentes: 0,
+    };
+    const turnos = new Map([['Z1', { manha: 3, tarde: 3 }]]);
+    const html = UM.buildZonasTableHtml([zona], new Map(), turnos, UM.MODO_BIOMARCADORES);
+    expect(html).not.toContain('sigc-pro-zona-sem-capacidade');
   });
 });
