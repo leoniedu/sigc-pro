@@ -130,11 +130,17 @@
     'Recusa': 'recusa',
   };
 
-  // The real ultimaPosicao domain, measured against 26.203 rows of BA
+  // The real ultimaPosicao domain, enumerated over all 26.203 rows of BA
   // movimento.parquet (pns.zonas, 2026-08-14): Distribuido, Enviado para
   // Carga, Descarregado, Descarregado Parcialmente, Reentrevista. There
   // is NO 'Transmitido' — an earlier version of this rule was written
   // against that assumed value.
+  //
+  // Row COUNTS elsewhere in this file are of the current state (until_ts
+  // IS NULL, 7.140 rows in BA), not of this raw history — enumerating a
+  // domain wants every version ever seen, counting a population wants
+  // one row per household. Conflating the two is what produced the wrong
+  // percentages this file used to cite.
   const POSICAO_DISTRIBUIDO = 'Distribuido';
 
   // Household demand, in two measures — deliberately not one.
@@ -152,21 +158,43 @@
   //
   // Both states verified against biomarcadores.parquet (BA, 2026-08-14),
   // scoring the share whose biomarcador status is still open (A agendar
-  // / Não iniciado / Agendado / Indefinido):
+  // / Não iniciado / Agendado / Indefinido).
   //
-  //   Descarregado Parcialmente  60% pending   <- owed
-  //   Reentrevista               53% pending   <- owed
-  //   Descarregado (completo)    32% pending   <- closed
+  // Denominator: households in the biomarcador SUBSAMPLE whose
+  // tipo_entrevista is 'Realizada' — only they can owe anything — in the
+  // CURRENT state (until_ts IS NULL) of both parquets:
+  //
+  //   Descarregado Parcialmente  89,7% em aberto (96/107)  <- owed
+  //   Reentrevista               86,4% em aberto (19/22)   <- owed
+  //   Descarregado (completo)    33,0% em aberto (86/261)  <- closed
+  //
+  // Stating the denominator is not optional here: an earlier version of
+  // this comment cited 60/53/32%, measured over the raw SCD history,
+  // where superseded rows count — a household that passed through
+  // 'Descarregado Parcialmente' and is now 'Descarregado' still scored as
+  // owed. (Over the current state but with ALL 'Realizada' in the
+  // denominator, the figures would be 32,5/25,0/7,1% — also wrong, since
+  // that admits households that never owed a collection at all.)
   //
   // Reentrevista tracks the partial state, not the completed one, which
   // is why it belongs here — an earlier version of this rule excluded it
-  // on the assumption that a re-interview owes no collection.
+  // on the assumption that a re-interview owes no collection. Note it now
+  // sits just BELOW Descarregado Parcialmente rather than above; what
+  // matters is that both sit far above the completed 33,0%.
   //
-  // Caveat worth knowing: biomarcadores.parquet, which carries an
-  // explicit "A agendar" status, is the authoritative source — but it
-  // covers only ~48% of these households and is a different SIGC report,
-  // not reachable from the Último Movimento page. This pair of posições
-  // is the best proxy available from the table on screen.
+  // This pair of posições is a PROXY, and only that. The authoritative
+  // source is the Relatório de Acompanhamento de Biomarcadores, whose
+  // literal `status` this extension now reads on its own page — see
+  // MODO_BIOMARCADORES. Measured against it in BA: of 121 households the
+  // proxy called owed, 11 were already collected and 4 refused; of those
+  // it called closed, 81 were still open. It errs in both directions.
+  //
+  // (An earlier version of this comment claimed that source "covers only
+  // ~48% of these households", and used that to justify staying on the
+  // proxy. It was false — biomarcadores.parquet covers 100% of the
+  // subsample, 1.860 of 1.860 rows in BA, every one with a status. The
+  // real reason to keep the proxy is narrower: this report is a different
+  // page, and Último Movimento cannot reach it.)
   const POSICAO_BIOMARCADOR_DEVIDO = new Set(
     ['Descarregado Parcialmente', 'Reentrevista']);
 
@@ -186,14 +214,21 @@
   //   'Distribuido'        — handed to the device, not yet worked. The
   //                          R script's "não é fila intocada".
   //   'Enviado para Carga' — queued for loading, same reasoning
-  //                          (3.582 rows in BA, all Não Iniciada).
+  //                          (800 rows in BA in the current state, all
+  //                          Não Iniciada; an earlier version of this
+  //                          comment said 3.582, which counted the raw
+  //                          SCD history including superseded rows).
   //
   // Deliberately NOT filtered by tipo_entrevista. An earlier version
-  // whitelisted four tipos, which was written against an assumed domain:
-  // the live table carries at least fifteen, including 'Em condições de
-  // ser habitada' (152 unbooked in BA), 'Uso Ocasional', 'Domicílio
-  // Vago' and 'Em Ruínas'. Enumerating them invites exactly the silent
+  // whitelisted four tipos, written against an assumed domain: the live
+  // table carries 12 in BA, among them 'Uso Ocasional' (47) and
+  // 'Domicílio Vago'. Enumerating them invites exactly the silent
   // undercount that whitelist produced.
+  //
+  // (That earlier version also cited 'Em condições de ser habitada' and
+  // 'Em Ruínas'. Neither string exists in any of the four UFs — the real
+  // value is 'Em obras ou ruínas', 8 rows in BA. They appeared only in
+  // this comment, never in a constant, so nothing was matching nothing.)
   //
   // Every household in isRealizadaSemAgendamento is also in here (both
   // its posições are past distribution), so the two columns are nested,

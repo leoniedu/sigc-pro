@@ -87,20 +87,25 @@ próprio — ver a tabela acima.
 
 ## 1. Corrigir os números citados nos comentários
 
-> **Agora é para aplicar no lugar.** A versão anterior deste documento
-> mandava esperar, porque a migração apagaria estes comentários. Não há
-> migração: `MODO_MOVIMENTO` mantém a regra do `ultimaPosicao`, e os
-> comentários que a justificam **continuam no código**, afirmando números
-> falsos com aparência de medição. Ficaram por corrigir.
+> ✅ **Feito.** A versão anterior deste documento mandava esperar, porque a
+> migração apagaria estes comentários. Não houve migração —
+> `MODO_MOVIMENTO` mantém a regra do `ultimaPosicao` —, então os
+> comentários foram corrigidos no lugar. O registro abaixo fica como
+> memória do que estava errado e por quê.
 
-Os comentários das linhas ~155-170 de `ultimo-movimento-map.js` citam
-percentuais que vieram de uma medição sobre o **histórico SCD**, não sobre o
-estado atual. `movimento.parquet` tem 26.203 linhas na BA, mas só 7.140 com
-`until_ts IS NULL` — uma por domicílio. As outras são versões superadas: um
-domicílio que passou por `Descarregado Parcialmente` e hoje está
-`Descarregado` contribuía para a contagem de "devido" mesmo estando fechado.
+Os comentários citavam percentuais medidos sobre o **histórico SCD**, não
+sobre o estado atual. `movimento.parquet` tem 26.203 linhas na BA, mas só
+7.140 com `until_ts IS NULL` — uma por domicílio. As outras são versões
+superadas: um domicílio que passou por `Descarregado Parcialmente` e hoje
+está `Descarregado` contribuía para a contagem de "devido" mesmo estando
+fechado.
 
-A tabela atual do comentário:
+A distinção agora está registrada no próprio código, junto ao domínio de
+`ultimaPosicao`: enumerar um domínio quer toda versão já vista; contar uma
+população quer uma linha por domicílio. Confundir as duas foi a origem de
+tudo o que segue.
+
+A tabela que estava no comentário:
 
 ```
 //   Descarregado Parcialmente  60% pending   <- owed
@@ -108,7 +113,7 @@ A tabela atual do comentário:
 //   Descarregado (completo)    32% pending   <- closed
 ```
 
-O correto (estado atual, BA, 14/08/2026):
+foi substituída pelo correto (estado atual, BA, 14/08/2026):
 
 ```
 //   Denominador: domicílios da SUBAMOSTRA de biomarcadores com
@@ -139,7 +144,7 @@ Parcialmente` (86,4% vs 89,7%), invertendo a ordem dos números antigos. Isso
 `Descarregado` completo (33,0%), que é o que justifica incluir
 `Reentrevista` entre as devidas.
 
-Outras afirmações erradas no mesmo bloco:
+Outras afirmações erradas no mesmo bloco, todas corrigidas:
 
 - "covers only ~48% of these households" → **é falso, e é a correção mais
   importante deste documento**: `biomarcadores.parquet` cobre **100% da
@@ -280,7 +285,7 @@ somar as duas; se ambas aparecerem na UI, rotular explicitamente qual é qual.
 > roxygen de `sigc_biomarcadores.R:62-65`, 51/45 numa remedição posterior).
 > São dados vivos: use a ordem de grandeza, não o número. Ver §10.3.
 
-## 5. Prazo final da coleta — o alerta que falta
+## 5. Prazo final do biomarcador ✅
 
 Regra confirmada em 1.019 linhas nas 4 UFs, sem exceção:
 
@@ -295,10 +300,17 @@ como `0`, igual a um que vence hoje. Na BA, 40 de 253 linhas divergem de
 diferença de 1 dia. **Recalcular**, para que atraso apareça negativo e ordene
 na frente.
 
-Alerta implementado no R (`relatorio_agenda.R`, aba `alerta_prazo`):
-domicílio não coletado, com prazo definido, cujo status seja `Recusa` /
-`A agendar` / `Indefinido` / agendamento vencido sem coleta, e a menos de 10
-dias do prazo (ou vencido).
+Portado como `emAlertaDePrazo()` / `acaoDePrazo()`, com as colunas Prazo e
+Ação na aba Domicílios e a contagem no rótulo da aba. Espelha o
+`alerta_prazo` do R (`relatorio_agenda.R:523`): domicílio não coletado, com
+prazo definido, com a coleta em aberto (ou `Recusa`, por exceção — é status
+fechado, mas revertê-la é o trabalho que o relógio ameaça), a menos de 10
+dias do prazo ou já vencido.
+
+A coluna **Ação** separa trabalho de agenda (agendar, reagendar) de
+convencimento (reverter recusa), porque nenhum slot livre resolve uma
+recusa. Sem essa separação, 24 das 39 linhas da BA eram recusa e os
+domicílios de fato agendáveis viravam minoria na própria lista.
 
 Volumes: BA 39 (10 vencidos), PE 25 (**17 vencidos**), MA 38 (12), RJ 63 (5).
 
@@ -512,7 +524,7 @@ documentado em `enderecoKey()` (`sigc-common.js:70`).
    livres"). Se isso basta, é pergunta de uso real — não está resolvido por
    decisão de projeto.
 
-## 11. O mapa: o lado do R já foi feito
+## 11. O mapa: cor, alfinete e contorno ✅
 
 Em 14/08/2026 o mapa do `pns.zonas` foi reformulado. O que segue é resultado
 — não proposta — e vale como referência.
@@ -532,11 +544,9 @@ A cor é o desfecho da ENTREVISTA, não o da coleta. As ~50 recusas de
 biomarcador da BA saem **verdes**, idênticas a um domicílio já coletado —
 porque a entrevista delas de fato deu certo.
 
-**Ainda é assim, nas duas variantes.** `statusColor()` não foi tocado, e na
-página de biomarcadores isso agora incomoda mais: o `status` literal está
-lido e disponível em cada linha, e a cor continua ignorando-o. Em
-`MODO_MOVIMENTO` a cor por entrevista é a única possível e está certa; o
-que falta é a escala abaixo em `MODO_BIOMARCADORES`.
+✅ **Corrigido em `MODO_BIOMARCADORES`**, que agora usa a escala abaixo.
+`MODO_MOVIMENTO` segue colorindo por entrevista — ali é a única fonte que
+existe, e a cor está certa.
 
 (A suspeita registrada antes, de que o mapa do R lia biomarcador de uma
 planilha do OneDrive, estava errada: aquela planilha só fornece o endereço
@@ -648,35 +658,22 @@ extensão já faz.
 
 ## O que falta
 
-Os passos 1 e 2 da ordem original estão feitos (apêndice B). O que resta,
-em ordem de valor:
-
-1. **Alerta de prazo** (§5). `data_final_coleta` e `dias_prazo_final` já
-   são lidos e guardados por `biomarcadoresParaLinhas()`, e **ninguém os
-   usa ainda**. É o que o proxy nunca conseguiu fazer. Lembrar de
-   recalcular a partir de `data_final_coleta` em vez de confiar em
-   `dias_prazo_final`, que vem truncado em zero, e de exigir coleta em
-   aberto — destacar prazo de domicílio já coletado foi o erro que o R
-   cometeu primeiro (75 de 138 destaques).
-2. **Cor por status de biomarcador** e as duas recusas separadas no mapa
-   (§11, §4). Hoje `statusColor()` ainda pinta pelo desfecho da
-   entrevista nas duas variantes, então na página de biomarcadores um
-   domicílio que recusou a coleta sai verde, igual a um já coletado. Sai
-   como consequência direta do que já está lido.
-3. **Corrigir os comentários do §1.** Deixou de ser trabalho descartável
-   quando `MODO_MOVIMENTO` ficou: os números falsos estão em código que
-   continua rodando. O que não pode se perder é a correção da cobertura —
-   o comentário afirma que a fonte autoritativa cobre ~48% e por isso não
-   serve; é falso (cobre 100%), e é o argumento que sustentava ficar no
-   proxy.
-
-### Ainda em aberto, menores
+Todo o trabalho de fundo deste documento está feito (apêndice B). O que
+resta é pequeno e nenhum item bloqueia outro:
 
 - **Rotular `Outro Motivo`** como o §4 pede. A recusa da entrevista já foi
-  nomeada em toda a UI; `Outro Motivo` tem a mesma ambiguidade e ainda não
-  foi tratado.
+  nomeada em toda a UI; `Outro Motivo` existe nos dois campos com a mesma
+  ambiguidade e ainda não foi tratado. É o único item de terminologia que
+  sobrou.
 - **Confirmar que zonas sem campo iniciado aparecem** (§11). O código está
-  certo; falta conferir se a Lista de Endereços devolve essas zonas.
+  certo (`aggregateZonas` semeia de `enderecosMap`); falta conferir ao
+  vivo se a Lista de Endereços devolve essas zonas.
+- **Zona em duas agências** (§6). Verificar se alguma agregação daqui
+  agrupa zona por agência — no R isso duplicava linhas e inflava a
+  demanda do PE. Provavelmente não se aplica, já que a agregação é por
+  `idZona` puro, mas não foi conferido.
+- **Como o usuário sabe qual variante está vendo** (§10.5). Pergunta de
+  uso real, não de projeto.
 
 ### Concluídos
 
@@ -685,6 +682,9 @@ em ordem de valor:
 - ~~**Piso da janela de agendamento**~~ ✅ (§5).
 - ~~**Rotular "Recusa da entrevista"**~~ ✅ (§4).
 - ~~**Alfinete no lugar do clique na linha**~~ ✅ (§11).
+- ~~**Cor por status de biomarcador**~~ ✅ (§11).
+- ~~**Alerta de prazo**~~ ✅ (§5).
+- ~~**Corrigir os comentários do §1**~~ ✅ (§1).
 
 ## Como verificar
 
@@ -779,5 +779,46 @@ Três coisas que só apareceram ao implementar:
    coluna presente em um e ausente no outro desloca em silêncio todas as
    células seguintes. Há teste de paridade de contagem por variante.
 
-Não implementado, e é o que resta: alerta de prazo, cor por status, e a
-correção dos comentários do §1. Ver "O que falta".
+**Cor por status** (§11, §4). `statusColor()` passou a receber a variante.
+Duas distinções que uma tabela plana de status não faria: as duas recusas
+em cores distintas (reverter uma exige convencer sobre o exame, a outra
+sobre a pesquisa inteira), e `Não iniciado` separado por **porquê** —
+travado atrás de uma entrevista reversível não é o mesmo que esperando a
+vez. Um agendamento vencido toma a cor de "precisa de ação", reusando
+`coletaEmAberto` para que mapa e colunas reabram pela mesma regra. Testes
+garantem que duas entradas da legenda nunca dividem uma cor e que as 231
+combinações de status/tipo/data caem numa cor documentada.
+
+**Terminologia** (§4). Toda string visível diz "biomarcador", nunca
+"coleta": no SIGC a entrevista regular também é chamada de coleta, então o
+rótulo nomeava justamente aquilo de que precisava se distinguir. Nesse
+passo dois tooltips se revelaram **errados** em `MODO_BIOMARCADORES` —
+descreviam as exclusões do proxy ("exceto os já descarregados", "não inclui
+Distribuído"), que não é como aquela variante calcula demanda. Passaram a
+ser escritos por variante, e encolheram de 3-4 frases (até 230 caracteres)
+para 1-2 (68-116).
+
+**Alerta de prazo** (§5). `diasParaPrazo()`, `emAlertaDePrazo()`,
+`acaoDePrazo()`, colunas Prazo e Ação na aba Domicílios, contagem no rótulo
+da aba. O prazo é **recalculado**: o campo do SIGC trunca em zero, então
+vencido há três semanas e vence hoje saem iguais e a ordenação não serve.
+Aqui vai negativo e lidera a ordem crescente.
+
+Duas regras que não se adivinham, e o §5 já avisava sobre a primeira:
+
+1. **Domicílio coletado mantém prazo**, então "prazo < 10 dias" sozinho
+   destaca trabalho concluído — 75 dos 138 destaques da primeira versão do
+   R. O alerta exige coleta em aberto.
+2. **`Recusa` alerta por exceção.** É status fechado, mas revertê-la é
+   exatamente o trabalho que o relógio ameaça. `Outro Motivo` e `Não
+   elegível` não: não há o que reverter.
+
+Achado de passagem: a coluna "Situação" da aba Domicílios renderizava
+`ultimaPosicao`, sempre vazio na página de biomarcadores — era uma coluna
+de travessões. Passou a mostrar o `status`.
+
+**Correção dos comentários do §1.** Os seis números falsos foram
+substituídos, cada um com o registro do que estava errado e por quê — o
+denominador declarado, a diferença entre enumerar um domínio (histórico
+cru) e contar uma população (estado atual), e a retratação do "~48% de
+cobertura" que era o argumento para ficar no proxy.
