@@ -653,9 +653,9 @@ describe('Zonas tab — turno columns and the capacity flag', () => {
 
   test('renders both demand columns', () => {
     const html = I().buildZonasTableHtml(
-      [zonaRow({ aAgendar: 2, jaAgendados: 5 })], new Map(), new Map());
-    expect(html).toContain('>A agendar</th>');
-    expect(html).toContain('>Já agendados</th>');
+      [zonaRow({ agendamentoPendente: 2, agendadoBio: 5 })], new Map(), new Map());
+    expect(html).toContain('>Agendamento pendente</th>');
+    expect(html).toContain('>Agendado</th>');
     expect(html).toContain('sigc-pro-devidas">2</td>');
     expect(html).toContain('<td>5</td>');
   });
@@ -1876,7 +1876,9 @@ describe('recusa disambiguation', () => {
       domicilioFechado: 0, recusa: 2, outros: 0, totalDomicilios: 3,
       semCoordenadas: 0, agendados: 0, realizadasSemAgendamento: 0, pendentes: 0,
     }];
-    const html = UM.buildZonasTableHtml(zonaRows, new Map(), new Map());
+    // MODO_MOVIMENTO keeps the interview-outcome columns, where the
+    // qualifier is what disambiguates the two refusals.
+    const html = UM.buildZonasTableHtml(zonaRows, new Map(), new Map(), UM.MODO_MOVIMENTO);
     expect(html).toContain('Recusa entrev.');
     // And says so in full on hover, naming the one it is NOT.
     expect(html).toMatch(/title="[^"]*entrevista[^"]*"/);
@@ -1943,8 +1945,8 @@ describe('modo (map variants)', () => {
   test('MODO_BIOMARCADORES keeps the slot columns', () => {
     const html = UM.buildZonasTableHtml([ZONA], new Map(), new Map(), UM.MODO_BIOMARCADORES);
     expect(html).toContain('Slots livres');
-    expect(html).toContain('Manhã');
-    expect(html).toContain('Agendados');
+    expect(html).toContain('Slots manhã');
+    expect(html).toContain('>Agendado</th>');
   });
 
   test('every row has the same cell count as the header', () => {
@@ -2841,7 +2843,7 @@ describe('untouched households get their own column', () => {
     };
     [UM.MODO_MOVIMENTO, UM.MODO_BIOMARCADORES].forEach((modo) => {
       const html = UM.buildZonasTableHtml([zonaRow], new Map(), new Map(), modo);
-      expect(html).toContain('Não distribuída');
+      expect(html).toContain(modo.comDemanda ? 'A entrevistar' : 'Não distribuída');
       // Header and body still agree.
       const ths = (html.match(/<th[ >]/g) || []).length;
       const tds = (html.match(/<td[ >]/g) || []).length;
@@ -3316,54 +3318,6 @@ describe('renderLeafletMap wires the three map features', () => {
   });
 });
 
-describe('biomarcadores zonas columns after the posição join', () => {
-  const linha = (over) => ({
-    controle: 'C1', domicilio: '1', idZona: 'Z1', zona: 'Z1', temZona: true,
-    temCoordenadas: true, tipoEntrevista: '', ultimaPosicao: 'Distribuido',
-    status: 'Não iniciado', agendado: '', dataAgendada: '', ...over,
-  });
-  const agg = (rows) => UM.aggregateZonas(rows, new Map(), UM.MODO_BIOMARCADORES, '2026-08-15')[0];
-
-  test('untouched and visited-without-outcome are separate columns', () => {
-    // In BA the 1.416 blank-tipo households split 1.192 untouched against
-    // 224 already worked. Both have no interview outcome, but only the
-    // second has had a field visit.
-    const z = agg([
-      linha({ domicilio: '1', ultimaPosicao: 'Distribuido' }),
-      linha({ domicilio: '2', ultimaPosicao: 'Enviado para Carga' }),
-      linha({ domicilio: '3', ultimaPosicao: 'Descarregado Parcialmente' }),
-      linha({ domicilio: '4', ultimaPosicao: 'Reentrevista' }),
-    ]);
-    expect(z.naoDistribuida).toBe(2);
-    expect(z.semDesfecho).toBe(2);
-    expect(z.outros).toBe(0);
-  });
-
-  test('a real tipo still lands in its own column, not Sem desfecho', () => {
-    const z = agg([
-      linha({ domicilio: '1', tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado' }),
-      linha({ domicilio: '2', tipoEntrevista: 'Domicílio Vago', ultimaPosicao: 'Descarregado' }),
-    ]);
-    expect(z.realizada).toBe(1);
-    expect(z.outros).toBe(1);
-    expect(z.semDesfecho).toBe(0);
-  });
-
-  test('every household lands in exactly one column', () => {
-    const z = agg([
-      linha({ domicilio: '1', ultimaPosicao: 'Distribuido' }),
-      linha({ domicilio: '2', ultimaPosicao: 'Reentrevista' }),
-      linha({ domicilio: '3', tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado' }),
-      linha({ domicilio: '4', tipoEntrevista: 'Recusa', ultimaPosicao: 'Descarregado' }),
-      linha({ domicilio: '5', tipoEntrevista: 'Demolida', ultimaPosicao: 'Descarregado' }),
-    ]);
-    const soma = z.naoDistribuida + z.semDesfecho + z.realizada +
-      z.naoIniciada + z.domicilioFechado + z.recusa + z.outros;
-    expect(soma).toBe(z.totalDomicilios);
-    expect(z.totalDomicilios).toBe(5);
-  });
-});
-
 describe('demand columns are disjoint and add up', () => {
   const linha = (over) => ({
     controle: 'C1', domicilio: '1', idZona: 'Z1', temZona: true,
@@ -3402,9 +3356,8 @@ describe('demand columns are disjoint and add up', () => {
   test('the headers say what they count', () => {
     const zonaRow = { ...agg([linha()]) };
     const html = UM.buildZonasTableHtml([zonaRow], new Map(), new Map(), UM.MODO_BIOMARCADORES);
-    expect(html).toContain('A agendar');
-    expect(html).toContain('Já agendados');
-    expect(html).toContain('Sem desfecho');
+    expect(html).toContain('Agendamento pendente');
+    expect(html).toContain('Em campo (indefinida)');
     // The slot columns say they are FREE slots.
     expect(html).toContain('Slots manhã');
     expect(html).toContain('Slots tarde');
@@ -3521,9 +3474,179 @@ describe('every household lands in a column that is actually rendered', () => {
       linha({ domicilio: '1' }),
       linha({ domicilio: '2', ultimaPosicao: 'Distribuido' }),
     ], new Map(), UM.MODO_BIOMARCADORES, '2026-08-15');
-    const soma = z[0].naoDistribuida + z[0].semDesfecho + z[0].realizada +
-      z[0].domicilioFechado + z[0].recusa + z[0].outros;
+    const soma = z[0].aEntrevistar + z[0].emAndamento + z[0].inelegivel +
+      z[0].semAgendamento + z[0].agendamentoPendente + z[0].agendadoBio +
+      z[0].coletado + z[0].recusaBio + z[0].semEntrevista;
     expect(soma).toBe(z[0].totalDomicilios);
+    // Nothing may land in the interview-outcome buckets on this page.
     expect(z[0].naoIniciada).toBe(0);
+    expect(z[0].outros).toBe(0);
+  });
+});
+
+describe('classificaDomicilio — the nine-column partition', () => {
+  const hoje = '2026-08-15';
+  const d = (over) => ({
+    tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado',
+    status: 'Não iniciado', dataAgendada: '', dataFinalColeta: '', ...over,
+  });
+  const c = (over) => UM.classificaDomicilio(d(over), hoje);
+
+  test('A entrevistar: nobody has been there yet', () => {
+    expect(c({ tipoEntrevista: '', ultimaPosicao: 'Distribuido' })).toBe('aEntrevistar');
+    expect(c({ tipoEntrevista: '', ultimaPosicao: 'Enviado para Carga' })).toBe('aEntrevistar');
+  });
+
+  test('Em campo (indefinida): left distribution, no tipo recorded', () => {
+    expect(c({ tipoEntrevista: '', ultimaPosicao: 'Descarregado Parcialmente' }))
+      .toBe('emAndamento');
+    expect(c({ tipoEntrevista: '', ultimaPosicao: 'Reentrevista' })).toBe('emAndamento');
+  });
+
+  test('Sem agendamento iniciado: interview done, 25A.01 never answered', () => {
+    // 25A.01 asks the INTERVIEWER "deseja iniciar o agendamento?" — these
+    // stopped before it. Still transmitting (Parcialmente/Reentrevista),
+    // so unlike the terminal case below they may yet get there.
+    expect(c({ ultimaPosicao: 'Descarregado Parcialmente' })).toBe('semAgendamento');
+    expect(c({ ultimaPosicao: 'Reentrevista' })).toBe('semAgendamento');
+  });
+
+  test('Inelegível: interview finished without ever opening the biomarcador', () => {
+    // Realizada + Descarregado + Não iniciado + no prazo. Measured in BA,
+    // 69 of these 74 have a selected resident under 35 — the eligibility
+    // floor (minimum age ever collected: 35; maximum among these: 34), so
+    // no collection will ever happen. Requiring Descarregado is what makes
+    // the inference safe: among partially-transmitted households the age
+    // mix is nearly even (23 under 35 against 33 over).
+    expect(c({ ultimaPosicao: 'Descarregado', status: 'Não iniciado' })).toBe('inelegivel');
+  });
+
+  test('Agendamento pendente: deadline running, nothing booked', () => {
+    expect(c({ status: 'A agendar', dataFinalColeta: '20/08/2026' })).toBe('agendamentoPendente');
+    expect(c({ status: 'Indefinido', dataFinalColeta: '20/08/2026' })).toBe('agendamentoPendente');
+    expect(c({ status: 'Agendado', dataAgendada: '01/08/2026', dataFinalColeta: '20/08/2026' }))
+      .toBe('agendamentoPendente');
+  });
+
+  test('Agendado: future date wins, even over an open interview', () => {
+    expect(c({ status: 'Agendado', dataAgendada: '31/12/2099' })).toBe('agendado');
+    expect(c({ tipoEntrevista: '', ultimaPosicao: 'Reentrevista',
+      status: 'Agendado', dataAgendada: '31/12/2099' })).toBe('agendado');
+    // Order matters: a future booking WITH a deadline must not fall into
+    // Agendamento pendente.
+    expect(c({ status: 'Agendado', dataAgendada: '31/12/2099', dataFinalColeta: '20/08/2026' }))
+      .toBe('agendado');
+  });
+
+  test('Coletado wins over everything', () => {
+    ['Coletado Sangue e Urina', 'Coletado apenas Sangue', 'Coletado apenas Urina']
+      .forEach((status) => expect(c({ status })).toBe('coletado'));
+    expect(c({ status: 'Coletado Sangue e Urina', dataFinalColeta: '20/08/2026' }))
+      .toBe('coletado');
+  });
+
+  test('Recusa is its own column — it may still be reversible', () => {
+    expect(c({ status: 'Recusa' })).toBe('recusa');
+    expect(c({ tipoEntrevista: 'Recusa', status: 'Não iniciado' })).toBe('recusa');
+    // Biomarcador refusal wins over an open interview.
+    expect(c({ tipoEntrevista: '', ultimaPosicao: 'Reentrevista', status: 'Recusa' }))
+      .toBe('recusa');
+  });
+
+  test('Encerrado sem entrevista: no usable interview happened', () => {
+    // Kept apart from Inelegível on purpose: there the interview WAS
+    // done (all 74 are tipo Realizada) and only the resident is out of
+    // range, so "sem entrevista" would be false for the majority.
+    ['Outro Motivo', 'Não elegível'].forEach((status) =>
+      expect(c({ status })).toBe('semEntrevista'));
+    ['Domicílio Vago', 'Uso Ocasional', 'Domicílio Fechado', 'Demolida',
+      'Em obras ou ruínas', 'Não Residencial', 'Não Foi Encontrado'].forEach((tipoEntrevista) =>
+      expect(c({ tipoEntrevista, status: 'Não iniciado' })).toBe('semEntrevista'));
+  });
+
+  test('never returns nothing', () => {
+    // A household that matched no rule would vanish from the status
+    // columns while still counting toward Total.
+    expect(c({ tipoEntrevista: '', ultimaPosicao: 'Descarregado', status: 'Novo Status' }))
+      .toBeTruthy();
+    expect(c({ tipoEntrevista: 'Tipo Novo', ultimaPosicao: '', status: '' })).toBeTruthy();
+  });
+});
+
+describe('the Zonas table renders the nine columns', () => {
+  const hoje = '2026-08-15';
+  const d = (over) => ({
+    controle: 'C1', idZona: 'Z1', zona: 'Z1', temZona: true, temCoordenadas: true,
+    tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado',
+    status: 'Não iniciado', dataAgendada: '', dataFinalColeta: '', agendado: '', ...over,
+  });
+
+  test('a realistic mix lands one household per column and sums to Total', () => {
+    const z = UM.aggregateZonas([
+      d({ domicilio: '1', tipoEntrevista: '', ultimaPosicao: 'Distribuido' }),
+      d({ domicilio: '2', tipoEntrevista: '', ultimaPosicao: 'Descarregado Parcialmente' }),
+      d({ domicilio: '3' }),
+      d({ domicilio: '4', ultimaPosicao: 'Reentrevista' }),
+      d({ domicilio: '5', status: 'A agendar', dataFinalColeta: '20/08/2026' }),
+      d({ domicilio: '6', status: 'Agendado', dataAgendada: '31/12/2099' }),
+      d({ domicilio: '7', status: 'Coletado Sangue e Urina' }),
+      d({ domicilio: '8', status: 'Recusa' }),
+      d({ domicilio: '9', tipoEntrevista: 'Domicílio Vago' }),
+    ], new Map(), UM.MODO_BIOMARCADORES, hoje)[0];
+    expect(z.aEntrevistar).toBe(1);
+    expect(z.emAndamento).toBe(1);
+    expect(z.inelegivel).toBe(1);
+    expect(z.semAgendamento).toBe(1);
+    expect(z.agendamentoPendente).toBe(1);
+    expect(z.agendadoBio).toBe(1);
+    expect(z.coletado).toBe(1);
+    expect(z.recusaBio).toBe(1);
+    expect(z.semEntrevista).toBe(1);
+    const soma = z.aEntrevistar + z.emAndamento + z.inelegivel + z.semAgendamento +
+      z.agendamentoPendente + z.agendadoBio + z.coletado + z.recusaBio + z.semEntrevista;
+    expect(soma).toBe(z.totalDomicilios);
+    expect(z.totalDomicilios).toBe(9);
+  });
+
+  test('the headers are the agreed labels', () => {
+    const z = UM.aggregateZonas([d({ domicilio: '1' })], new Map(),
+      UM.MODO_BIOMARCADORES, hoje)[0];
+    const html = UM.buildZonasTableHtml([z], new Map(), new Map(), UM.MODO_BIOMARCADORES);
+    ['A entrevistar', 'Em campo (indefinida)', 'Inelegível',
+      'Sem agendamento iniciado', 'Agendamento pendente', 'Agendado',
+      'Coletado', 'Recusa', 'Encerrado sem entrevista'].forEach((label) =>
+      expect(html).toContain(`>${label}</th>`));
+    // The names that confused the reader are gone.
+    expect(html).not.toContain('Biomarc. devidos');
+    expect(html).not.toContain('Não distribuída');
+    expect(html).not.toContain('Sem desfecho');
+    expect(html).not.toContain('>Outros</th>');
+  });
+
+  test('header and body still agree in both variants', () => {
+    const z = UM.aggregateZonas([d({ domicilio: '1' })], new Map(),
+      UM.MODO_BIOMARCADORES, hoje)[0];
+    [UM.MODO_MOVIMENTO, UM.MODO_BIOMARCADORES].forEach((modo) => {
+      const html = UM.buildZonasTableHtml([z], new Map(), new Map(), modo);
+      const ths = (html.match(/<th[ >]/g) || []).length;
+      const tds = (html.match(/<td[ >]/g) || []).length;
+      expect(tds).toBe(ths);
+    });
+  });
+
+  test('the capacity flag uses Agendamento pendente', () => {
+    // The actionable queue, not everything still open — comparing the
+    // old 170-style count raised false alarms on zones with nothing
+    // bookable this week.
+    const z = UM.aggregateZonas([
+      d({ domicilio: '1', status: 'A agendar', dataFinalColeta: '20/08/2026' }),
+      d({ domicilio: '2', status: 'A agendar', dataFinalColeta: '20/08/2026' }),
+      d({ domicilio: '3', tipoEntrevista: '', ultimaPosicao: 'Distribuido' }),
+    ], new Map(), UM.MODO_BIOMARCADORES, hoje)[0];
+    const html = UM.buildZonasTableHtml([z], new Map(),
+      new Map([['Z1', { manha: 1, tarde: 0 }]]), UM.MODO_BIOMARCADORES);
+    // 2 pending against 1 free slot.
+    expect(html).toContain('sigc-pro-zona-sem-capacidade');
+    expect(html).toContain('Deve 2 biomarcador(es)');
   });
 });

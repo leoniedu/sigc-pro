@@ -263,6 +263,11 @@
       idZona, nomeZona,
       realizada: 0, naoIniciada: 0, domicilioFechado: 0, recusa: 0, outros: 0,
       naoDistribuida: 0, semDesfecho: 0,
+      // The nine-column partition (MODO_BIOMARCADORES) — see
+      // classificaDomicilio. Every household increments exactly one.
+      aEntrevistar: 0, emAndamento: 0, inelegivel: 0, semAgendamento: 0,
+      agendamentoPendente: 0, agendadoBio: 0, coletado: 0, recusaBio: 0,
+      semEntrevista: 0,
       totalDomicilios: 0, semCoordenadas: 0, agendados: 0,
       realizadasSemAgendamento: 0, pendentes: 0,
       aAgendar: 0, jaAgendados: 0,
@@ -295,17 +300,24 @@
       // households already worked whose interview produced no outcome
       // (224). Filing both under one label hides which of the two a zona
       // is actually made of.
-      let coluna;
-      if (POSICAO_NAO_EM_CAMPO.has(r.ultimaPosicao)) coluna = 'naoDistribuida';
-      else if (m.comDemanda && (!r.tipoEntrevista || r.tipoEntrevista === 'Não Iniciada')) {
-        // 'Não Iniciada' means the same thing as a blank tipo here — the
-        // interview has not concluded — and this page renders no Não
-        // Iniciada column, so folding them keeps every household in a
-        // column the reader can actually see.
-        coluna = 'semDesfecho';
-      } else if (!r.tipoEntrevista) coluna = 'semDesfecho';
-      else coluna = TIPO_COLUNA[r.tipoEntrevista] || 'outros';
-      bucket[coluna] += 1;
+      // On the biomarcadores page the columns are collection states (see
+      // classificaDomicilio); on Último Movimento they stay interview
+      // outcomes, which is all that report carries.
+      if (m.comDemanda) {
+        const CHAVE = {
+          coletado: 'coletado', agendado: 'agendadoBio', recusa: 'recusaBio',
+          semEntrevista: 'semEntrevista', inelegivel: 'inelegivel',
+          agendamentoPendente: 'agendamentoPendente',
+          semAgendamento: 'semAgendamento', aEntrevistar: 'aEntrevistar',
+          emAndamento: 'emAndamento',
+        };
+        bucket[CHAVE[classificaDomicilio(r, hojeIso)]] += 1;
+      } else {
+        const coluna = POSICAO_NAO_EM_CAMPO.has(r.ultimaPosicao)
+          ? 'naoDistribuida'
+          : (TIPO_COLUNA[r.tipoEntrevista] || 'outros');
+        bucket[coluna] += 1;
+      }
       bucket.totalDomicilios += 1;
       if (!r.temCoordenadas) bucket.semCoordenadas += 1;
       if (r.agendado) bucket.agendados += 1;
@@ -385,6 +397,69 @@
     'Não Iniciada': STATUS_NAO_INICIADA,
     'Domicílio Fechado': STATUS_FECHADO,
   };
+
+  // --- The nine-column partition (MODO_BIOMARCADORES) --------------------
+  //
+  // One column per household, summing to Total. The old set answered the
+  // wrong question: it counted INTERVIEW outcomes on a page about
+  // COLLECTIONS, so 76% of households landed in "Outros" and the
+  // actionable queue read 170 when 29 could actually be booked.
+  //
+  // Read left to right as a pipeline, with the two dead ends pulled out:
+  //   A entrevistar -> Em campo (indefinida) -> Sem agendamento
+  //   iniciado -> Agendamento pendente -> Agendado -> Coletado
+  //   (Inelegível and Encerrado sem entrevista leave the pipeline.)
+  //
+  // Counts below are BA on 2026-08-15, measured against the parquet.
+  const TIPO_SEM_MORADOR = new Set([
+    'Domicílio Vago', 'Uso Ocasional', 'Domicílio Fechado', 'Demolida',
+    'Em obras ou ruínas', 'Não Residencial', 'Não Foi Encontrado', 'Outro Motivo',
+  ]);
+
+  function temPrazo(r) {
+    return !!String((r && r.dataFinalColeta) || '').trim();
+  }
+
+  // ORDER IS LOAD-BEARING. 47 BA households are 'Agendado' AND have a
+  // deadline; the 36 future-dated must be claimed as `agendado` before
+  // the deadline rule runs, or they would inflate the actionable queue.
+  // Likewise a biomarcador outcome wins over an unfinished interview —
+  // a booked collection is the fact a supervisor acts on.
+  function classificaDomicilio(r, hojeIso) {
+    const status = (r && r.status) || '';
+    const tipo = (r && r.tipoEntrevista) || '';
+    const posicao = (r && r.ultimaPosicao) || '';
+
+    if (STATUS_COLETADO.has(status)) return 'coletado';                    // 128
+    if (status === STATUS_AGENDADO && !coletaEmAberto(r, hojeIso)) {
+      return 'agendado';                                                   // 40
+    }
+    if (status === 'Recusa' || tipo === 'Recusa') return 'recusa';         // 68
+    if (status === 'Outro Motivo' || status === 'Não elegível' ||
+        TIPO_SEM_MORADOR.has(tipo)) {
+      return 'semEntrevista';                                              // 43
+    }
+    // Interview finished, fully transmitted, and the biomarcador was
+    // never opened — no visit, no scheduler, no deadline. In BA 69 of
+    // these 74 have a selected resident under 35, below the eligibility
+    // floor (minimum age ever collected: 35). Requiring Descarregado is
+    // what makes the inference safe: among partially-transmitted
+    // households the age mix is nearly even, so including them would be
+    // wrong about as often as right.
+    if (tipo === 'Realizada' && posicao === 'Descarregado' &&
+        status === 'Não iniciado' && !temPrazo(r)) {
+      return 'inelegivel';                                                 // 74
+    }
+    if (tipo === 'Realizada') {
+      // The deadline is born from item 25A.01 — "ENTREVISTADOR(A): Deseja
+      // iniciar o agendamento para a coleta de sangue e urina?", the last
+      // module of the questionnaire. Its presence is what separates a
+      // collection already under way from one never begun.
+      return temPrazo(r) ? 'agendamentoPendente' : 'semAgendamento';       // 29 / 67
+    }
+    if (POSICAO_NAO_EM_CAMPO.has(posicao)) return 'aEntrevistar';          // 1.192
+    return 'emAndamento';                                                  // 219
+  }
 
   // --- Agência layers ----------------------------------------------------
   //
@@ -886,6 +961,34 @@
     const TIP_SEM_DESFECHO =
       'Já distribuído, mas a entrevista ainda não concluiu — sem tipo ' +
       'registrado. Alguém já esteve lá; o desfecho é que não veio.';
+    const TIP_A_ENTREVISTAR =
+      'Ainda não chegou ao entrevistador (Distribuído ou Enviado para Carga). ' +
+      'Ninguém esteve lá — não é atraso de campo.';
+    // NOT "em andamento": the SIGC recorded no tipo at all, so there is
+    // no evidence the interview progressed — only that the household
+    // left distribution. An interview genuinely under way shows a tipo
+    // and lands in one of the columns to the right.
+    const TIP_EM_ANDAMENTO =
+      'Já saiu da distribuição, mas o SIGC não registrou tipo de ' +
+      'entrevista — situação indefinida. Não afirma que a entrevista começou.';
+    const TIP_SEM_AGENDAMENTO =
+      'Entrevista realizada, mas o agendamento do biomarcador nunca foi ' +
+      'aberto (item 25A.01 não respondido). Não há prazo correndo.';
+    const TIP_AGEND_PENDENTE =
+      'Prazo do biomarcador correndo e sem horário marcado — inclui ' +
+      'agendamento vencido. É a fila de trabalho da zona.';
+    const TIP_AGENDADO = 'Biomarcador com data futura marcada.';
+    const TIP_COLETADO = 'Biomarcador coletado (sangue, urina ou ambos).';
+    const TIP_RECUSA_BIO =
+      'Recusa do biomarcador ou da entrevista. Pode ser revertida — por ' +
+      'isso não entra em Encerrado.';
+    const TIP_INELEGIVEL =
+      'Entrevista concluída e descarregada sem abrir o biomarcador. Em ' +
+      'geral o morador sorteado tem menos de 35 anos, abaixo da idade de ' +
+      'coleta — não haverá coleta.';
+    const TIP_SEM_ENTREVISTA =
+      'Sem entrevista aproveitável: domicílio vago, uso ocasional, ' +
+      'demolido, fora de âmbito ou encerrado por outro motivo.';
     const TIP_A_AGENDAR =
       'Entrevista realizada, biomarcador em aberto e sem horário marcado — ' +
       'inclui agendamento vencido sem coleta. Só entra quem dá para agendar ' +
@@ -901,26 +1004,23 @@
       '<tr>' +
       `<th class="sigc-pro-zona-pin-col" data-orderable="false" title="${esc(TIP_PIN)}"></th>` +
       '<th>Zona</th><th>Nome</th>' +
-      // First among the status columns: it is the state BEFORE fieldwork,
-      // so the row reads left-to-right as a progression.
-      `<th title="${esc(TIP_NAO_DISTRIBUIDA)}">Não distribuída</th>` +
-      (m.comDemanda ? `<th title="${esc(TIP_SEM_DESFECHO)}">Sem desfecho</th>` : '') +
-      '<th>Realizada</th>' +
-      (m.comDemanda ? '' : '<th>Não Iniciada</th>') +
-      '<th>Dom. Fechado</th>' +
-      `<th title="${esc(TIP_RECUSA)}">Recusa entrev.</th>` +
-      '<th>Outros</th><th>Total</th>' +
-      '<th>Sem coordenadas</th>' +
-      (m.comAgenda ? '<th>Agendados</th>' : '') +
-      // Named per variant: in MODO_BIOMARCADORES the count is of
-      // biomarcadores owed, so naming it after the interview state would
-      // read as an interview column. In MODO_MOVIMENTO the proxy rule
-      // literally IS "Realizada sem agendamento", so that name is the
-      // honest one — it says what was measured, proxy and all.
+      // Left to right IS the pipeline, with the two dead ends pulled out
+      // of it. See classificaDomicilio for the predicates.
       (m.comDemanda
-        ? `<th title="${esc(TIP_A_AGENDAR)}">A agendar</th>` +
-          `<th title="${esc(TIP_JA_AGENDADOS)}">Já agendados</th>`
-        : '') +
+        ? `<th title="${esc(TIP_A_ENTREVISTAR)}">A entrevistar</th>` +
+          `<th title="${esc(TIP_EM_ANDAMENTO)}">Em campo (indefinida)</th>` +
+          `<th title="${esc(TIP_SEM_AGENDAMENTO)}">Sem agendamento iniciado</th>` +
+          `<th title="${esc(TIP_AGEND_PENDENTE)}">Agendamento pendente</th>` +
+          `<th title="${esc(TIP_AGENDADO)}">Agendado</th>` +
+          `<th title="${esc(TIP_COLETADO)}">Coletado</th>` +
+          `<th title="${esc(TIP_RECUSA_BIO)}">Recusa</th>` +
+          `<th title="${esc(TIP_INELEGIVEL)}">Inelegível</th>` +
+          `<th title="${esc(TIP_SEM_ENTREVISTA)}">Encerrado sem entrevista</th>` +
+          '<th>Total</th><th>Sem coordenadas</th>'
+        : `<th title="${esc(TIP_NAO_DISTRIBUIDA)}">Não distribuída</th>` +
+          '<th>Realizada</th><th>Não Iniciada</th><th>Dom. Fechado</th>' +
+          `<th title="${esc(TIP_RECUSA)}">Recusa entrev.</th>` +
+          '<th>Outros</th><th>Total</th><th>Sem coordenadas</th>') +
       (m.comSlots
         ? `<th title="${esc(TIP_TURNO)}">Slots manhã</th>` +
           `<th title="${esc(TIP_TURNO)}">Slots tarde</th>` +
@@ -974,17 +1074,23 @@
         `<td class="sigc-pro-zona-pin-col">${pinCell}</td>` +
         `<td>${zonaLabel}</td>` +
         `<td>${esc(r.nomeZona)}</td>` +
-        `<td>${r.naoDistribuida || 0}</td>` +
-        (m.comDemanda ? `<td>${r.semDesfecho || 0}</td>` : '') +
-        `<td>${r.realizada}</td>` +
-        (m.comDemanda ? '' : `<td>${r.naoIniciada}</td>`) +
-        `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
-        `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>` +
-        (m.comAgenda ? `<td>${r.agendados}</td>` : '') +
         (m.comDemanda
-          ? `<td class="sigc-pro-devidas">${r.aAgendar || 0}</td>` +
-            `<td>${r.jaAgendados || 0}</td>`
-          : '') +
+          ? `<td>${r.aEntrevistar || 0}</td>` +
+            `<td>${r.emAndamento || 0}</td>` +
+            `<td>${r.semAgendamento || 0}</td>` +
+            // The actionable queue, bolded: it is the one number in the
+            // row that says "book something this week".
+            `<td class="sigc-pro-devidas">${r.agendamentoPendente || 0}</td>` +
+            `<td>${r.agendadoBio || 0}</td>` +
+            `<td>${r.coletado || 0}</td>` +
+            `<td>${r.recusaBio || 0}</td>` +
+            `<td>${r.inelegivel || 0}</td>` +
+            `<td>${r.semEntrevista || 0}</td>` +
+            `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>`
+          : `<td>${r.naoDistribuida || 0}</td>` +
+            `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
+            `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
+            `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>`) +
         (m.comSlots
           ? `<td>${turnos.manha || 0}</td><td>${turnos.tarde || 0}</td>` +
             `<td class="sigc-pro-slots-cell" data-order="${slotsCount}">${slotsCell}</td>`
@@ -2655,6 +2761,7 @@
     statusColor,
     raioPorZoom,
     agruparPorAgencia,
+    classificaDomicilio,
     valeControleDeCamadas,
     corDaBorda,
     marcadorUrgente,
