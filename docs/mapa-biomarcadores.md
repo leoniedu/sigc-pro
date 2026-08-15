@@ -1,9 +1,9 @@
-# Mapa de biomarcadores no Relatório de Acompanhamento de Biomarcadores
+# O mapa em duas variantes: Biomarcadores e Último Movimento
 
 > Revisão de `prompt-extensao.md` (sessão pns.zonas, 14/08/2026), com as
-> citações de código conferidas contra as fontes e a decisão de página já
-> tomada. O que mudou em relação àquele documento está listado no
-> apêndice A.
+> citações de código conferidas contra as fontes. O que mudou em relação
+> àquele documento está no apêndice A; o que já foi implementado, no
+> apêndice B.
 
 Contexto: `pns.zonas/scripts/relatorio_agenda.R` e esta extensão relatam os
 mesmos dados e devem concordar. Numa sessão de 14/08/2026 o script R foi
@@ -12,20 +12,48 @@ caíram. Parte já foi portada para cá — o domínio de `ultimaPosicao`, o
 casamento positivo, a inclusão de `Reentrevista`, a remoção da whitelist de
 tipo. Este documento trata do que ficou.
 
-## Decisão de página (resolvida)
+## Decisão de arquitetura (resolvida): duas variantes, não uma migração
 
-**O mapa de biomarcadores vive no Relatório de Acompanhamento de
-Biomarcadores**, não no Último Movimento:
+O mapa de biomarcadores vive no Relatório de Acompanhamento de
+Biomarcadores:
 
 ```
 https://portalweb.ibge.gov.br/f5-w-…$$/relatorio/relatorio-acomp-biomarc
 ```
 
-O recorte vem do **filtro da própria página**, exatamente como o Mapa faz
-hoje no Último Movimento: captura-se `#filtroJson` no clique de `#btnFiltrar`
-e exige-se **agência OU município OU controle**. Isso elimina o fan-out por
-município e a lista de municípios com biomarcador — o usuário escolhe o
-recorte, e é uma requisição só.
+**Mas o Último Movimento mantém um mapa próprio.** A versão anterior deste
+documento tratava a mudança como migração — "reduzir o Último Movimento ao
+que ele faz bem", apagar a lógica de proxy. Não é isso: são **duas
+variantes do mesmo painel**, escolhidas pela página, porque a versão sem
+agendamentos vale por si.
+
+| | Último Movimento (`MODO_MOVIMENTO`) | Biomarcadores (`MODO_BIOMARCADORES`) |
+|---|---|---|
+| Requisições | **1** (Lista de Endereços) | 2 (Endereços + agenda) |
+| Demanda vem de | `ultimaPosicao` (proxy) | `status` (literal) |
+| `agendado` vem de | — | `Data Agendada` do relatório |
+| Agenda serve para | — | **só** slots livres por zona |
+| Colunas de agenda/slot | ausentes | completas |
+| Flag de capacidade | nunca dispara | dispara |
+
+Por que a variante sem agenda vale a pena: **uma requisição só**, o que a
+torna utilizável em qualquer recorte de controle/município/agência sem o
+custo (nem o consentimento) da consulta à agenda da UF. Ela perde as
+colunas derivadas da agenda, e as **omite** em vez de mostrá-las zeradas —
+uma coluna de travessões diz "nada agendado" quando a verdade é "não foi
+perguntado".
+
+O proxy do `ultimaPosicao` **continua vivo** nessa variante, e continua
+sendo um proxy: erra nos dois sentidos (§2). Isso é aceitável porque ali
+ele é a única fonte disponível, e porque a variante não afirma demanda de
+coleta como se fosse autoritativa — quem quer o número certo abre o
+relatório de biomarcadores. O que **não** se faz é apagá-lo.
+
+O recorte vem do **filtro da própria página** nas duas variantes:
+captura-se `#filtroJson` no clique de `#btnFiltrar` e exige-se **agência OU
+município OU controle**. Isso elimina o fan-out por município e a lista de
+municípios com biomarcador — o usuário escolhe o recorte, e é uma
+requisição só.
 
 Consequências práticas:
 
@@ -33,31 +61,37 @@ Consequências práticas:
   dataset `sf` local (`pns_upas_biomarcador`) que a extensão não tem e não
   tem como obter — era a dependência não resolvida da versão anterior deste
   documento.
-- `motivoBloqueio()` (`ultimo-movimento-map.js:1466`) **já implementa
-  exatamente essa regra**: bloqueia quando `IdAgencia`, `IdMunicipio` e
-  `Controle` são todos wildcard. Reaproveitar, não reescrever.
+- `motivoBloqueio()` **já implementava exatamente essa regra**: bloqueia
+  quando `IdAgencia`, `IdMunicipio` e `Controle` são todos wildcard.
+  Reaproveitada nas duas variantes, sem reescrita.
 - O `manifest.json` já casa `https://portalweb.ibge.gov.br/*`, então a nova
-  página está coberta sem mudança de permissão.
-- Falta só a detecção de página: `onUltimoMovimento()`
-  (`ultimo-movimento-export.js:34`) procura um `<h6>` com "último
-  movimento". O análogo é procurar "acompanhamento de biomarcadores" —
-  mesma normalização de acento.
+  página ficou coberta sem mudança de permissão.
+- ✅ Detecção de página: `onBiomarcadores()`. Não dá para compartilhar com
+  `onUltimoMovimento()` (`ultimo-movimento-export.js:34`), que procura um
+  `<h6>` — esta página não tem título em `<h6>`, só o breadcrumb. Casa o
+  **nome completo** do relatório, nunca a palavra "Biomarcadores" sozinha,
+  que é entrada de menu em todo o SIGC. `modoAtual()` escolhe a variante a
+  partir dela.
 
 ## Resumo: a recomendação principal
 
-**Esta lógica pertence ao Relatório de Acompanhamento de Biomarcadores.**
-`ultimaPosicao` é um proxy, e a sessão mediu que ele erra nos dois sentidos.
-O relatório de biomarcadores traz o status literal da coleta. A extensão já
-sabe que ele existe (`common/sigc-common.js:50`, `biomarcadores: { index: 17 }`),
-mas não o consome.
+**A demanda de coleta pertence ao Relatório de Acompanhamento de
+Biomarcadores.** `ultimaPosicao` é um proxy, e a sessão mediu que ele erra
+nos dois sentidos. Onde o relatório está disponível, é ele que manda.
+
+O que **não** decorre disso: apagar o mapa do Último Movimento. Lá o proxy
+segue sendo a única fonte, e a variante de uma requisição só tem valor
+próprio — ver a tabela acima.
 
 ---
 
 ## 1. Corrigir os números citados nos comentários
 
-> **Não aplicar isolado.** Ver "Ordem sugerida": estes comentários são
-> apagados pela migração. O conteúdo abaixo vale como **insumo do código
-> novo**. Só vale editá-los no lugar se a migração for adiada.
+> **Agora é para aplicar no lugar.** A versão anterior deste documento
+> mandava esperar, porque a migração apagaria estes comentários. Não há
+> migração: `MODO_MOVIMENTO` mantém a regra do `ultimaPosicao`, e os
+> comentários que a justificam **continuam no código**, afirmando números
+> falsos com aparência de medição. Ficaram por corrigir.
 
 Os comentários das linhas ~155-170 de `ultimo-movimento-map.js` citam
 percentuais que vieram de uma medição sobre o **histórico SCD**, não sobre o
@@ -95,7 +129,7 @@ números antigos. Duas escolhas mudam o resultado:
   dilui o percentual.
 
 Sobre o mesmo recorte de estado atual, o denominador "todas as Realizadas"
-daria 32,5% / 25,0% / 7,1% — números que já circularam nesta migração e
+daria 32,5% / 25,0% / 7,1% — números que já circularam neste trabalho e
 **não devem ser usados**: incluem no denominador domicílios que nunca
 deveriam coleta.
 
@@ -132,7 +166,7 @@ Outras afirmações erradas no mesmo bloco:
 Vago` só ocorrem no comentário (`ultimo-movimento-map.js:193-195`). Não há
 casamento morto a consertar; é erro de documentação apenas.
 
-## 2. Consumir o Relatório de Biomarcadores
+## 2. Consumir o Relatório de Biomarcadores ✅
 
 ### Por que o proxy não serve
 
@@ -200,7 +234,7 @@ Endereços** para agrupar por zona. Não dispensa o join para **coordenadas**:
 o relatório não tem lat/lon, então o mapa continua precisando da Lista de
 Endereços por esse motivo.
 
-## 3. Domínio de `status` (10 valores observados)
+## 3. Domínio de `status` (10 valores observados) ✅
 
 ```
 Fecham COM coleta:  Coletado Sangue e Urina, Coletado apenas Sangue,
@@ -225,7 +259,7 @@ Fechado — sem prazo, agendamento ou visita. Provavelmente a mesma família de
 `Outro Motivo` do lado do biomarcador, que é o rótulo mais antigo para o
 mesmo desfecho.
 
-## 4. Duas armadilhas de rótulo homônimo
+## 4. Duas armadilhas de rótulo homônimo (parcial)
 
 **Recusa** e **Outro Motivo** existem nos DOIS campos e significam coisas
 diferentes, em populações quase disjuntas (BA, 14/08/2026):
@@ -289,6 +323,14 @@ mesma janela do R (`primeiro_dia_agendavel()`, `sigc_biomarcadores.R:442`;
 > de semana, e um sábado daqui a três semanas é capacidade real. Excluí-lo
 > subestimaria a zona — o erro oposto ao que este piso conserta. O fim de
 > semana entra só no cálculo do prazo (a sexta que vira +4).
+>
+> (O R vai deixar de restringir seg-sex também; quando isso acontecer, os
+> dois lados passam a concordar e esta nota vira histórica.)
+
+Tudo isto vale **só em `MODO_BIOMARCADORES`**. Sem consulta à agenda não há
+slot livre para comparar, então a flag de capacidade não dispara na
+variante do Último Movimento — pintar escassez a partir de dado que não foi
+buscado diria "0 slots livres" quando a verdade é "não foi perguntado".
 
 Cobertura: só ~14% dos domicílios têm prazo (BA: 253 de 1.860), porque ele
 nasce da resposta ao 25A.01. **`Não iniciado` nunca tem prazo** — o prazo só
@@ -308,10 +350,12 @@ agrupa zona por agência em qualquer lugar, verificar a mesma armadilha. A
 política adotada (igual a `pns.zonas/R/map_corredores.R:291`) é rotular a
 zona como ambígua em vez de atribuí-la a uma agência arbitrária.
 
-## 7. `isPendente` muda — como consequência do passo 1
+## 7. As duas medidas de demanda ✅
 
-> Não é conserto independente: as duas correções abaixo **exigem** o
-> relatório de biomarcadores. Mesma natureza do §4.
+> Implementado. `MODO_BIOMARCADORES` usa `deveColeta()`/`coletaEmAberto()`;
+> `MODO_MOVIMENTO` mantém `isRealizadaSemAgendamento()`/`isPendente()`.
+> As duas variantes **não concordam entre si**, e não deveriam: uma lê o
+> status literal, a outra um proxy que erra nos dois sentidos.
 
 O casamento por posição continua certo — sem whitelist de tipo, excluindo
 `Distribuido` + `Enviado para Carga`. Mas isso sozinho não basta para as duas
@@ -329,14 +373,29 @@ Domicílio fora da subamostra não é pendente (nunca deveu coleta), e
 domicílio cuja coleta já fechou também não. O `isPendente` atual, que roda
 sobre todos os domicílios e ignora o status, conta os dois — e diverge do R.
 
-Na nova página os dois recortes ficam triviais: **toda linha do relatório de
-biomarcadores já é da subamostra**, e `status` dá o segundo filtro
-diretamente.
+Na página de biomarcadores os dois recortes ficaram triviais: **toda linha
+do relatório já é da subamostra**, e `status` dá o segundo filtro
+diretamente. A distinção entre as duas colunas é a mesma do R
+(`relatorio_agenda.R:345` vs `:375`):
 
-Manter o aninhamento (`isRealizadaSemAgendamento` ⊂ `isPendente`) e o
-tooltip que impede o leitor de somar as duas colunas.
+- **Realizadas sem agend.** (`deveColeta`) — coleta em aberto **e**
+  entrevista já realizada. É o que o gap mede.
+- **Pendentes** (`coletaEmAberto`) — coleta em aberto, sem exigir
+  entrevista. Pano de fundo.
 
-## 8. Como buscar o relatório DENTRO da extensão
+O aninhamento é por construção, mas o tooltip o afirma ao usuário, então é
+**verificado por teste** em 108 combinações de status/tipo/data — foi assim
+que se pegou uma primeira versão de `deveColeta()` que, ao excluir todo
+`Agendado`, ficava idêntica a `coletaEmAberto()` e colapsava as duas
+colunas em uma.
+
+Um detalhe que só aparece na implementação: **`Agendado` vencido conta como
+demanda**, e não se testa "tem `agendado` preenchido" para decidir isso — a
+linha vencida ainda carrega a data antiga. Quem resolve é o próprio
+`coletaEmAberto`, que só devolve `true` para `Agendado` depois de a data
+passar.
+
+## 8. Como buscar o relatório DENTRO da extensão ✅
 
 Não reimplementar a mecânica do R (`f5_hex`, curl): a extensão já tem o
 helper certo em `features/agenda-lookups/agenda-lookups.js`.
@@ -351,7 +410,7 @@ O comentário em `agenda-lookups.js:45-48` já registra que o mesmo endpoint
 serve Lista de Endereços e Último Movimento; biomarcadores é mais um slug.
 Ver §2 "Diferenças de request a vigiar" para o Referer.
 
-## 9. Cabeçalhos literais da tabela
+## 9. Cabeçalhos literais da tabela ✅
 
 A extensão casa cabeçalho por texto; se errar, falha fechado.
 
@@ -443,9 +502,15 @@ documentado em `enderecoKey()` (`sigc-common.js:70`).
    dia. Servem para conferir a implementação contra este documento, **não
    como critério de aceitação**. (O histórico SCD de biomarcadores começa em
    13/08/2026 18:19.)
-4. **O que fazer com o mapa do Último Movimento.** Duas ferramentas na mesma
-   extensão, ou aposentar a versão-proxy quando esta estiver de pé. Ver
-   passo 4 da ordem.
+4. **~~O que fazer com o mapa do Último Movimento~~** — resolvido: **fica**,
+   como `MODO_MOVIMENTO`. Não é uma segunda ferramenta a manter em
+   paralelo, é a mesma, com as colunas que dependem da agenda omitidas.
+   Ver a tabela no topo.
+5. **Como o usuário sabe qual variante está vendo.** Hoje a diferença é
+   inferível pelas colunas ausentes e por uma frase no hint da aba Zonas
+   ("Sem consulta à agenda: este recorte não traz agendamentos nem slots
+   livres"). Se isso basta, é pergunta de uso real — não está resolvido por
+   decisão de projeto.
 
 ## 11. O mapa: o lado do R já foi feito
 
@@ -466,6 +531,12 @@ function statusColor(row) {
 A cor é o desfecho da ENTREVISTA, não o da coleta. As ~50 recusas de
 biomarcador da BA saem **verdes**, idênticas a um domicílio já coletado —
 porque a entrevista delas de fato deu certo.
+
+**Ainda é assim, nas duas variantes.** `statusColor()` não foi tocado, e na
+página de biomarcadores isso agora incomoda mais: o `status` literal está
+lido e disponível em cada linha, e a cor continua ignorando-o. Em
+`MODO_MOVIMENTO` a cor por entrevista é a única possível e está certa; o
+que falta é a escala abaixo em `MODO_BIOMARCADORES`.
 
 (A suspeita registrada antes, de que o mapa do R lia biomarcador de uma
 planilha do OneDrive, estava errada: aquela planilha só fornece o endereço
@@ -542,17 +613,29 @@ nenhuma linha de movimento ainda produz uma linha. Verificação restante:
 confirmar que a Lista de Endereços realmente devolve zonas sem movimento —
 o código está certo, a fonte é que não foi conferida.
 
-### Clique na linha inteira atrapalha copiar
+### Clique na linha inteira atrapalha copiar ✅
 
-`wireZonaRowClicks()` (`:749`) põe o handler na `<tr>`. No R isso foi
-desfeito por pedido de uso real: selecionar um código de controle para
-copiar disparava a navegação e a tabela sumia debaixo do cursor.
+Feito: `wireZonaRowClicks()` agora liga o handler ao alfinete, não à `<tr>`.
+No R isso foi desfeito por pedido de uso real — selecionar um código de
+controle para copiar disparava a navegação e a tabela sumia debaixo do
+cursor.
 
-Mover o clique para um alfinete (📍) numa primeira coluna estreita — no R é
-um `<span role="button" tabindex="0" title="Ver no mapa">`. Ganha-se também
-deixar explícito o que é clicável. Cuidado: acrescentar coluna desloca os
-índices de ordenação e de filtro (no DataTables, marcar a coluna do alfinete
-como não-ordenável).
+Três coisas que a implementação acrescentou ao que o R fez:
+
+- O alfinete é `role="button" tabindex="0"` **e responde a Enter/Espaço**.
+  Um elemento tabulável que só atende ao mouse é pior que um não-tabulável.
+- A coluna declara `data-orderable="false"` **no próprio `<th>`**, não por
+  índice: `initPanelTables` usa `order: []` e nenhum `columnDefs`
+  posicional, então nada precisou ser renumerado — era exatamente a
+  armadilha que uma configuração por índice teria armado.
+- O código da zona virou **texto puro**. Era um `<a>` com estilo de link;
+  com o alfinete carregando o gesto, o link seria um segundo alvo de
+  clique sobre justamente o texto que o usuário quer selecionar.
+
+Efeito colateral bem-vindo: o `<details>` dos slots livres deixou de ser
+impossível. O comentário no código registrava que a lista ficava inline
+porque o handler da linha engolia o clique do `<summary>` — essa restrição
+não existe mais.
 
 ### O que NÃO portar
 
@@ -563,46 +646,45 @@ extensão já faz.
 
 ---
 
-## Ordem sugerida
+## O que falta
 
-O trabalho é **construir no Relatório de Biomarcadores**, não consertar o
-proxy. Boa parte do que hoje está em `ultimo-movimento-map.js` sai fora,
-então não vale poli-lo antes.
+Os passos 1 e 2 da ordem original estão feitos (apêndice B). O que resta,
+em ordem de valor:
 
-1. **Montar na nova página.** Detecção de página análoga a
-   `onUltimoMovimento()`, captura de `#filtroJson` no `#btnFiltrar`,
-   `motivoBloqueio()` reaproveitado (agência/município/controle), POST via
-   `postRelatorio` com `slug=relatorio-acomp-biomarc`, parse de
-   `#tableRelatorio` contra os cabeçalhos do §9 (já conferidos ao vivo),
-   casando com `foldLive()`.
-2. **Ler `status`** e derivar a demanda dele (§3), substituindo
-   `isRealizadaSemAgendamento`. A zona vem do próprio relatório
-   (`id_zona`/`nome_zona`), o que dispensa o join com a Lista de Endereços
-   **para agrupar** — mas não para coordenadas.
-3. **Alerta de prazo** (§5). É o que o proxy nunca conseguiu fazer, porque
-   `data_final_coleta` só existe neste relatório. (O piso da janela de
-   agendamento, que era parte deste passo, já foi feito à parte.)
-4. **Cor por status de biomarcador** e as duas recusas separadas (§11, §4).
-   Sai como consequência do passo 2.
-5. **Decidir o destino do mapa do Último Movimento** (§10.4). Se aposentado,
-   apagar a lógica de "devido" baseada em `ultimaPosicao` e os comentários
-   que a sustentam — em vez de corrigi-los agora e deletá-los depois.
+1. **Alerta de prazo** (§5). `data_final_coleta` e `dias_prazo_final` já
+   são lidos e guardados por `biomarcadoresParaLinhas()`, e **ninguém os
+   usa ainda**. É o que o proxy nunca conseguiu fazer. Lembrar de
+   recalcular a partir de `data_final_coleta` em vez de confiar em
+   `dias_prazo_final`, que vem truncado em zero, e de exigir coleta em
+   aberto — destacar prazo de domicílio já coletado foi o erro que o R
+   cometeu primeiro (75 de 138 destaques).
+2. **Cor por status de biomarcador** e as duas recusas separadas no mapa
+   (§11, §4). Hoje `statusColor()` ainda pinta pelo desfecho da
+   entrevista nas duas variantes, então na página de biomarcadores um
+   domicílio que recusou a coleta sai verde, igual a um já coletado. Sai
+   como consequência direta do que já está lido.
+3. **Corrigir os comentários do §1.** Deixou de ser trabalho descartável
+   quando `MODO_MOVIMENTO` ficou: os números falsos estão em código que
+   continua rodando. O que não pode se perder é a correção da cobertura —
+   o comentário afirma que a fonte autoritativa cobre ~48% e por isso não
+   serve; é falso (cobre 100%), e é o argumento que sustentava ficar no
+   proxy.
 
-As correções do §1 valem como **insumo do código novo**, não como edição do
-antigo. A que não pode se perder é a da cobertura: o comentário atual afirma
-que a fonte autoritativa cobre ~48% e por isso não serve. É falso (cobre
-100%), e é exatamente o argumento que hoje sustenta ficar no proxy.
+### Ainda em aberto, menores
 
-Se a migração for adiada, aí sim vale aplicar o §1 sozinho — os números de
-hoje afirmam coisas falsas com aparência de medição.
+- **Rotular `Outro Motivo`** como o §4 pede. A recusa da entrevista já foi
+  nomeada em toda a UI; `Outro Motivo` tem a mesma ambiguidade e ainda não
+  foi tratado.
+- **Confirmar que zonas sem campo iniciado aparecem** (§11). O código está
+  certo; falta conferir se a Lista de Endereços devolve essas zonas.
 
-### Alcançável hoje, sem depender da migração
+### Concluídos
 
-- **Rotular "Recusa da entrevista"** onde a UI hoje escreve só "Recusa". A
-  extensão só enxerga essa recusa; nomeá-la evita que seja lida como recusa
-  da coleta. Mesmo cuidado com `Outro Motivo`.
-- **Alfinete no lugar do clique na linha** — incômodo real em uso.
-- ~~**Piso da janela de agendamento**~~ ✅ feito (§5).
+- ~~**Montar na nova página**~~ ✅ (§ decisão de arquitetura).
+- ~~**Ler `status` e derivar a demanda**~~ ✅ (§3, §7).
+- ~~**Piso da janela de agendamento**~~ ✅ (§5).
+- ~~**Rotular "Recusa da entrevista"**~~ ✅ (§4).
+- ~~**Alfinete no lugar do clique na linha**~~ ✅ (§11).
 
 ## Como verificar
 
@@ -650,3 +732,52 @@ Correções aplicadas nesta revisão, todas conferidas contra as fontes:
     `Status sangue`/`Motivo sangue` (minúsculos) e `Dias entre 1°…` (grau, não
     ordinal). Também confirmou que só 8 das 24 colunas são sempre
     preenchidas, e que nenhuma traz coordenada.
+12. **A migração virou duas variantes.** Era a premissa estrutural do
+    documento anterior — "reduzir o Último Movimento ao que ele faz bem",
+    apagar o proxy. O Último Movimento fica, como `MODO_MOVIMENTO`, e o
+    proxy com ele. Reescreveu o topo, §1, §5, §7, §10.4 e a ordem.
+
+---
+
+## Apêndice B — o que já está implementado
+
+Ordem cronológica, com o que cada passo ensinou.
+
+**Piso da janela de agendamento** (§5). `primeiroDiaAgendavel()` /
+`fimDaJanela()`. A janela ia de hoje a +14; agora vai do primeiro dia ainda
+agendável a +17, como o R. Divergência do R **por decisão**: o fim de semana
+é prazo, não filtro (ver a nota no §5).
+
+**Busca e parse do relatório** (§2, §8, §9). `filtroBodyBiomarcadores()`,
+`parseBiomarcadoresHtml()`, `fetchBiomarcadoresPorFiltro()` em
+`agenda-lookups.js`; `onBiomarcadores()` em `ultimo-movimento-map.js`.
+Reaproveita `postRelatorio` — terceiro slug no mesmo endpoint genérico.
+Acrescentou `foldOrdinal`, que mapeia `°` e `º` para `o`: o SIGC mistura os
+dois na mesma linha de cabeçalho e o NFD não normaliza nenhum, então uma
+troca futura de um pelo outro mataria o parser em silêncio.
+
+**Recusa da entrevista nomeada** (§4). Coluna "Recusa entrev." com tooltip
+que nomeia a recusa que ela **não** mostra, e legenda do mapa por extenso.
+
+**Alfinete no lugar do clique na linha** (§11).
+
+**As duas variantes** (topo, §3, §7). `MODO_MOVIMENTO` /
+`MODO_BIOMARCADORES`, `modoAtual()`, `biomarcadoresParaLinhas()`,
+`coletaEmAberto()`, `deveColeta()`.
+
+Três coisas que só apareceram ao implementar:
+
+1. **A flag de capacidade vazava.** Em `MODO_MOVIMENTO` ela continuava
+   pintando escassez, com tooltip dizendo "0 slot(s) livre(s)" — a partir
+   de dado que nunca foi buscado. Corrigido; tem teste.
+2. **`deveColeta()` quase colapsou as duas colunas.** A primeira versão era
+   "em aberto e não `Agendado`", o que a tornava idêntica a
+   `coletaEmAberto()`. O `relatorio_agenda.R:345` mostrou a distinção real:
+   a medida estreita exige **entrevista feita**, a larga só **estar em
+   campo**. O aninhamento virou teste de 108 combinações.
+3. **Cabeçalho e corpo têm de ser condicionados pelos mesmos flags.** Uma
+   coluna presente em um e ausente no outro desloca em silêncio todas as
+   células seguintes. Há teste de paridade de contagem por variante.
+
+Não implementado, e é o que resta: alerta de prazo, cor por status, e a
+correção dos comentários do §1. Ver "O que falta".
