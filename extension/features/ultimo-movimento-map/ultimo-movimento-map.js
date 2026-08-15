@@ -302,9 +302,70 @@
     'Domicílio Fechado': STATUS_FECHADO,
   };
 
-  function statusColor(row) {
-    if (row.ultimaPosicao === 'Distribuido') return STATUS_INATIVO;
-    return STATUS_TIPO_COLOR[row.tipoEntrevista] || STATUS_OUTROS;
+  // --- Biomarcador collection palette (MODO_BIOMARCADORES) --------------
+  //
+  // Okabe-Ito throughout, same family as the zona palette. Ports the
+  // `tem_bio` branch of pns.zonas' map_corredores.R:650-678.
+  const BIO_COLETADO = '#009E73';        // verde   — pronto
+  const BIO_AGENDADO = '#0072B2';        // azul    — encaminhado
+  const BIO_ACAO = '#F0E442';            // amarelo — precisa de agenda
+  const BIO_RECUSA_COLETA = '#D55E00';   // laranja
+  const BIO_RECUSA_ENTREVISTA = '#A63603'; // vermelho escuro
+  const BIO_OUTRO_MOTIVO = '#882255';    // roxo
+  const BIO_NAO_ELEGIVEL = '#000000';    // preto
+  const BIO_BLOQUEADO = '#E69F00';       // âmbar   — ocupado, sem entrevista
+  const BIO_NAO_INICIADO = '#999999';    // cinza   — esperando a vez
+  const BIO_DESCONHECIDO = '#CC79A7';    // rosa    — status não reconhecido
+
+  // Interview outcomes a revisit can still turn around. A household whose
+  // collection is "Não iniciado" for one of these is not queued — it is
+  // BLOCKED behind the interview, and that is worth its own colour.
+  //
+  // Deliberately short: 'Uso Ocasional' (second home) and 'Domicílio Vago'
+  // (empty) are excluded because there is nobody to interview, so there is
+  // nothing to reverse; 'Em obras ou ruínas', 'Demolida' and 'Não
+  // Residencial' are not dwellings at all; 'Outro Motivo' records no
+  // reason, so occupancy cannot be asserted. Mirrors TIPOS_REVERSIVEIS
+  // (map_corredores.R:638).
+  const TIPOS_REVERSIVEIS = new Set(['Recusa', 'Domicílio Fechado', 'Não Foi Encontrado']);
+
+  // In MODO_MOVIMENTO the interview outcome is the only thing on screen,
+  // so colouring by it is right. In MODO_BIOMARCADORES it is actively
+  // misleading: a household that refused the COLLECTION usually has a
+  // successful interview, and would render green — identical to one
+  // already collected (~50 such households in BA).
+  //
+  // Matched positively, like every other status rule here: an unrecognized
+  // status gets BIO_DESCONHECIDO rather than falling into a real category.
+  function statusColor(row, modo, hojeIso) {
+    const m = modo || MODO_MOVIMENTO;
+    if (!m.comDemanda) {
+      if (row.ultimaPosicao === 'Distribuido') return STATUS_INATIVO;
+      return STATUS_TIPO_COLOR[row.tipoEntrevista] || STATUS_OUTROS;
+    }
+    const s = (row && row.status) || '';
+    if (STATUS_COLETADO.has(s)) return BIO_COLETADO;
+    if (s === STATUS_AGENDADO) {
+      // A booking that lapsed without a collection is demand again, so it
+      // takes the needs-action colour rather than keeping "encaminhado"
+      // blue — the same reopening coletaEmAberto applies.
+      return coletaEmAberto(row, hojeIso) ? BIO_ACAO : BIO_AGENDADO;
+    }
+    if (s === 'Recusa') return BIO_RECUSA_COLETA;
+    if (s === 'Outro Motivo') return BIO_OUTRO_MOTIVO;
+    if (s === 'Não elegível') return BIO_NAO_ELEGIVEL;
+    if (s === 'A agendar' || s === 'Indefinido') return BIO_ACAO;
+    if (s === 'Não iniciado') {
+      // Why it has not started matters more than that it has not. The
+      // interview refusal gets a colour of its own, distinct from the
+      // collection refusal above: reverting one means arguing for the
+      // exam, the other for the whole survey — different work.
+      const tipo = (row && row.tipoEntrevista) || '';
+      if (tipo === 'Recusa') return BIO_RECUSA_ENTREVISTA;
+      if (TIPOS_REVERSIVEIS.has(tipo)) return BIO_BLOQUEADO;
+      return BIO_NAO_INICIADO;
+    }
+    return BIO_DESCONHECIDO;
   }
 
   // A zona row is clickable (opens the Mapa tab focused on that zona)
@@ -1094,6 +1155,12 @@
   // `finally` so a failed load can still be retried.
   let tileLoadInFlight = false;
   let pendingJoined = null;
+  // The variant the pending rows were built for, parked next to them:
+  // tiles load asynchronously, so the render happens long after
+  // onMapaClick resolved its modo, and re-deriving it from the DOM there
+  // would risk colouring rows by a different rule than the table beside
+  // them used.
+  let pendingModo = MODO_MOVIMENTO;
   // Live Leaflet map instance, once rendered — lets a Zonas-tab row
   // click (see focusZonaOnMap below) call fitBounds without threading
   // the map object through every function in between. Cleared on
@@ -1129,7 +1196,7 @@
     tileLoadInFlight = true;
     try {
       const L = await loadLeafletAssets();
-      renderLeafletMap(L, container, pendingJoined || []);
+      renderLeafletMap(L, container, pendingJoined || [], pendingModo);
       mapInitialized = true;
     } catch (err) {
       container.innerHTML = `<p class="sigc-pro-map-declined">Falha ao carregar o mapa: ${window.__sigcPro.escapeHtml(String(err && err.message || err))}</p>`;
@@ -1188,7 +1255,8 @@
   // Agendado line is entirely omitted (not blank) when there is none —
   // an empty "Agendado:" line would read as a broken lookup rather than
   // "not scheduled".
-  function buildPopupHtml(r) {
+  function buildPopupHtml(r, modo) {
+    const m = modo || MODO_MOVIMENTO;
     const esc = window.__sigcPro.escapeHtml;
     const gmapsUrl = window.__sigcPro.gmapsPontoUrl(r.lat, r.lon);
     const gmapsLine = gmapsUrl
@@ -1208,13 +1276,19 @@
       `Domicílio: ${esc(r.domicilio)}${coLocadoLinha}<br>` +
       `Entrevistador: ${esc(r.entrevistador)}<br>` +
       `Tipo: ${esc(r.tipoEntrevista)}<br>` +
+      // The collection outcome, which the marker colour now encodes and
+      // "Tipo" alone actively hides: a refused COLLECTION reads as
+      // "Realizada" here, because the interview did succeed.
+      (m.comDemanda ? `Coleta: ${esc(r.status || '—')}<br>` : '') +
       `Zona: ${esc(r.idZona || 'Sem zona')}` +
       agendadoLinha +
       gmapsLine
     );
   }
 
-  function renderLeafletMap(L, container, joined) {
+  function renderLeafletMap(L, container, joined, modo) {
+    const m = modo || MODO_MOVIMENTO;
+    const hojeIso = new Date().toISOString().slice(0, 10);
     const withCoords = joined.filter((r) => r.temCoordenadas);
     const map = L.map(container);
     currentMap = map;
@@ -1224,7 +1298,7 @@
     }).addTo(map);
     if (withCoords.length === 0) {
       map.setView([-14, -51], 4); // Brazil-wide fallback view
-      addStatusLegend(L, map);
+      addStatusLegend(L, map, m);
       return;
     }
 
@@ -1261,7 +1335,7 @@
     // domicílio number stays readable and clickable.
     const bounds = [];
     spiderfyRows(withCoords).forEach((r) => {
-      const color = statusColor(r);
+      const color = statusColor(r, m, hojeIso);
       if (r.coLocated > 1) {
         // Thin leader line back to the true geocode, so the fan reads as
         // "these all live at that one point" rather than as separate
@@ -1293,7 +1367,8 @@
       // Popup and bounds both use the TRUE geocode, never the fanned ring
       // position: the Google Maps link must pin the real address, and the
       // fitBounds box must not be inflated by the fan offsets.
-      marker.bindPopup(buildPopupHtml(Object.assign({}, r, { lat: r.origLat, lon: r.origLon })));
+      marker.bindPopup(buildPopupHtml(
+        Object.assign({}, r, { lat: r.origLat, lon: r.origLon }), m));
       bounds.push([r.origLat, r.origLon]);
     });
 
@@ -1320,7 +1395,7 @@
       }).addTo(map);
     });
 
-    addStatusLegend(L, map);
+    addStatusLegend(L, map, m);
     map.fitBounds(bounds, { padding: [20, 20] });
   }
 
@@ -1329,17 +1404,39 @@
   // colors, per the design's explicit scope decision. Takes L explicitly
   // (matching renderLeafletMap's own established style of receiving L as
   // a parameter) rather than closing over window.L.
-  function addStatusLegend(L, map) {
-    const entries = [
-      ['Inativo (Distribuído)', STATUS_INATIVO],
-      ['Realizada', STATUS_REALIZADA],
-      // Named in full: on the map there is no header tooltip to carry the
-      // distinction (see TIP_RECUSA).
-      ['Recusa da entrevista', STATUS_RECUSA],
-      ['Não Iniciada', STATUS_NAO_INICIADA],
-      ['Domicílio Fechado', STATUS_FECHADO],
-      ['Outros', STATUS_OUTROS],
+  // One entry per colour the ACTIVE scale can emit, and no others: a
+  // legend listing a colour the map never draws is worse than a shorter
+  // legend, because the reader goes looking for it.
+  function legendEntries(modo) {
+    const m = modo || MODO_MOVIMENTO;
+    if (!m.comDemanda) {
+      return [
+        ['Inativo (Distribuído)', STATUS_INATIVO],
+        ['Realizada', STATUS_REALIZADA],
+        // Named in full: on the map there is no header tooltip to carry
+        // the distinction (see TIP_RECUSA).
+        ['Recusa da entrevista', STATUS_RECUSA],
+        ['Não Iniciada', STATUS_NAO_INICIADA],
+        ['Domicílio Fechado', STATUS_FECHADO],
+        ['Outros', STATUS_OUTROS],
+      ];
+    }
+    return [
+      ['Coletado', BIO_COLETADO],
+      ['Agendado', BIO_AGENDADO],
+      ['A agendar / vencido', BIO_ACAO],
+      ['Recusa da coleta', BIO_RECUSA_COLETA],
+      ['Recusa da entrevista', BIO_RECUSA_ENTREVISTA],
+      ['Outro motivo', BIO_OUTRO_MOTIVO],
+      ['Não elegível', BIO_NAO_ELEGIVEL],
+      ['Sem entrevista (reversível)', BIO_BLOQUEADO],
+      ['Não iniciado', BIO_NAO_INICIADO],
+      ['Status não reconhecido', BIO_DESCONHECIDO],
     ];
+  }
+
+  function addStatusLegend(L, map, modo) {
+    const entries = legendEntries(modo);
     const div = L.DomUtil.create('div', 'sigc-pro-status-legend');
     div.innerHTML = entries.map(([label, color]) => (
       `<div><span style="display:inline-block;width:10px;height:10px;background:${color};margin-right:4px;"></span>${window.__sigcPro.escapeHtml(label)}</div>`
@@ -1637,6 +1734,7 @@
       const comAgenda = joinAgenda(joined, agendaIdx, todayIso);
 
       pendingJoined = comAgenda;
+      pendingModo = modo;
       const zonaRows = aggregateZonas(comAgenda, enderecosMap, modo, todayIso);
 
       // "Bookable now": from the first day still worth booking (see
@@ -1900,6 +1998,7 @@
     aggregateZonas,
     zonaColor,
     statusColor,
+    legendEntries,
     buildZonasTableHtml,
     buildDomiciliosTabHtml,
     buildPopupHtml,

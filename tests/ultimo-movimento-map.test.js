@@ -2110,3 +2110,164 @@ describe('the two demand columns stay nested', () => {
     })));
   });
 });
+
+describe('statusColor per modo', () => {
+  const hoje = '2026-08-14';
+  const bio = (over) => ({ status: 'Não iniciado', tipoEntrevista: '', ultimaPosicao: '', ...over });
+
+  test('MODO_MOVIMENTO keeps colouring by interview outcome', () => {
+    expect(UM.statusColor(bio({ tipoEntrevista: 'Realizada' }), UM.MODO_MOVIMENTO, hoje))
+      .toBe('#009E73');
+    expect(UM.statusColor(bio({ tipoEntrevista: 'Recusa' }), UM.MODO_MOVIMENTO, hoje))
+      .toBe('#D55E00');
+    expect(UM.statusColor(bio({ ultimaPosicao: 'Distribuido' }), UM.MODO_MOVIMENTO, hoje))
+      .toBe('#888888');
+  });
+
+  test('a collected household is green, however it was collected', () => {
+    ['Coletado Sangue e Urina', 'Coletado apenas Sangue', 'Coletado apenas Urina']
+      .forEach((status) => {
+        expect(UM.statusColor(bio({ status }), UM.MODO_BIOMARCADORES, hoje)).toBe('#009E73');
+      });
+  });
+
+  test('a refused COLLECTION is no longer green', () => {
+    // The bug this fixes: ~50 BA households refused the collection and
+    // almost all of them show a successful interview, so they rendered
+    // identical to an already-collected household.
+    const cor = UM.statusColor(
+      bio({ status: 'Recusa', tipoEntrevista: 'Realizada' }), UM.MODO_BIOMARCADORES, hoje);
+    expect(cor).not.toBe('#009E73');
+    expect(cor).toBe('#D55E00');
+  });
+
+  test('the two refusals are different colours', () => {
+    const recusaColeta = UM.statusColor(
+      bio({ status: 'Recusa', tipoEntrevista: 'Realizada' }), UM.MODO_BIOMARCADORES, hoje);
+    const recusaEntrevista = UM.statusColor(
+      bio({ status: 'Não iniciado', tipoEntrevista: 'Recusa' }), UM.MODO_BIOMARCADORES, hoje);
+    expect(recusaColeta).not.toBe(recusaEntrevista);
+    expect(recusaEntrevista).toBe('#A63603');
+  });
+
+  test('a booking is blue while it holds and amber once it lapses', () => {
+    expect(UM.statusColor(
+      bio({ status: 'Agendado', dataAgendada: '20/08/2026' }), UM.MODO_BIOMARCADORES, hoje))
+      .toBe('#0072B2');
+    // Lapsed without a collection: back to needing action, same colour as
+    // "A agendar" — it IS demand again.
+    expect(UM.statusColor(
+      bio({ status: 'Agendado', dataAgendada: '01/08/2026' }), UM.MODO_BIOMARCADORES, hoje))
+      .toBe('#F0E442');
+  });
+
+  test('needs-action statuses share the amber', () => {
+    ['A agendar', 'Indefinido'].forEach((status) => {
+      expect(UM.statusColor(bio({ status }), UM.MODO_BIOMARCADORES, hoje)).toBe('#F0E442');
+    });
+  });
+
+  test('Outro Motivo and Não elegível stay distinct', () => {
+    expect(UM.statusColor(bio({ status: 'Outro Motivo' }), UM.MODO_BIOMARCADORES, hoje))
+      .toBe('#882255');
+    expect(UM.statusColor(bio({ status: 'Não elegível' }), UM.MODO_BIOMARCADORES, hoje))
+      .toBe('#000000');
+  });
+
+  test('"Não iniciado" splits by why it has not started', () => {
+    // Waiting its turn — grey.
+    expect(UM.statusColor(
+      bio({ status: 'Não iniciado', tipoEntrevista: 'Realizada' }),
+      UM.MODO_BIOMARCADORES, hoje)).toBe('#999999');
+    // Blocked behind a reversible interview outcome — amber-orange. The
+    // collection is not queued, it is stuck, and a revisit can unstick it.
+    ['Domicílio Fechado', 'Não Foi Encontrado'].forEach((tipoEntrevista) => {
+      expect(UM.statusColor(
+        bio({ status: 'Não iniciado', tipoEntrevista }),
+        UM.MODO_BIOMARCADORES, hoje)).toBe('#E69F00');
+    });
+    // No resident to interview: nothing to reverse, so it stays grey.
+    ['Uso Ocasional', 'Domicílio Vago', 'Em obras ou ruínas'].forEach((tipoEntrevista) => {
+      expect(UM.statusColor(
+        bio({ status: 'Não iniciado', tipoEntrevista }),
+        UM.MODO_BIOMARCADORES, hoje)).toBe('#999999');
+    });
+  });
+
+  test('an unknown status gets its own colour, not a silent default', () => {
+    // Matched positively like everything else: a status SIGC adds must be
+    // visible as unrecognized, never absorbed into a real category.
+    expect(UM.statusColor(bio({ status: 'Status Novo Do SIGC' }), UM.MODO_BIOMARCADORES, hoje))
+      .toBe('#CC79A7');
+  });
+});
+
+describe('legend follows the scale actually drawn', () => {
+  test('MODO_BIOMARCADORES legend names collection outcomes', () => {
+    const entradas = UM.legendEntries(UM.MODO_BIOMARCADORES);
+    const labels = entradas.map(([l]) => l);
+    expect(labels).toContain('Coletado');
+    expect(labels).toContain('Recusa da coleta');
+    expect(labels).toContain('Recusa da entrevista');
+    // A legend must not promise a colour the scale never emits.
+    expect(labels).not.toContain('Inativo (Distribuído)');
+    // Every colour on the legend is one statusColor can actually return.
+    const cores = new Set(entradas.map(([, c]) => c));
+    expect(cores.has('#009E73')).toBe(true);
+    expect(cores.has('#A63603')).toBe(true);
+  });
+
+  test('MODO_MOVIMENTO legend is the interview scale', () => {
+    const labels = UM.legendEntries(UM.MODO_MOVIMENTO).map(([l]) => l);
+    expect(labels).toContain('Inativo (Distribuído)');
+    expect(labels).toContain('Recusa da entrevista');
+    expect(labels).not.toContain('Coletado');
+  });
+});
+
+describe('popup shows the collection status', () => {
+  const row = {
+    controle: 'C1', domicilio: '1', entrevistador: 'F', idZona: 'Z1',
+    tipoEntrevista: 'Realizada', status: 'Recusa', lat: -12, lon: -38,
+    agendado: '', coLocated: 1,
+  };
+
+  test('biomarcadores popup names the collection outcome', () => {
+    const html = UM.buildPopupHtml(row, UM.MODO_BIOMARCADORES);
+    // Without this the popup says "Tipo: Realizada" and nothing else —
+    // exactly the reading that hides a refused collection.
+    expect(html).toContain('Coleta');
+    expect(html).toContain('Recusa');
+  });
+
+  test('movimento popup does not invent a status line', () => {
+    const html = UM.buildPopupHtml({ ...row, status: '' }, UM.MODO_MOVIMENTO);
+    expect(html).not.toContain('Coleta:');
+  });
+});
+
+describe('palette integrity', () => {
+  test('no two legend entries in one scale share a colour', () => {
+    // Two meanings on one colour is unreadable and silent — nothing
+    // errors, the map just stops distinguishing them.
+    [UM.MODO_MOVIMENTO, UM.MODO_BIOMARCADORES].forEach((modo) => {
+      const cores = UM.legendEntries(modo).map(([, c]) => c);
+      expect(new Set(cores).size).toBe(cores.length);
+    });
+  });
+
+  test('every colour statusColor emits is on the legend', () => {
+    const hoje = '2026-08-14';
+    const statuses = ['Coletado Sangue e Urina', 'Coletado apenas Sangue',
+      'Coletado apenas Urina', 'Agendado', 'A agendar', 'Não iniciado',
+      'Indefinido', 'Recusa', 'Outro Motivo', 'Não elegível', 'Novo'];
+    const tipos = ['Realizada', 'Recusa', 'Domicílio Fechado',
+      'Não Foi Encontrado', 'Uso Ocasional', 'Domicílio Vago', ''];
+    const datas = ['', '01/01/2020', '31/12/2099'];
+    const naLegenda = new Set(UM.legendEntries(UM.MODO_BIOMARCADORES).map(([, c]) => c));
+    statuses.forEach((status) => tipos.forEach((tipoEntrevista) => datas.forEach((dataAgendada) => {
+      const cor = UM.statusColor({ status, tipoEntrevista, dataAgendada }, UM.MODO_BIOMARCADORES, hoje);
+      expect(naLegenda.has(cor)).toBe(true);
+    })));
+  });
+});
