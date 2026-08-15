@@ -413,16 +413,48 @@
       'a coleta de biomarcadores está devida e não tem horário marcado. ' +
       'Transmitido ainda conta; só Descarregado encerra.';
     const TIP_PENDENTES =
-      'Domicílios já em campo e sem agendamento (Fechado, Recusa, Realizada ' +
+      'Domicílios já em campo e sem agendamento (Fechado, Recusa de ' +
+      'entrevista, Realizada ' +
       'ou Não Iniciada), exceto os já descarregados. Não inclui Distribuído. ' +
       'Contém as Realizadas sem agend. — as duas colunas não se somam.';
+    // "Recusa" is two different outcomes in SIGC, in nearly disjoint
+    // populations: refusing the INTERVIEW (tipoEntrevista, what this
+    // report shows) and refusing the biomarcador COLLECTION (the
+    // biomarcadores report's status). In BA ~50 households refused the
+    // collection against 18 who refused the interview — and almost every
+    // collection refusal appears HERE as a successful interview, because
+    // it was one. Naming the column plain "Recusa" invites a reader to
+    // take it for the collection refusal it structurally cannot show.
+    const TIP_RECUSA =
+      'Recusa da ENTREVISTA (Tipo Entrevista). Não é a recusa da coleta de ' +
+      'biomarcador, que só aparece no Relatório de Acompanhamento de ' +
+      'Biomarcadores — um domicílio que recusou a coleta costuma constar ' +
+      'aqui como entrevista realizada. As duas nunca se somam.';
     const TIP_TURNO =
       'Slots livres na janela: do primeiro dia ainda agendável (hoje, amanhã ' +
       'e depois de amanhã não dá mais tempo; na sexta, nem a segunda) até ' +
       '+17 dias. Manhã antes das 13h.';
+    // Pin column, deliberately first and narrow. The click used to live on
+    // the whole <tr>, which made the table hostile to ordinary use:
+    // selecting a Controle to copy it fired the handler, switched tabs and
+    // pulled the table out from under the cursor (reported against the R
+    // twin, same layout). Confining the gesture to one glyph also makes
+    // what is clickable visible at rest, and frees the row for a <details>
+    // that the row handler used to swallow.
+    //
+    // data-orderable="false" is declared on the header itself rather than
+    // through a positional columnDefs entry: initPanelTables uses no
+    // column indices at all (order: []), so nothing else has to be
+    // renumbered when a column is added — which is exactly the trap a
+    // positional config would have set here.
+    const TIP_PIN = 'Ver esta zona no mapa';
     const head =
-      '<tr><th>Zona</th><th>Nome</th><th>Realizada</th><th>Não Iniciada</th>' +
-      '<th>Dom. Fechado</th><th>Recusa</th><th>Outros</th><th>Total</th>' +
+      '<tr>' +
+      `<th class="sigc-pro-zona-pin-col" data-orderable="false" title="${esc(TIP_PIN)}"></th>` +
+      '<th>Zona</th><th>Nome</th><th>Realizada</th><th>Não Iniciada</th>' +
+      '<th>Dom. Fechado</th>' +
+      `<th title="${esc(TIP_RECUSA)}">Recusa entrev.</th>` +
+      '<th>Outros</th><th>Total</th>' +
       '<th>Sem coordenadas</th><th>Agendados</th>' +
       `<th title="${esc(TIP_REALIZADAS)}">Realizadas sem agend.</th>` +
       `<th title="${esc(TIP_PENDENTES)}">Pendentes</th>` +
@@ -443,15 +475,19 @@
           `${turnos.manha + turnos.tarde} slot(s) livre(s) na janela` +
           (clickable ? ' — clique para ver no mapa' : '')
         : (clickable ? 'Ver esta zona no mapa' : '');
+      // No data-id-zona on the <tr> any more — the pin owns the gesture.
       const rowAttrs =
         (classes ? ` class="${classes}"` : '') +
-        (clickable ? ` data-id-zona="${esc(zonaKey)}"` : '') +
         (titulo ? ` title="${esc(titulo)}"` : '');
-      // Link-style affordance for a clickable row's Zona cell — cursor:
-      // pointer on the row alone wasn't a visible signal at rest, only
-      // on hover.
+      // Plain text now: with the pin carrying the affordance, a link on
+      // the zona code would be a second, competing click target over text
+      // the user most likely wants to select and copy.
       const zonaLabel = esc(r.idZona || '—');
-      const zonaCell = clickable ? `<a href="#" class="sigc-pro-zona-link">${zonaLabel}</a>` : zonaLabel;
+      const pinCell = clickable
+        ? '<span class="sigc-pro-zona-pin" role="button" tabindex="0" ' +
+          `data-id-zona="${esc(zonaKey)}" title="${esc(TIP_PIN)}" ` +
+          `aria-label="${esc(`${TIP_PIN}: ${r.idZona || ''}`)}">📍</span>`
+        : '';
       // Rendered inline, NOT behind a <details>: the whole row is a click
       // target that jumps to the map, so a disclosure widget inside it was
       // unopenable — the row handler swallowed the summary's click and
@@ -464,7 +500,8 @@
       const slotsCount = grupos.reduce((n, g) => n + ((g.horas && g.horas.length) || 0), 0);
       return (
         `<tr${rowAttrs}>` +
-        `<td>${zonaCell}</td>` +
+        `<td class="sigc-pro-zona-pin-col">${pinCell}</td>` +
+        `<td>${zonaLabel}</td>` +
         `<td>${esc(r.nomeZona)}</td>` +
         `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
         `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
@@ -541,10 +578,17 @@
     #sigc-pro-leaflet-map { width: 100%; height: 100%; }
     .sigc-pro-zonas-table { border-collapse: collapse; width: 100%; }
     .sigc-pro-zonas-table th, .sigc-pro-zonas-table td { border: 1px solid #ddd; padding: 4px 8px; text-align: right; }
-    .sigc-pro-zonas-table th:nth-child(-n+2), .sigc-pro-zonas-table td:nth-child(-n+2) { text-align: left; }
+    /* Pin, Zona and Nome are the text columns; every count stays right-aligned.
+       Widened from -n+2 when the pin column was inserted at the front. */
+    .sigc-pro-zonas-table th:nth-child(-n+3), .sigc-pro-zonas-table td:nth-child(-n+3) { text-align: left; }
     .sigc-pro-zonas-table th { background: #f4f4f4; }
-    .sigc-pro-zonas-table tr.sigc-pro-zona-row-clickable { cursor: pointer; }
+    /* Hover still highlights the whole row — it marks what the pin will act
+       on — but the pointer cursor now belongs to the pin alone, since the
+       row itself is no longer a click target. */
     .sigc-pro-zonas-table tr.sigc-pro-zona-row-clickable:hover { background: #eef6ff; }
+    .sigc-pro-zona-pin-col { width: 1%; white-space: nowrap; padding-right: 2px !important; }
+    .sigc-pro-zona-pin { cursor: pointer; user-select: none; line-height: 1; }
+    .sigc-pro-zona-pin:focus-visible { outline: 2px solid #0645ad; outline-offset: 1px; }
     /* Zona owing more biomarcador visits than it has bookable slots. Amber
        wash plus a left rule — the row stays readable and still highlights
        on hover, so the flag never fights the click affordance. Colour is
@@ -554,8 +598,6 @@
     .sigc-pro-zonas-table tr.sigc-pro-zona-sem-capacidade td:first-child {
       box-shadow: inset 3px 0 0 #D55E00; }
     .sigc-pro-zonas-table td.sigc-pro-devidas { font-weight: 700; }
-    .sigc-pro-zona-link { color: #0645ad; text-decoration: none; }
-    .sigc-pro-zona-link:hover { text-decoration: underline; }
     .sigc-pro-zonas-hint { margin: 0 0 8px; font-size: 12px; color: #555; }
     .sigc-pro-controle-label span { font-size: 10px; font-weight: 600; color: #fff;
       padding: 1px 4px; border-radius: 3px; white-space: nowrap;
@@ -673,7 +715,7 @@
     // Only shown when at least one row is actually clickable — no point
     // telling the user to click a zona if none have mapped coordinates.
     const zonasHint = zonaRows.some(zonaRowIsClickable)
-      ? '<p class="sigc-pro-zonas-hint">Clique no nome de uma zona para vê-la no mapa. ' +
+      ? '<p class="sigc-pro-zonas-hint">Clique no 📍 de uma zona para vê-la no mapa. ' +
         'Linhas destacadas têm mais realizadas sem agendamento do que slots livres na janela. ' +
         'As contagens de demanda excluem Distribuído (ainda não é demanda de campo) e ' +
         'Realizada já descarregada (encerrada).</p>'
@@ -814,11 +856,24 @@
     });
   }
 
+  // Bound to the pin, never the row: see the TIP_PIN comment in
+  // buildZonasTableHtml for why the whole-row target had to go.
+  //
+  // role="button" is a promise that Enter and Space activate it, so both
+  // are handled — a tabbable element that only responds to the mouse is
+  // worse than one that isn't tabbable at all. Space is prevented from
+  // scrolling the panel, its default on a focused non-button.
   function wireZonaRowClicks(panelEl, joined) {
-    panelEl.querySelectorAll('.sigc-pro-zona-row-clickable').forEach((row) => {
-      row.addEventListener('click', (event) => {
-        event.preventDefault(); // the Zona cell's <a href="#"> would otherwise jump-scroll
-        focusZonaOnMap(panelEl, joined, row.dataset.idZona || '');
+    panelEl.querySelectorAll('.sigc-pro-zona-pin').forEach((pin) => {
+      const ir = () => focusZonaOnMap(panelEl, joined, pin.dataset.idZona || '');
+      pin.addEventListener('click', (event) => {
+        event.preventDefault();
+        ir();
+      });
+      pin.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        ir();
       });
     });
   }
@@ -1126,7 +1181,9 @@
     const entries = [
       ['Inativo (Distribuído)', STATUS_INATIVO],
       ['Realizada', STATUS_REALIZADA],
-      ['Recusa', STATUS_RECUSA],
+      // Named in full: on the map there is no header tooltip to carry the
+      // distinction (see TIP_RECUSA).
+      ['Recusa da entrevista', STATUS_RECUSA],
       ['Não Iniciada', STATUS_NAO_INICIADA],
       ['Domicílio Fechado', STATUS_FECHADO],
       ['Outros', STATUS_OUTROS],

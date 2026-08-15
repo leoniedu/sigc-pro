@@ -404,12 +404,16 @@ describe('buildZonasTableHtml', () => {
     expect(html).toContain('data-id-zona="Z1"');
   });
 
-  test('a clickable row renders its Zona cell as a link-styled <a>, visible affordance not just cursor:pointer', () => {
+  test('the Zona cell is plain text — the pin carries the affordance now', () => {
+    // Superseded the link-styled <a> that used to sit on the zona code:
+    // with the pin owning the gesture, a link here would be a second
+    // click target over text the user most likely wants to select.
     const rows = [
       { idZona: 'Z1', nomeZona: 'Bairro X', realizada: 1, naoIniciada: 0, domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 2, semCoordenadas: 1 },
     ];
     const html = UM.buildZonasTableHtml(rows);
-    expect(html).toContain('<a href="#" class="sigc-pro-zona-link">Z1</a>');
+    expect(html).not.toContain('sigc-pro-zona-link');
+    expect(html).toContain('<td>Z1</td>');
   });
 
   test('a row with zero mapped domicílios (all sem coordenadas) is NOT clickable', () => {
@@ -473,7 +477,7 @@ describe('buildPanelHtml', () => {
   test('shows the "click a zona" hint when at least one row is clickable', () => {
     const html = UM.buildPanelHtml(joined, zonaRows);
     expect(html).toContain('sigc-pro-zonas-hint');
-    expect(html).toContain('Clique no nome de uma zona');
+    expect(html).toContain('Clique no 📍 de uma zona');
   });
 
   test('omits the hint when no row has mapped coordinates', () => {
@@ -1806,5 +1810,60 @@ describe('onBiomarcadores', () => {
     } finally {
       document.body.innerHTML = '';
     }
+  });
+});
+
+describe('recusa disambiguation', () => {
+  // "Recusa" means two different things in SIGC and the two populations
+  // are nearly disjoint: in BA ~50 households refused the BIOMARCADOR
+  // collection while 18 refused the INTERVIEW, and almost all of the
+  // former show up here as a successful interview. This table only ever
+  // sees the interview refusal, so labelling it plain "Recusa" invites
+  // reading it as the collection refusal it cannot show.
+  test('the zonas column names which refusal it counts', () => {
+    const zonaRows = [{
+      idZona: '29XJYY', nomeZona: 'Zona X', realizada: 1, naoIniciada: 0,
+      domicilioFechado: 0, recusa: 2, outros: 0, totalDomicilios: 3,
+      semCoordenadas: 0, agendados: 0, realizadasSemAgendamento: 0, pendentes: 0,
+    }];
+    const html = UM.buildZonasTableHtml(zonaRows, new Map(), new Map());
+    expect(html).toContain('Recusa entrev.');
+    // And says so in full on hover, naming the one it is NOT.
+    expect(html).toMatch(/title="[^"]*entrevista[^"]*"/);
+    expect(html).toContain('biomarcador');
+  });
+});
+
+describe('zona pin instead of whole-row click', () => {
+  const ZONA_ROWS = [{
+    idZona: '29XJYY', nomeZona: 'Zona X', realizada: 1, naoIniciada: 0,
+    domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 3,
+    semCoordenadas: 0, agendados: 0, realizadasSemAgendamento: 0, pendentes: 0,
+  }];
+
+  test('the pin cell carries the click target, not the row', () => {
+    const html = UM.buildZonasTableHtml(ZONA_ROWS, new Map(), new Map());
+    // The pin is a real button for keyboard/AT users, not a bare glyph.
+    expect(html).toMatch(/role="button"/);
+    expect(html).toMatch(/tabindex="0"/);
+    expect(html).toContain('📍');
+    // data-id-zona moves onto the pin so the row is no longer a target.
+    expect(html).toMatch(/class="[^"]*sigc-pro-zona-pin[^"]*"[^>]*data-id-zona="29XJYY"/);
+    expect(html).not.toMatch(/<tr[^>]*data-id-zona=/);
+  });
+
+  test('a zona with no mapped coordinates gets no pin', () => {
+    const semCoords = [{ ...ZONA_ROWS[0], semCoordenadas: 3 }];
+    const html = UM.buildZonasTableHtml(semCoords, new Map(), new Map());
+    expect(html).not.toContain('📍');
+  });
+
+  test('the pin column is first and marked unsortable', () => {
+    const html = UM.buildZonasTableHtml(ZONA_ROWS, new Map(), new Map());
+    // Leading <th> before "Zona": adding a column shifts every later
+    // index, so the header must declare itself unsortable rather than
+    // relying on a positional columnDefs entry elsewhere.
+    expect(html).toMatch(/<thead><tr><th[^>]*class="[^"]*sigc-pro-zona-pin-col/);
+    expect(html).toMatch(/<th[^>]*data-orderable="false"/);
   });
 });
