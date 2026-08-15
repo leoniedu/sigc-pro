@@ -342,54 +342,86 @@ Ver §2 "Diferenças de request a vigiar" para o Referer.
 
 ## 9. Cabeçalhos literais da tabela
 
-A extensão casa cabeçalho por texto; se errar, falha fechado. **Cuidado: a
-tabela do R não é um de-para direto.** `fetch_biomarcadores_municipio()`
-aplica `sub("^#?!", "", …)` e depois `janitor::clean_names()`
-(`sigc_biomarcadores.R:174-175`) antes de renomear
-(`:177-200`). Ou seja, o nome no R passou por duas transformações — não dá
-para invertê-lo por adivinhação.
+A extensão casa cabeçalho por texto; se errar, falha fechado.
 
-Os cabeçalhos **crus do HTML**, reconstruídos dessa cadeia (o `#!`/`!` é
-decoração do SIGC, como no Último Movimento — ver
-`ultimo-movimento-map.js:182`):
+Os 24 cabeçalhos abaixo são **observados ao vivo** (captura do `<thead>` de
+`#tableRelatorio`, BA/Pituba, 14/08/2026), na ordem em que aparecem. Casar
+por texto, nunca por índice.
 
-| cabeçalho no HTML | após `clean_names()` | nome no R |
+| # | `<th>` no HTML | nome no R |
 |---|---|---|
-| `Controle` | `controle` | `controle` |
-| `N.º Domicilio` | `n_domicilio` | `domicilio` |
-| `UF` | `uf` | `id_uf` |
-| `Agência` | `agencia` | `id_agencia` |
-| `Município` | `municipio` | `municipio` |
-| `Id Zona` | `id_zona` | `id_zona` |
-| `Nome Zona` | `nome_zona` | `nome_zona` |
-| `Tipo Entrevista` | `tipo_entrevista` | `tipo_entrevista` |
-| `Nome Equipe` | `nome_equipe` | `nome_equipe` |
-| `Status` | `status` | `status` |
-| `SIAPE Agendamento` | `siape_agendamento` | `siape_agendamento` |
-| `Data Resposta 25A.01` | `data_resposta_25a_01` | `data_resposta_25a01` |
-| `Data Agendada` | `data_agendada` | `data_agendada` |
-| `Data Visita Biomarcadores` | `data_visita_biomarcadores` | `data_visita` |
-| `SIAPE Coleta Biomarcadores` | `siape_coleta_biomarcadores` | `siape_coleta` |
-| `Data Final para Coleta` | `data_final_para_coleta` | `data_final_coleta` |
-| `Dias Prazo Final` | `dias_prazo_final` | `dias_prazo_final` |
-| `Data Hora Coleta Sangue` | `data_hora_coleta_sangue` | `data_hora_sangue` |
-| `Status Sangue` | `status_sangue` | `status_sangue` |
-| `Motivo Sangue` | `motivo_sangue` | `motivo_sangue` |
-| `Data Hora Coleta Urina` | `data_hora_coleta_urina` | `data_hora_urina` |
-| `Status Urina` | `status_urina` | `status_urina` |
-| `Motivo Urina` | `motivo_urina` | `motivo_urina` |
-| `Dias entre 1º agendamento e coleta` | `dias_entre_1_agendamento_e_coleta` | `dias_agendamento_coleta` |
+| 1 | `UF` | `id_uf` |
+| 2 | `Agência` | `id_agencia` |
+| 3 | `Município` | `municipio` |
+| 4 | `ID Zona` | `id_zona` |
+| 5 | `Nome Zona` | `nome_zona` |
+| 6 | `#!Controle` | `controle` |
+| 7 | `!N.º Domicílio` | `domicilio` |
+| 8 | `Tipo Entrevista` | `tipo_entrevista` |
+| 9 | `Nome Equipe` | `nome_equipe` |
+| 10 | `Status` | `status` |
+| 11 | `Siape Agendamento` | `siape_agendamento` |
+| 12 | `Data Resposta 25A.01` | `data_resposta_25a01` |
+| 13 | `Data Agendada` | `data_agendada` |
+| 14 | `Data Visita Biomarcadores` | `data_visita` |
+| 15 | `Siape Coleta Biomarcadores` | `siape_coleta` |
+| 16 | `Data Final para Coleta` | `data_final_coleta` |
+| 17 | `Dias Prazo Final` | `dias_prazo_final` |
+| 18 | `Data/hora coleta sangue` | `data_hora_sangue` |
+| 19 | `Status sangue` | `status_sangue` |
+| 20 | `Motivo sangue` | `motivo_sangue` |
+| 21 | `Data/hora coleta urina` | `data_hora_urina` |
+| 22 | `Status urina` | `status_urina` |
+| 23 | `Motivo urina` | `motivo_urina` |
+| 24 | `Dias entre 1° agendamento e coleta` | `dias_agendamento_coleta` |
 
-Duas linhas merecem atenção porque `clean_names()` as deforma de um jeito
-que não se adivinha: `Data Resposta 25A.01` → `data_resposta_25a_01`
-(quebra na fronteira dígito/letra) e `Dias entre 1º agendamento e coleta`
-→ `dias_entre_1_agendamento_e_coleta`.
+Cinco armadilhas confirmadas na captura, todas resolvidas por `foldLive()`
+(`agenda-lookups.js:210-211` — `normalizeLabel` + `stripAccents` +
+`stripHeaderMarker`), que é o casador a usar:
 
-**Confirmar a coluna do HTML contra uma captura viva antes de codificar** —
-a tabela acima é derivada, não observada. Como a extensão roda na própria
-página, isso é um `Ctrl+Shift+I` e ler os `<th>` de `#tableRelatorio`. Usar a
-mesma normalização de rótulo que os parsers existentes
-(`normalizeLabel`), que já lida com o prefixo `#!`/`!`.
+- **`#!Controle` e `!N.º Domicílio` trazem a decoração de ordenação/filtro**,
+  a mesma quirk do Último Movimento (`agenda-lookups.js:182-187`).
+  `normalizeLabel` sozinho NÃO remove o `#!`; é `stripHeaderMarker` que
+  remove.
+- **`Siape` vem em caixa mista**, não `SIAPE`. `normalizeLabel` já baixa a
+  caixa, então não é problema — desde que ninguém case a string literal.
+- **`Data/hora coleta sangue` usa barra, não espaço**, e é minúscula em
+  "hora". Idem `urina`.
+- **`Status sangue`/`Status urina`/`Motivo …` são minúsculos** no segundo
+  termo, enquanto `Status` (col. 10) é capitalizado. Distinguir por texto
+  completo, não por prefixo `status`.
+- **`Dias entre 1° agendamento e coleta` usa `°` (DEGREE SIGN, U+00B0)**, não
+  `º` (MASCULINE ORDINAL INDICATOR, U+00BA) — enquanto `N.º Domicílio` usa o
+  ordinal de verdade. Os dois símbolos convivem na mesma tabela e não se
+  casam por igualdade. `stripAccents` (`agenda-lookups.js:196-198`) usa NFD,
+  que **não** toca em nenhum dos dois (verificado: NFD de ambos é ele mesmo;
+  só NFKD converteria `º`→`o`, e mesmo assim `°` continuaria intacto). Casar
+  esta coluna por igualdade exata é frágil — preferir
+  `includes('agendamento e coleta')`.
+
+O de-para do R (`sigc_biomarcadores.R:177-200`) chega aos mesmos nomes por
+outro caminho — `sub("^#?!", "", …)` seguido de `janitor::clean_names()`
+(`:174-175`). Útil como conferência cruzada, mas **não** como fonte dos
+cabeçalhos: `clean_names()` deforma de um jeito que não se inverte por
+adivinhação (`Data Resposta 25A.01` → `data_resposta_25a_01`).
+
+Note que o relatório **não traz coordenadas** — nenhuma das 24 colunas é
+lat/lon. É por isso que o join com a Lista de Endereços continua necessário
+(ver §2), exatamente como no Mapa do Último Movimento.
+
+### Sobre as linhas de exemplo
+
+A captura mostra `Tipo Entrevista` e `Nome Equipe` **vazios** em domicílios
+`Não iniciado` — o relatório lista a subamostra inteira, inclusive quem nem
+começou. Confirma o §5: `Não iniciado` não tem prazo, agendamento nem
+visita, e aqui não tem sequer tipo de entrevista. O parser não pode assumir
+célula preenchida em nenhuma coluna além das cinco primeiras, `Controle`,
+`N.º Domicílio` e `Status`.
+
+Confirma também que a chave é `(controle, domicilio)` e não `controle`
+sozinho: as três primeiras linhas compartilham
+`Controle = 292740805220571` com `N.º Domicílio` 1, 2 e 3 — o mesmo motivo
+documentado em `enderecoKey()` (`sigc-common.js:70`).
 
 ## 10. Decisões de UX ainda em aberto
 
@@ -530,8 +562,8 @@ então não vale poli-lo antes.
    `onUltimoMovimento()`, captura de `#filtroJson` no `#btnFiltrar`,
    `motivoBloqueio()` reaproveitado (agência/município/controle), POST via
    `postRelatorio` com `slug=relatorio-acomp-biomarc`, parse de
-   `#tableRelatorio` contra os cabeçalhos do §9 — **conferindo-os ao vivo
-   primeiro**.
+   `#tableRelatorio` contra os cabeçalhos do §9 (já conferidos ao vivo),
+   casando com `foldLive()`.
 2. **Ler `status`** e derivar a demanda dele (§3), substituindo
    `isRealizadaSemAgendamento`. A zona vem do próprio relatório
    (`id_zona`/`nome_zona`), o que dispensa o join com a Lista de Endereços
@@ -603,3 +635,9 @@ Correções aplicadas nesta revisão, todas conferidas contra as fontes:
    existem em comentário; `aggregateZonas` de fato semeia de `enderecosMap`.
 10. **Piso da janela de agendamento** promovido a item alcançável hoje: é
     divergência ativa com o R e não depende da migração.
+11. **§9 substituído por captura ao vivo** (14/08/2026). A tabela derivada de
+    `clean_names()` errava seis cabeçalhos: `Siape` (não `SIAPE`), `ID Zona`
+    (não `Id Zona`), `Data/hora coleta sangue`/`urina` (barra, minúsculo),
+    `Status sangue`/`Motivo sangue` (minúsculos) e `Dias entre 1°…` (grau, não
+    ordinal). Também confirmou que só 8 das 24 colunas são sempre
+    preenchidas, e que nenhuma traz coordenada.
