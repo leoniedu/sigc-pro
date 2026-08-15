@@ -109,9 +109,18 @@
   // the same controle|domicilio key. Empty strings (never undefined) so
   // the renderers can write cells without guarding — the convention
   // lista-agenda.js's annotateRow established.
+  // NEVER overwrites a booking the row already carries. On the
+  // biomarcadores page `agendado` comes from the report's own Data
+  // Agendada — authoritative, and free — so blanking it whenever the
+  // agenda lookup missed showed "—" for a household SIGC says is booked.
+  //
+  // That is also why the agenda is fetched at all on that page: not for
+  // per-household bookings, which the report already answers, but for
+  // the FREE slots per zona, which it cannot know.
   function joinAgenda(joined, agendaIdx, todayIso) {
     const AM = window.__sigcProAgendaLookups;
     return (joined || []).map((r) => {
+      if (r.agendado) return r;
       const slots = (agendaIdx && agendaIdx.get(`${r.controle}|${r.domicilio}`)) || [];
       const ag = AM.pickAgendado(slots, todayIso);
       return {
@@ -2615,7 +2624,11 @@
           const agenda = await AM.fetchAgendaSlots(
             uf, `${ano}-01-01T00:00:00`, `${ano + 1}-01-01T00:00:00`);
           agendaSlots = agenda.dados || [];
-          agendaIdx = AM.indexByControle(agendaSlots);
+          // Only Último Movimento needs the per-household index: on the
+          // biomarcadores page every booking comes from the report's own
+          // Data Agendada, so indexing thousands of slots by controle
+          // would build a lookup joinAgenda can never use.
+          if (!modo.comDemanda) agendaIdx = AM.indexByControle(agendaSlots);
         } catch (err) {
           console.warn(`${TAG} agenda fetch failed:`, err);
         }

@@ -1530,7 +1530,7 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
   // matching household, reaching all the way to the rendered Domicílios
   // tab HTML (not just an internal), so the `.dados` unwrapping at the
   // onMapaClick call site stays covered against a shape change.
-  test('a resolving agenda fetch joins a matching scheduled visit onto its household, visible in the Domicílios tab', async () => {
+  test('on the biomarcadores page the report wins over the agenda for a booking', async () => {
     const I = window.__sigcProUltimoMovimentoMapInternals;
     setUpDom({ header: HEADER_BIO, rows: ROWS_BIO, biomarcadores: true });
     I.resetFiltroCapturado();
@@ -1578,8 +1578,15 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
       const panel = document.getElementById('sigc-pro-ultimo-movimento-map-panel');
       expect(panel).not.toBeNull();
       const domiciliosHtml = document.getElementById('sigc-pro-domicilios-panel').innerHTML;
-      expect(domiciliosHtml).toContain('01/09/2026 09:00');
-      expect(domiciliosHtml).toContain('sigc-pro-futura');
+      // The fixture's Data Agendada is empty — the report says this
+      // household is NOT booked — while the agenda offers a slot for it.
+      // The report is authoritative here, so the agenda's date must not
+      // appear; the agenda is fetched on this page only for free slots.
+      expect(domiciliosHtml).not.toContain('01/09/2026 09:00');
+      // The panel still rendered, i.e. the agenda fetch is not wasted:
+      // its slots feed the zona capacity columns.
+      const zonasHtml = document.getElementById('sigc-pro-zonas-panel').innerHTML;
+      expect(zonasHtml).toContain('Slots');
       await new Promise((resolve) => setTimeout(resolve, 50));
     } finally {
       window.confirm = originalConfirm;
@@ -3887,5 +3894,35 @@ describe('Domicílios shows its zona\'s free slots', () => {
       const tds = (html.match(/<td[ >]/g) || []).length;
       expect(tds).toBe(ths);
     });
+  });
+});
+
+describe('the agenda is fetched only for free slots', () => {
+  test('joinAgenda does not erase a booking the report already stated', () => {
+    // The biomarcadores report carries Data Agendada per household, and
+    // biomarcadoresParaLinhas sets `agendado` from it. joinAgenda then
+    // overwrote that with the agenda's own lookup, which blanks it
+    // whenever the agenda has no matching slot — showing "—" for a
+    // household SIGC says is booked.
+    const joined = [{
+      controle: 'C1', domicilio: '1', agendado: '20/08/2026',
+      agendadoOrdenavel: '2026-08-20', futura: true,
+      status: 'Agendado', dataAgendada: '20/08/2026',
+    }];
+    const out = UM.joinAgenda(joined, new Map(), '2026-08-15');
+    expect(out[0].agendado).toBe('20/08/2026');
+    expect(out[0].agendadoOrdenavel).toBe('2026-08-20');
+  });
+
+  test('a household with no booking of its own still takes the agenda\'s', () => {
+    // Último Movimento has no Data Agendada column at all, so there the
+    // agenda remains the only source.
+    const AM = window.__sigcProAgendaLookups;
+    const idx = AM.indexByControle([{
+      start: '2026-09-01T09:00:00', isoDate: '2026-09-01',
+      controle: 'C1', domicilio: '1', zonas: 'Z1 - x', aberto: false,
+    }]);
+    const out = UM.joinAgenda([{ controle: 'C1', domicilio: '1' }], idx, '2026-08-15');
+    expect(out[0].agendado).toContain('01/09/2026');
   });
 });
