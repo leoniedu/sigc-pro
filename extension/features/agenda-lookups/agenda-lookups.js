@@ -625,6 +625,143 @@
     return fetchEnderecosPorFiltro({ IdUf: uf, IdAgencia: agencia });
   }
 
+  // --- Relatório de Acompanhamento de Biomarcadores --------------------
+  //
+  // The authoritative source for what a household still owes: it carries
+  // the literal collection `status`, where Último Movimento only offers
+  // `ultimaPosicao` as a proxy that errs in BOTH directions (measured in
+  // BA: ~12% of proxy-owed households were already collected or refused,
+  // while 81 proxy-closed ones were still open). See
+  // docs/mapa-biomarcadores.md.
+  //
+  // Third slug on the same generic /relatorio/filtrar endpoint, so it
+  // reuses postRelatorio — but its filtro field set is NOT the same as
+  // Último Movimento's: it has IdSupervisores and IdZona, and no
+  // IdTipoAcompanhamento. Mirrors pns.zonas'
+  // fetch_biomarcadores_municipio() (R/sigc_biomarcadores.R:129).
+  const BIOMARCADORES_SLUG = 'relatorio-acomp-biomarc';
+
+  // The scope comes from the page's own submitted filtro, replayed
+  // field-for-field — same contract as fetchEnderecosPorFiltro, so a
+  // município-wide report is ONE request, never one per Controle. (The R
+  // fans out per município only because it has no page filter to read.)
+  function filtroBodyBiomarcadores(filtro) {
+    const f = filtro || {};
+    const w = (v) => {
+      const s = String(v == null ? '' : v).trim();
+      return s === '' ? '*' : s;
+    };
+    return 'filtro=' + encodeURIComponent(JSON.stringify({
+      IdFiltro: BIOMARCADORES_SLUG,
+      IdUf: String(f.IdUf || ''),
+      IdAgencia: w(f.IdAgencia),
+      IdMunicipio: w(f.IdMunicipio),
+      Controle: w(f.Controle),
+      IdSupervisores: w(f.IdSupervisores),
+      IdEntrevistadores: w(f.IdEntrevistadores),
+      IdZona: w(f.IdZona),
+    }));
+  }
+
+  // Labels are the LIVE header texts (captured 2026-08-14), not the names
+  // pns.zonas ends up with — the R reaches those through
+  // janitor::clean_names(), which is not invertible by guessing. Matched
+  // with foldLive, which absorbs the "#!"/"!" sort decoration that
+  // "#!Controle" and "!N.º Domicílio" carry, plus accents and case (the
+  // live grid writes "Siape", "Status sangue" — mixed case both ways).
+  //
+  // Only the columns this feature actually reads are listed: adding a
+  // label here makes it REQUIRED, and resolveColumns returns null if any
+  // is missing, so an unused column would turn a harmless SIGC rename
+  // into a dead feature.
+  const BIOMARCADORES_LABELS = {
+    controle: 'Controle',
+    domicilio: 'N.º Domicílio',
+    idZona: 'ID Zona',
+    nomeZona: 'Nome Zona',
+    tipoEntrevista: 'Tipo Entrevista',
+    nomeEquipe: 'Nome Equipe',
+    status: 'Status',
+    dataResposta25a01: 'Data Resposta 25A.01',
+    dataAgendada: 'Data Agendada',
+    dataVisita: 'Data Visita Biomarcadores',
+    dataFinalColeta: 'Data Final para Coleta',
+    diasPrazoFinal: 'Dias Prazo Final',
+  };
+
+  // SIGC mixes DEGREE SIGN (U+00B0) and MASCULINE ORDINAL (U+00BA) in the
+  // SAME header row: "Dias entre 1° agendamento e coleta" uses the degree
+  // sign while "N.º Domicílio" uses the true ordinal. NFD normalizes
+  // neither, so a fold that ignores the difference is the only way both
+  // spellings keep matching if SIGC ever swaps one for the other.
+  function foldOrdinal(s) {
+    return foldLive(s).replace(/[°º]/g, 'o');
+  }
+
+  function tableToBiomarcadoresMap(headers, rows) {
+    const idx = resolveColumns(headers, BIOMARCADORES_LABELS, foldOrdinal);
+    if (!idx) return null;
+    const cell = (cells, i) => String(cells[i] == null ? '' : cells[i]).trim();
+    const map = new Map();
+    (rows || []).forEach((cells) => {
+      const controle = cell(cells, idx.controle);
+      const domicilio = cell(cells, idx.domicilio);
+      if (!controle || !domicilio) return;
+      // Every column past the first few is legitimately empty for a "Não
+      // iniciado" household — the report lists the whole subsample,
+      // including households where nothing has happened yet (confirmed in
+      // the live capture: no tipo, no equipe, no dates). Blank is data
+      // here, never a parse failure.
+      map.set(`${controle}|${domicilio}`, {
+        controle,
+        domicilio,
+        idZona: cell(cells, idx.idZona),
+        nomeZona: cell(cells, idx.nomeZona),
+        tipoEntrevista: cell(cells, idx.tipoEntrevista),
+        nomeEquipe: cell(cells, idx.nomeEquipe),
+        status: cell(cells, idx.status),
+        dataResposta25a01: cell(cells, idx.dataResposta25a01),
+        dataAgendada: cell(cells, idx.dataAgendada),
+        dataVisita: cell(cells, idx.dataVisita),
+        dataFinalColeta: cell(cells, idx.dataFinalColeta),
+        diasPrazoFinal: cell(cells, idx.diasPrazoFinal),
+      });
+    });
+    return map;
+  }
+
+  function parseBiomarcadoresHtml(html) {
+    const table = readReportTable(html, '#tableRelatorio');
+    return table ? tableToBiomarcadoresMap(table.headers, table.rows) : null;
+  }
+
+  // Cached per scope for the page's lifetime, same contract (and same
+  // poison-avoidance on failure) as fetchEnderecosPorFiltro.
+  const biomarcadoresCache = new Map();
+
+  function fetchBiomarcadoresPorFiltro(filtro) {
+    const f = filtro || {};
+    const chave = [f.IdUf, f.IdAgencia, f.IdMunicipio, f.Controle,
+      f.IdSupervisores, f.IdEntrevistadores, f.IdZona].map(
+      (v) => String(v == null ? '*' : v)).join('|');
+    const hit = biomarcadoresCache.get(chave);
+    if (hit) return hit;
+    const p = postRelatorio({
+      slug: BIOMARCADORES_SLUG,
+      body: filtroBodyBiomarcadores(f),
+      parse: parseBiomarcadoresHtml,
+    }).catch((err) => {
+      biomarcadoresCache.delete(chave);
+      throw err;
+    });
+    biomarcadoresCache.set(chave, p);
+    return p;
+  }
+
+  function resetBiomarcadoresCache() {
+    biomarcadoresCache.clear();
+  }
+
   const ULTIMO_MOVIMENTO_SLUG = 'relatorio-ultimo-movimento';
 
   function filtroBodyUltimoMovimento(uf, controle) {
@@ -842,6 +979,8 @@
     parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl,
     fetchEnderecos, fetchEnderecosByAgencia, fetchEnderecosPorFiltro,
     resetEnderecosAgenciaCache, stripAccents, stripHeaderMarker,
+    filtroBodyBiomarcadores, parseBiomarcadoresHtml, tableToBiomarcadoresMap,
+    fetchBiomarcadoresPorFiltro, resetBiomarcadoresCache, BIOMARCADORES_SLUG,
     parseSlots, zonaIdOf, chaveDomicilio, indexByControle, pickAgendado, fmtAgendado, horaDoStart, horaDeIso,
     slotsLivresDaJanela, agruparPorDia, buildSlotsLivresHtml, TARDE_FROM_MIN, indexZonaLivres,
     fetchAgendaSlots, resetAgendaCache,

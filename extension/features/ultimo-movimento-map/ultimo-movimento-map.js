@@ -308,6 +308,28 @@
     return r.totalDomicilios > r.semCoordenadas;
   }
 
+  // The Relatório de Acompanhamento de Biomarcadores, where the map is
+  // moving to (docs/mapa-biomarcadores.md). Unlike Último Movimento this
+  // page has no <h6> report title — the live capture (2026-08-14) names
+  // it only in the breadcrumb's active crumb — so onUltimoMovimento()'s
+  // h6 probe finds nothing here and the two detectors can't be shared.
+  //
+  // Matches the FULL report name, never the bare word "Biomarcadores":
+  // that word is the breadcrumb's first crumb and a menu entry across
+  // SIGC, so matching it would mount this feature on unrelated pages.
+  // Both the breadcrumb and an h6 are searched, so a future SIGC redesign
+  // that adds a title (or drops the breadcrumb) doesn't silently kill the
+  // feature — the same lesson onUltimoMovimento's own comment records.
+  const NOME_RELATORIO_BIOMARCADORES = 'acompanhamento de biomarcadores';
+
+  function onBiomarcadores() {
+    const AM = window.__sigcProAgendaLookups;
+    const sel = 'h6, .breadcrumb-item, [aria-current="page"]';
+    return [...document.querySelectorAll(sel)].some((el) => window.__sigcPro
+      .normalizeLabel(AM.stripAccents(el.textContent))
+      .includes(NOME_RELATORIO_BIOMARCADORES));
+  }
+
   // A slot needs lead time to be filled: the lab has to be arranged and
   // the household contacted, so today and the next two days are already
   // spoken for. On a FRIDAY the third day is out too — it lands on Monday,
@@ -1631,6 +1653,7 @@
     isRealizadaSemAgendamento,
     isPendente,
     zonaSemCapacidade,
+    onBiomarcadores,
     primeiroDiaAgendavel,
     fimDaJanela,
     lerFiltro,

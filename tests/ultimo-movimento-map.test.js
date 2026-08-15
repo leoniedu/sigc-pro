@@ -1755,3 +1755,56 @@ describe('janelaAgendavel', () => {
     expect(domingo >= primeiro && domingo <= fim).toBe(true);
   });
 });
+
+describe('onBiomarcadores', () => {
+  // The biomarcadores report has no <h6> title — the live capture shows
+  // the report named only in a breadcrumb, so onUltimoMovimento()'s h6
+  // probe finds nothing here.
+  const BREADCRUMB =
+    '<nav aria-label="breadcrumb"><ol class="breadcrumb">' +
+    '<li class="breadcrumb-item"><a href="javascript:void(0);">Biomarcadores</a></li>' +
+    '<li class="breadcrumb-item"><a href="javascript:void(0);">Relatório</a></li>' +
+    '<li class="breadcrumb-item active" aria-current="page">' +
+    'Relat&#xF3;rio de Acompanhamento de Biomarcadores</li></ol></nav>';
+
+  test('detects the report from its breadcrumb', () => {
+    document.body.innerHTML = BREADCRUMB;
+    try {
+      expect(UM.onBiomarcadores()).toBe(true);
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('does not fire on Último Movimento', () => {
+    document.body.innerHTML = '<h6>Relatório Último Movimento</h6>';
+    try {
+      expect(UM.onBiomarcadores()).toBe(false);
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('does not fire on the bare Biomarcadores menu word alone', () => {
+    // "Biomarcadores" alone appears in the breadcrumb's first crumb and in
+    // menus all over SIGC; only the full report name may match, or the
+    // feature mounts on unrelated pages.
+    document.body.innerHTML =
+      '<ol class="breadcrumb"><li class="breadcrumb-item">Biomarcadores</li></ol>';
+    try {
+      expect(UM.onBiomarcadores()).toBe(false);
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('tolerates an h6 title if SIGC ever adds one', () => {
+    document.body.innerHTML =
+      '<h6>Relatório de Acompanhamento de Biomarcadores</h6>';
+    try {
+      expect(UM.onBiomarcadores()).toBe(true);
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+});

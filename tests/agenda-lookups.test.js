@@ -290,3 +290,106 @@ describe('agenda helpers moved from lista-agenda', () => {
     expect(grupos[0].horas).toEqual(['09:00', '14:00']);
   });
 });
+
+describe('biomarcadores report', () => {
+  // Header row copied verbatim from a live capture (BA/Pituba,
+  // 2026-08-14) — including the "#!"/"!" sort decoration, the mixed-case
+  // "Siape", the slashed "Data/hora coleta sangue", and the DEGREE SIGN
+  // in "1°" where "N.º Domicílio" uses the MASCULINE ORDINAL. Anything
+  // that stops matching this HTML is a live-parity break.
+  const LIVE_HEADERS = [
+    'UF', 'Agência', 'Município', 'ID Zona', 'Nome Zona', '#!Controle',
+    '!N.º Domicílio', 'Tipo Entrevista', 'Nome Equipe', 'Status',
+    'Siape Agendamento', 'Data Resposta 25A.01', 'Data Agendada',
+    'Data Visita Biomarcadores', 'Siape Coleta Biomarcadores',
+    'Data Final para Coleta', 'Dias Prazo Final', 'Data/hora coleta sangue',
+    'Status sangue', 'Motivo sangue', 'Data/hora coleta urina',
+    'Status urina', 'Motivo urina', 'Dias entre 1° agendamento e coleta',
+  ];
+
+  function liveHtml(bodyRows) {
+    const th = LIVE_HEADERS.map((h) => `<th>${h}</th>`).join('');
+    const trs = bodyRows.map(
+      (cells) => `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('');
+    return `<div><table id="tableRelatorio"><thead><tr>${th}</tr></thead>` +
+      `<tbody>${trs}</tbody></table></div>`;
+  }
+
+  // The three sample rows from the same capture: one Controle, three
+  // domicílios, all "Não iniciado" with every later column empty.
+  const NAO_INICIADO = (dom) => [
+    '29', '292740800', '2927408', '29XJYY', '29.3.01.02 29_Linus_Pituba',
+    '292740805220571', dom, '', '', 'Não iniciado',
+    '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+  ];
+
+  test('parses the live header row, decoration and all', () => {
+    const map = AM.parseBiomarcadoresHtml(liveHtml([NAO_INICIADO('1')]));
+    expect(map).not.toBeNull();
+    const row = map.get('292740805220571|1');
+    expect(row).toBeDefined();
+    expect(row.status).toBe('Não iniciado');
+    expect(row.idZona).toBe('29XJYY');
+    expect(row.nomeZona).toBe('29.3.01.02 29_Linus_Pituba');
+  });
+
+  test('keys by controle|domicilio, not controle alone', () => {
+    // The live capture shows one Controle spanning domicílios 1, 2 and 3.
+    // Keying by Controle would collapse them to a single household.
+    const map = AM.parseBiomarcadoresHtml(
+      liveHtml([NAO_INICIADO('1'), NAO_INICIADO('2'), NAO_INICIADO('3')]));
+    expect(map.size).toBe(3);
+    expect(map.get('292740805220571|2').domicilio).toBe('2');
+  });
+
+  test('reads the columns the proxy never had', () => {
+    const cells = NAO_INICIADO('7');
+    cells[9] = 'Agendado';
+    cells[12] = '20/08/2026';   // Data Agendada
+    cells[11] = '01/08/2026';   // Data Resposta 25A.01
+    cells[15] = '26/08/2026';   // Data Final para Coleta
+    cells[16] = '3';            // Dias Prazo Final
+    cells[8] = 'EQUIPE 1';      // Nome Equipe
+    const row = AM.parseBiomarcadoresHtml(liveHtml([cells])).get('292740805220571|7');
+    expect(row.status).toBe('Agendado');
+    expect(row.dataAgendada).toBe('20/08/2026');
+    expect(row.dataResposta25a01).toBe('01/08/2026');
+    expect(row.dataFinalColeta).toBe('26/08/2026');
+    expect(row.diasPrazoFinal).toBe('3');
+    expect(row.nomeEquipe).toBe('EQUIPE 1');
+  });
+
+  test('fails closed when a required header is missing', () => {
+    const broken = LIVE_HEADERS.filter((h) => h !== 'Status');
+    const th = broken.map((h) => `<th>${h}</th>`).join('');
+    const html = `<table id="tableRelatorio"><thead><tr>${th}</tr></thead><tbody></tbody></table>`;
+    // null, never a map with an undefined column silently joined.
+    expect(AM.parseBiomarcadoresHtml(html)).toBeNull();
+  });
+
+  test('tolerates the ordinal/degree confusion in the last column', () => {
+    // Same header with the MASCULINE ORDINAL instead of DEGREE SIGN: SIGC
+    // already mixes the two in one row, so neither spelling may break it.
+    const swapped = LIVE_HEADERS.map(
+      (h) => h.replace('1° agendamento', '1º agendamento'));
+    const th = swapped.map((h) => `<th>${h}</th>`).join('');
+    const html = `<table id="tableRelatorio"><thead><tr>${th}</tr></thead>` +
+      `<tbody><tr>${NAO_INICIADO('1').map((c) => `<td>${c}</td>`).join('')}</tr></tbody></table>`;
+    expect(AM.parseBiomarcadoresHtml(html)).not.toBeNull();
+  });
+
+  test('filtro body pins the scope and wildcards the rest', () => {
+    const body = AM.filtroBodyBiomarcadores({
+      IdUf: '29', IdAgencia: '*', IdMunicipio: '2927408', Controle: '*',
+    });
+    const filtro = JSON.parse(decodeURIComponent(body.replace(/^filtro=/, '')));
+    expect(filtro.IdFiltro).toBe('relatorio-acomp-biomarc');
+    expect(filtro.IdUf).toBe('29');
+    expect(filtro.IdMunicipio).toBe('2927408');
+    // This report's field set differs from Último Movimento's: it has
+    // IdSupervisores/IdZona and no IdTipoAcompanhamento.
+    expect(filtro.IdSupervisores).toBe('*');
+    expect(filtro.IdZona).toBe('*');
+    expect(filtro).not.toHaveProperty('IdTipoAcompanhamento');
+  });
+});
