@@ -347,6 +347,95 @@
     'Domicílio Fechado': STATUS_FECHADO,
   };
 
+  // --- Agência layers ----------------------------------------------------
+  //
+  // One toggleable marker layer per agência, so a supervisor covering
+  // several can isolate one at a time. Only the household markers are
+  // grouped: hulls, Controle labels and the leader lines stay on the base
+  // map, since they answer "where is this zona" rather than "whose work
+  // is this".
+  //
+  // Agência comes from the biomarcadores report's own column. Último
+  // Movimento has no such column, so everything there lands in the single
+  // "Sem agência" bucket and the control is suppressed (see
+  // valeControleDeCamadas).
+  const SEM_AGENCIA = 'Sem agência';
+
+  function agruparPorAgencia(rows) {
+    const grupos = new Map();
+    (rows || []).forEach((r) => {
+      const chave = String((r && r.agencia) || '').trim() || SEM_AGENCIA;
+      if (!grupos.has(chave)) grupos.set(chave, []);
+      grupos.get(chave).push(r);
+    });
+    // Sorted so the control's order is stable across renders — an
+    // insertion-ordered list would shuffle whenever the report did.
+    return new Map([...grupos.entries()].sort((a, b) => a[0].localeCompare(b[0])));
+  }
+
+  // A control with one checkbox toggles nothing and just costs a corner
+  // of the map. The scope gate already requires agência/município/
+  // controle, so one agência is the common case, not an edge case.
+  function valeControleDeCamadas(grupos) {
+    return grupos.size > 1;
+  }
+
+  // --- Marker size, by zoom ---------------------------------------------
+  //
+  // A fixed radius cannot work at both ends: with thousands of markers,
+  // 9px is a solid smear at state level (nothing is distinguishable) and
+  // wider than the building at street level. Ports the interpolation from
+  // pns.zonas' map_corredores.R:1262-1268 — 3px at zoom 9 up to 13px at
+  // zoom 18, with urgent markers ~50% larger at every stop so they keep
+  // standing out without blowing up close in.
+  //
+  // Clamped, not extrapolated: a world-level zoom must not produce a
+  // negative radius.
+  const RAIO_POR_ZOOM = [
+    { zoom: 9, normal: 3, urgente: 4.5 },
+    { zoom: 13, normal: 6, urgente: 9 },
+    { zoom: 16, normal: 9, urgente: 14 },
+    { zoom: 18, normal: 13, urgente: 19 },
+  ];
+
+  function raioPorZoom(zoom, urgente) {
+    const chave = urgente ? 'urgente' : 'normal';
+    const pontos = RAIO_POR_ZOOM;
+    if (zoom <= pontos[0].zoom) return pontos[0][chave];
+    const ultimo = pontos[pontos.length - 1];
+    if (zoom >= ultimo.zoom) return ultimo[chave];
+    for (let i = 1; i < pontos.length; i += 1) {
+      const a = pontos[i - 1];
+      const b = pontos[i];
+      if (zoom <= b.zoom) {
+        const t = (zoom - a.zoom) / (b.zoom - a.zoom);
+        return a[chave] + t * (b[chave] - a[chave]);
+      }
+    }
+    return ultimo[chave];
+  }
+
+  // The needs-action fill is yellow, and a white stroke vanishes against
+  // it — the R hit exactly this and switched the urgent marker to a dark
+  // halo (map_corredores.R:1274-1277).
+  const BORDA_URGENTE = '#7A0177';
+
+  function corDaBorda(urgente) {
+    return urgente ? BORDA_URGENTE : 'white';
+  }
+
+  // Worth a bigger, haloed marker: the household needs action before its
+  // deadline closes. Reuses emAlertaDePrazo so the map and the Domicílios
+  // table can never disagree about who is urgent.
+  //
+  // Only in MODO_BIOMARCADORES: Último Movimento has no deadline data at
+  // all, so nothing there can be urgent.
+  function marcadorUrgente(row, modo, hojeIso) {
+    const m = modo || MODO_MOVIMENTO;
+    if (!m.comDemanda) return false;
+    return emAlertaDePrazo(row, hojeIso);
+  }
+
   // --- Biomarcador collection palette (MODO_BIOMARCADORES) --------------
   //
   // Okabe-Ito throughout, same family as the zona palette. Ports the
@@ -1756,6 +1845,23 @@
     // markers below never sit exactly on top of one another and each
     // domicílio number stays readable and clickable.
     const bounds = [];
+    // Kept so zoomend can resize them in place; rebuilding markers on
+    // every zoom would drop their popups and cost far more than a
+    // setRadius pass.
+    const marcadoresPorUrgencia = [];
+    // One LayerGroup per agência when there is more than one to separate.
+    // With a single agência every marker goes straight on the map, as
+    // before — no group, no control.
+    const gruposAgencia = agruparPorAgencia(withCoords);
+    const usarCamadas = valeControleDeCamadas(gruposAgencia);
+    const camadaPorAgencia = new Map();
+    if (usarCamadas) {
+      gruposAgencia.forEach((_, agencia) => {
+        camadaPorAgencia.set(agencia, L.layerGroup().addTo(map));
+      });
+    }
+    const destinoDe = (r) => camadaPorAgencia.get(
+      String((r && r.agencia) || '').trim() || SEM_AGENCIA) || map;
     spiderfyRows(withCoords).forEach((r) => {
       const color = statusColor(r, m, hojeIso);
       if (r.coLocated > 1) {
@@ -1766,9 +1872,19 @@
           color: '#666', weight: 1, opacity: 0.5, interactive: false,
         }).addTo(map);
       }
+      // Urgent markers are bigger and darker-edged, and the radius tracks
+      // zoom (see raioPorZoom): what needs action is a small minority —
+      // in BA, dozens against ~1.600 "Não iniciado" — so colour alone
+      // loses it in the crowd.
+      const urgente = marcadorUrgente(r, m, hojeIso);
       const marker = L.circleMarker([r.lat, r.lon], {
-        radius: 9, color, fillColor: color, fillOpacity: 0.8,
-      }).addTo(map);
+        radius: raioPorZoom(map.getZoom(), urgente),
+        color: corDaBorda(urgente),
+        weight: urgente ? 2 : 1,
+        fillColor: color,
+        fillOpacity: 0.8,
+      }).addTo(destinoDe(r));
+      marcadoresPorUrgencia.push({ marker, urgente });
       // The number rides in its own non-interactive divIcon centered on
       // the circle — circleMarker itself cannot carry text.
       L.marker([r.lat, r.lon], {
@@ -1779,7 +1895,7 @@
           iconAnchor: [9, 9],
         }),
         interactive: false,
-      }).addTo(map);
+      }).addTo(destinoDe(r));
       // gmapsPontoUrl (just pins the point — no turn-by-turn directions)
       // is always non-empty here (withCoords already filtered to
       // temCoordenadas rows), same outbound-link-only pattern
@@ -1816,6 +1932,26 @@
         interactive: false,
       }).addTo(map);
     });
+
+    // Resize in place on zoom. fitBounds below fires this too, so the
+    // initial radii land at the zoom the map actually settles on rather
+    // than the one it was constructed with.
+    map.on('zoomend', () => {
+      const z = map.getZoom();
+      marcadoresPorUrgencia.forEach(({ marker, urgente }) => {
+        marker.setRadius(raioPorZoom(z, urgente));
+      });
+    });
+
+    // Overlays only: there is one base layer (OSM), so offering it as a
+    // choice would just invite turning the map off.
+    if (usarCamadas) {
+      const overlays = {};
+      camadaPorAgencia.forEach((camada, agencia) => {
+        overlays[`Agência ${agencia} (${gruposAgencia.get(agencia).length})`] = camada;
+      });
+      L.control.layers(null, overlays, { collapsed: true }).addTo(map);
+    }
 
     addStatusLegend(L, map, m);
     map.fitBounds(bounds, { padding: [20, 20] });
@@ -2426,6 +2562,12 @@
     aggregateZonas,
     zonaColor,
     statusColor,
+    raioPorZoom,
+    agruparPorAgencia,
+    valeControleDeCamadas,
+    corDaBorda,
+    marcadorUrgente,
+    renderLeafletMap,
     legendEntries,
     buildZonasTableHtml,
     buildDomiciliosTabHtml,

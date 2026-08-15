@@ -677,6 +677,7 @@
   const BIOMARCADORES_LABELS = {
     controle: 'Controle',
     domicilio: 'N.º Domicílio',
+    agencia: 'Agência',
     idZona: 'ID Zona',
     nomeZona: 'Nome Zona',
     tipoEntrevista: 'Tipo Entrevista',
@@ -715,6 +716,7 @@
       map.set(`${controle}|${domicilio}`, {
         controle,
         domicilio,
+        agencia: cell(cells, idx.agencia),
         idZona: cell(cells, idx.idZona),
         nomeZona: cell(cells, idx.nomeZona),
         tipoEntrevista: cell(cells, idx.tipoEntrevista),

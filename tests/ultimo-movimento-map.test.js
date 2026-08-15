@@ -1595,8 +1595,18 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
   // happy-dom disables script loading outright, which would otherwise
   // make every tile load reject via onerror.
   function fakeLeaflet() {
-    const layer = { addTo: () => layer, bindTooltip: () => layer, bindPopup: () => layer };
-    const map = { addLayer: () => {}, setView: () => map, fitBounds: () => map };
+    const layer = {
+      addTo: () => layer, bindTooltip: () => layer, bindPopup: () => layer,
+      // circleMarker's zoom-driven resize (see raioPorZoom).
+      setRadius: () => layer,
+    };
+    // getZoom/on are real Leaflet surface the render path uses; without
+    // them here the fake diverges from the browser and these tests pass
+    // against code that would throw on the live page.
+    const map = {
+      addLayer: () => {}, setView: () => map, fitBounds: () => map,
+      getZoom: () => 13, on: () => map,
+    };
     let mapCallCount = 0;
     const L = {
       mapCallCount: () => mapCallCount,
@@ -1611,8 +1621,13 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
       circleMarker: () => layer,
       marker: () => layer,
       divIcon: () => ({}),
+      layerGroup: () => layer,
       DomUtil: { create: () => document.createElement('div') },
-      control: () => ({ addTo: () => {}, onAdd: null }),
+      control: Object.assign(() => ({ addTo: () => {}, onAdd: null }), {
+        // L.control.layers is a property ON the control function in real
+        // Leaflet, not a separate export.
+        layers: () => ({ addTo: () => {} }),
+      }),
     };
     return L;
   }
@@ -3067,5 +3082,233 @@ describe('initPanelTables refuses malformed tables', () => {
       window.jQuery = window.$ = prev;
       document.body.innerHTML = '';
     }
+  });
+});
+
+describe('agência reaches the map rows', () => {
+  const BIO_HEADERS = [
+    'UF', 'Agência', 'Município', 'ID Zona', 'Nome Zona', '#!Controle',
+    '!N.º Domicílio', 'Tipo Entrevista', 'Nome Equipe', 'Status',
+    'Siape Agendamento', 'Data Resposta 25A.01', 'Data Agendada',
+    'Data Visita Biomarcadores', 'Siape Coleta Biomarcadores',
+    'Data Final para Coleta', 'Dias Prazo Final', 'Data/hora coleta sangue',
+    'Status sangue', 'Motivo sangue', 'Data/hora coleta urina',
+    'Status urina', 'Motivo urina', 'Dias entre 1° agendamento e coleta',
+  ];
+  const BIO_ROW = [
+    '29', '292740800', '2927408', '29XJYY', 'Pituba', '292740805220571',
+    '1', 'Realizada', 'EQ1', 'A agendar', '', '', '', '', '',
+    '20/08/2026', '6', '', '', '', '', '', '', '',
+  ];
+
+  test('the agência column is parsed, so layers can group by it', () => {
+    const row = UM.biomarcadoresParaLinhas(BIO_HEADERS, [BIO_ROW])
+      .get('292740805220571|1');
+    expect(row.agencia).toBe('292740800');
+  });
+});
+
+describe('marker radius scales with zoom', () => {
+  // Ported from pns.zonas' map_corredores.R:1262-1268. At ~3.400 markers a
+  // fixed 9px is a solid smear zoomed out and larger than the building
+  // zoomed in. Urgent markers run ~50% larger at every level so they keep
+  // standing out without blowing up close in.
+  test('grows from state view to street view', () => {
+    expect(UM.raioPorZoom(9, false)).toBeLessThan(UM.raioPorZoom(13, false));
+    expect(UM.raioPorZoom(13, false)).toBeLessThan(UM.raioPorZoom(18, false));
+    expect(UM.raioPorZoom(9, false)).toBe(3);
+    expect(UM.raioPorZoom(18, false)).toBe(13);
+  });
+
+  test('urgent markers are larger at every level', () => {
+    [9, 13, 16, 18].forEach((z) => {
+      expect(UM.raioPorZoom(z, true)).toBeGreaterThan(UM.raioPorZoom(z, false));
+    });
+    expect(UM.raioPorZoom(9, true)).toBe(4.5);
+    expect(UM.raioPorZoom(18, true)).toBe(19);
+  });
+
+  test('interpolates between the anchor points', () => {
+    // Halfway from zoom 9 (3px) to 13 (6px).
+    expect(UM.raioPorZoom(11, false)).toBe(4.5);
+  });
+
+  test('clamps outside the anchor range instead of extrapolating', () => {
+    // A world-level zoom must not produce a negative radius.
+    expect(UM.raioPorZoom(0, false)).toBe(3);
+    expect(UM.raioPorZoom(22, false)).toBe(13);
+  });
+});
+
+describe('urgency is visible on the map', () => {
+  const linha = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', status: 'A agendar',
+    tipoEntrevista: 'Realizada', dataAgendada: '', dataFinalColeta: '20/08/2026',
+    ...over,
+  });
+
+  test('an alerted household is marked urgent, a calm one is not', () => {
+    // The alert already existed in the Domicílios table; the map is where
+    // someone plans a route, so it has to carry it too.
+    expect(UM.marcadorUrgente(linha(), UM.MODO_BIOMARCADORES, '2026-08-14')).toBe(true);
+    expect(UM.marcadorUrgente(
+      linha({ dataFinalColeta: '30/09/2026' }), UM.MODO_BIOMARCADORES, '2026-08-14')).toBe(false);
+  });
+
+  test('a collected household is never urgent', () => {
+    expect(UM.marcadorUrgente(
+      linha({ status: 'Coletado Sangue e Urina' }),
+      UM.MODO_BIOMARCADORES, '2026-08-14')).toBe(false);
+  });
+
+  test('MODO_MOVIMENTO has no deadline data, so nothing is urgent', () => {
+    expect(UM.marcadorUrgente(linha(), UM.MODO_MOVIMENTO, '2026-08-14')).toBe(false);
+  });
+
+  test('the urgent halo is dark, not white', () => {
+    // White disappears against the yellow needs-action fill — the R hit
+    // this and switched to a dark stroke.
+    expect(UM.corDaBorda(true)).not.toBe('white');
+    expect(UM.corDaBorda(false)).toBe('white');
+  });
+});
+
+describe('agência layer toggles', () => {
+  const linha = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', temZona: true,
+    temCoordenadas: true, lat: -12, lon: -38, origLat: -12, origLon: -38,
+    tipoEntrevista: 'Realizada', status: 'A agendar', ultimaPosicao: '',
+    agendado: '', dataAgendada: '', dataFinalColeta: '', agencia: '292740800',
+    entrevistador: '', coLocated: 1, ...over,
+  });
+
+  test('groups rows by agência, sorted, for the layer control', () => {
+    const grupos = UM.agruparPorAgencia([
+      linha({ domicilio: '1', agencia: '292740800' }),
+      linha({ domicilio: '2', agencia: '290570100' }),
+      linha({ domicilio: '3', agencia: '292740800' }),
+    ]);
+    expect([...grupos.keys()]).toEqual(['290570100', '292740800']);
+    expect(grupos.get('292740800')).toHaveLength(2);
+  });
+
+  test('rows with no agência fall into one labelled bucket', () => {
+    // Último Movimento carries no agência column at all, so this is the
+    // normal case there — the bucket must be named, not blank.
+    const grupos = UM.agruparPorAgencia([linha({ agencia: '' })]);
+    expect([...grupos.keys()]).toEqual(['Sem agência']);
+  });
+
+  test('a single agência is not worth a layer control', () => {
+    // The scope gate already requires agência/município/controle, so a
+    // one-agência report is the common case. A control with one checkbox
+    // is chrome that toggles nothing.
+    expect(UM.valeControleDeCamadas(UM.agruparPorAgencia([linha()]))).toBe(false);
+    expect(UM.valeControleDeCamadas(UM.agruparPorAgencia([
+      linha({ domicilio: '1', agencia: 'A' }),
+      linha({ domicilio: '2', agencia: 'B' }),
+    ]))).toBe(true);
+  });
+});
+
+describe('renderLeafletMap wires the three map features', () => {
+  // Drives the real render path against a recording fake, so the wiring
+  // is covered — not just the pure helpers. The pre-existing fake only
+  // asserted the map got constructed, which is how a missing getZoom()
+  // could have shipped.
+  function recordingLeaflet() {
+    const rec = {
+      circles: [], grupos: 0, camadas: null, zoomHandlers: [], addedTo: [],
+    };
+    // addTo returns the layer itself, as real Leaflet does — returning
+    // anything else breaks the chained .bindPopup() the render path uses.
+    const mkLayer = () => {
+      const layer = {
+        addTo(dest) { rec.addedTo.push(dest === rec.map ? 'map' : 'grupo'); return layer; },
+        bindTooltip() { return layer; },
+        bindPopup() { return layer; },
+        setRadius(r) { rec.circles.push({ raio: r, set: true }); return layer; },
+      };
+      return layer;
+    };
+    rec.map = {
+      addLayer: () => {}, setView() { return this; }, fitBounds() { return this; },
+      getZoom: () => 13,
+      on: (ev, fn) => { if (ev === 'zoomend') rec.zoomHandlers.push(fn); return rec.map; },
+    };
+    const L = {
+      map: (c) => { if (c) c.innerHTML = ''; return rec.map; },
+      tileLayer: () => mkLayer(),
+      polygon: () => mkLayer(), polyline: () => mkLayer(), circle: () => mkLayer(),
+      circleMarker: (_ll, opts) => {
+        const m = mkLayer();
+        rec.circles.push({ raio: opts.radius, cor: opts.color, peso: opts.weight });
+        return m;
+      },
+      marker: () => mkLayer(),
+      divIcon: () => ({}),
+      layerGroup: () => { rec.grupos += 1; return mkLayer(); },
+      DomUtil: { create: () => document.createElement('div') },
+      control: Object.assign(() => ({ addTo: () => {}, onAdd: null }), {
+        layers: (_base, overlays) => { rec.camadas = Object.keys(overlays); return { addTo: () => {} }; },
+      }),
+    };
+    return { L, rec };
+  }
+
+  const linha = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', zona: 'Z1', temZona: true,
+    temCoordenadas: true, lat: -12, lon: -38, tipoEntrevista: 'Realizada',
+    status: 'A agendar', ultimaPosicao: '', agendado: '', dataAgendada: '',
+    dataFinalColeta: '', entrevistador: '', agencia: '292740800', ...over,
+  });
+
+  const render = (rows, modo) => {
+    const { L, rec } = recordingLeaflet();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      UM.renderLeafletMap(L, container, rows, modo);
+    } finally {
+      container.remove();
+    }
+    return rec;
+  };
+
+  test('registers a zoomend handler that resizes markers', () => {
+    const rec = render([linha()], UM.MODO_BIOMARCADORES);
+    expect(rec.zoomHandlers).toHaveLength(1);
+    const antes = rec.circles.length;
+    rec.zoomHandlers[0]();
+    // Every marker got a new radius, none was rebuilt.
+    expect(rec.circles.length).toBeGreaterThan(antes);
+    expect(rec.circles.at(-1).set).toBe(true);
+  });
+
+  test('an urgent household is drawn larger with a dark edge', () => {
+    const urgente = render(
+      [linha({ dataFinalColeta: '20/08/2026' })], UM.MODO_BIOMARCADORES);
+    const calmo = render([linha()], UM.MODO_BIOMARCADORES);
+    expect(urgente.circles[0].raio).toBeGreaterThan(calmo.circles[0].raio);
+    expect(urgente.circles[0].cor).not.toBe('white');
+    expect(calmo.circles[0].cor).toBe('white');
+  });
+
+  test('one agência means no layer control and no groups', () => {
+    const rec = render([linha()], UM.MODO_BIOMARCADORES);
+    expect(rec.grupos).toBe(0);
+    expect(rec.camadas).toBeNull();
+  });
+
+  test('two agências get one layer each, labelled with their counts', () => {
+    const rec = render([
+      linha({ domicilio: '1', agencia: '292740800' }),
+      linha({ domicilio: '2', agencia: '290570100' }),
+      linha({ domicilio: '3', agencia: '290570100' }),
+    ], UM.MODO_BIOMARCADORES);
+    expect(rec.grupos).toBe(2);
+    expect(rec.camadas).toEqual([
+      'Agência 290570100 (2)', 'Agência 292740800 (1)',
+    ]);
   });
 });
