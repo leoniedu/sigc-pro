@@ -321,9 +321,20 @@
       // A lapsed booking is in the first, not the second: coletaEmAberto
       // reopens it once the date passes, so a stale Data Agendada can
       // never read as work in progress.
+      //
+      // "A agendar" means SCHEDULABLE, which is narrower than "open":
+      // deveColeta also requires the interview to have concluded as
+      // 'Realizada'. The collection follows the interview, so a household
+      // nobody has visited — or one whose interview found no resident —
+      // cannot be booked, however open its status. Counting merely-open
+      // households put 1.629 in this column in BA when 170 were
+      // actionable, which is the R's `realizadas_sem_agendamento`
+      // (relatorio_agenda.R:345).
       if (m.comDemanda) {
-        if (coletaEmAberto(r, hojeIso)) bucket.aAgendar += 1;
-        else if (r.status === STATUS_AGENDADO) bucket.jaAgendados += 1;
+        if (deveColeta(r, hojeIso)) bucket.aAgendar += 1;
+        else if (r.status === STATUS_AGENDADO && !coletaEmAberto(r, hojeIso)) {
+          bucket.jaAgendados += 1;
+        }
       }
     });
 
@@ -870,11 +881,12 @@
       'Já distribuído, mas a entrevista ainda não concluiu — sem tipo ' +
       'registrado. Alguém já esteve lá; o desfecho é que não veio.';
     const TIP_A_AGENDAR =
-      'Biomarcador em aberto e sem horário marcado — inclui agendamento ' +
-      'vencido sem coleta. É o que precisa de ação.';
+      'Entrevista realizada, biomarcador em aberto e sem horário marcado — ' +
+      'inclui agendamento vencido sem coleta. Só entra quem dá para agendar ' +
+      'hoje: sem entrevista feita não há coleta a marcar.';
     const TIP_JA_AGENDADOS =
-      'Biomarcador em aberto com data futura marcada. Somado a "A agendar" ' +
-      'dá a carga em aberto da zona.';
+      'Entrevista realizada e biomarcador com data futura marcada. Somado a ' +
+      '"A agendar" dá a carga agendável da zona.';
     const TIP_PIN = 'Ver esta zona no mapa';
     // Header and body segments are gated by the SAME flags, so a column
     // can never appear in one and not the other — the failure mode that

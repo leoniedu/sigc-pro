@@ -3444,3 +3444,62 @@ describe('the capacity flag matches the column on screen', () => {
     expect(html).not.toContain('sigc-pro-zona-sem-capacidade');
   });
 });
+
+describe('A agendar means schedulable, not merely open', () => {
+  const linha = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', temZona: true,
+    temCoordenadas: true, tipoEntrevista: 'Realizada',
+    ultimaPosicao: 'Descarregado', status: 'A agendar', agendado: '',
+    dataAgendada: '', ...over,
+  });
+  const agg = (rows) => UM.aggregateZonas(rows, new Map(), UM.MODO_BIOMARCADORES, '2026-08-15')[0];
+
+  test('a household nobody has visited is NOT schedulable', () => {
+    // The collection follows the interview: you cannot book a biomarcador
+    // visit for a household whose interview has not happened. Counting
+    // these made BA read 1.629 "a agendar" when 170 were actionable.
+    const z = agg([
+      linha({ domicilio: '1', tipoEntrevista: '', ultimaPosicao: 'Distribuido', status: 'Não iniciado' }),
+      linha({ domicilio: '2', tipoEntrevista: '', ultimaPosicao: 'Enviado para Carga', status: 'Não iniciado' }),
+    ]);
+    expect(z.aAgendar).toBe(0);
+  });
+
+  test('nor is one already in the field whose interview has not concluded', () => {
+    const z = agg([linha({
+      domicilio: '1', tipoEntrevista: '', ultimaPosicao: 'Descarregado Parcialmente',
+      status: 'Não iniciado',
+    })]);
+    expect(z.aAgendar).toBe(0);
+  });
+
+  test('an interview that concluded WITHOUT a resident is not schedulable either', () => {
+    // Domicílio Vago, Demolida and friends: the interview is done, but
+    // there is nobody to draw blood from.
+    ['Domicílio Vago', 'Demolida', 'Uso Ocasional'].forEach((tipoEntrevista) => {
+      expect(agg([linha({ tipoEntrevista, status: 'Não iniciado' })]).aAgendar).toBe(0);
+    });
+  });
+
+  test('a completed interview with the collection open IS schedulable', () => {
+    expect(agg([linha({ status: 'A agendar' })]).aAgendar).toBe(1);
+    expect(agg([linha({ status: 'Não iniciado' })]).aAgendar).toBe(1);
+    expect(agg([linha({ status: 'Indefinido' })]).aAgendar).toBe(1);
+  });
+
+  test('a lapsed booking on a completed interview is schedulable again', () => {
+    const z = agg([linha({ status: 'Agendado', dataAgendada: '01/01/2020' })]);
+    expect(z.aAgendar).toBe(1);
+    expect(z.jaAgendados).toBe(0);
+  });
+
+  test('the two columns still add to the open workload', () => {
+    const z = agg([
+      linha({ domicilio: '1', status: 'A agendar' }),
+      linha({ domicilio: '2', status: 'Agendado', dataAgendada: '31/12/2099' }),
+      linha({ domicilio: '3', tipoEntrevista: '', ultimaPosicao: 'Distribuido', status: 'Não iniciado' }),
+    ]);
+    // The undistributed one is in neither: it is not work anyone can book.
+    expect(z.aAgendar + z.jaAgendados).toBe(2);
+  });
+});
