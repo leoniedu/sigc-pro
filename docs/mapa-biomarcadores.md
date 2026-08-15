@@ -264,7 +264,7 @@ Fechado — sem prazo, agendamento ou visita. Provavelmente a mesma família de
 `Outro Motivo` do lado do biomarcador, que é o rótulo mais antigo para o
 mesmo desfecho.
 
-## 4. Duas armadilhas de rótulo homônimo (parcial)
+## 4. Duas armadilhas de rótulo homônimo ✅
 
 **Recusa** e **Outro Motivo** existem nos DOIS campos e significam coisas
 diferentes, em populações quase disjuntas (BA, 14/08/2026):
@@ -349,7 +349,7 @@ nasce da resposta ao 25A.01. **`Não iniciado` nunca tem prazo** — o prazo só
 existe depois de a coleta começar, então a combinação é impossível, não
 apenas rara.
 
-## 6. Zona pode abranger mais de uma agência
+## 6. Zona pode abranger mais de uma agência ✅ (não se aplica)
 
 A premissa "toda zona resolve a uma agência" vale para a BA e **não vale em
 geral**. No PE, 7 zonas abrangem 2 agências cada (RJ: 1). Não é dado
@@ -505,7 +505,7 @@ sozinho: as três primeiras linhas compartilham
 `Controle = 292740805220571` com `N.º Domicílio` 1, 2 e 3 — o mesmo motivo
 documentado em `enderecoKey()` (`sigc-common.js:70`).
 
-## 10. Decisões de UX ainda em aberto
+## 10. Decisões de UX ✅
 
 1. **~~Em que página a funcionalidade vive~~** — resolvido, ver topo.
 2. **~~Custo do fan-out~~** — dissolvido pela decisão de página: o recorte é
@@ -518,11 +518,16 @@ documentado em `enderecoKey()` (`sigc-common.js:70`).
    como `MODO_MOVIMENTO`. Não é uma segunda ferramenta a manter em
    paralelo, é a mesma, com as colunas que dependem da agenda omitidas.
    Ver a tabela no topo.
-5. **Como o usuário sabe qual variante está vendo.** Hoje a diferença é
-   inferível pelas colunas ausentes e por uma frase no hint da aba Zonas
-   ("Sem consulta à agenda: este recorte não traz agendamentos nem slots
-   livres"). Se isso basta, é pergunta de uso real — não está resolvido por
-   decisão de projeto.
+5. **~~Como o usuário sabe qual variante está vendo~~** — resolvido: o
+   painel se identifica na própria barra ("Biomarcadores" ou "Último
+   Movimento (sem demanda estimada)"), com tooltip dizendo de onde vêm os
+   dados. Antes a diferença só era inferível pelas colunas **ausentes**, o
+   que não ajuda quem nunca viu a outra variante.
+
+   O rótulo do Último Movimento diz "sem demanda estimada", não "demanda
+   estimada": aquela variante não mostra coluna de demanda nenhuma, então
+   a ressalva honesta é "não há esse número aqui", não "o número é
+   aproximado".
 
 ## 11. O mapa: cor, alfinete e contorno ✅
 
@@ -658,22 +663,19 @@ extensão já faz.
 
 ## O que falta
 
-Todo o trabalho de fundo deste documento está feito (apêndice B). O que
-resta é pequeno e nenhum item bloqueia outro:
+Nada deste documento. Tudo o que ele propunha está implementado
+(apêndice B) ou verificado e descartado como não-aplicável.
 
-- **Rotular `Outro Motivo`** como o §4 pede. A recusa da entrevista já foi
-  nomeada em toda a UI; `Outro Motivo` existe nos dois campos com a mesma
-  ambiguidade e ainda não foi tratado. É o único item de terminologia que
-  sobrou.
-- **Confirmar que zonas sem campo iniciado aparecem** (§11). O código está
-  certo (`aggregateZonas` semeia de `enderecosMap`); falta conferir ao
-  vivo se a Lista de Endereços devolve essas zonas.
-- **Zona em duas agências** (§6). Verificar se alguma agregação daqui
-  agrupa zona por agência — no R isso duplicava linhas e inflava a
-  demanda do PE. Provavelmente não se aplica, já que a agregação é por
-  `idZona` puro, mas não foi conferido.
-- **Como o usuário sabe qual variante está vendo** (§10.5). Pergunta de
-  uso real, não de projeto.
+O que resta é de outra natureza — só a realidade responde:
+
+- **Conferir os números ao vivo.** Todos os volumes citados aqui são do
+  snapshot de 14/08/2026 e servem para conferir a implementação, **não
+  como critério de aceitação** (§10.3). Rodar as duas variantes num
+  recorte real e comparar com o `relatorio_agenda.R` do mesmo dia é o
+  único teste que este documento não pode escrever.
+- **A janela seg-sex do R.** A extensão deliberadamente não replica esse
+  recorte (§5). Quando o R deixar de restringi-lo, os dois lados passam a
+  concordar e aquela nota vira histórica.
 
 ### Concluídos
 
@@ -685,6 +687,12 @@ resta é pequeno e nenhum item bloqueia outro:
 - ~~**Cor por status de biomarcador**~~ ✅ (§11).
 - ~~**Alerta de prazo**~~ ✅ (§5).
 - ~~**Corrigir os comentários do §1**~~ ✅ (§1).
+- ~~**Rotular `Outro Motivo`**~~ ✅ (§4).
+- ~~**Zonas sem campo iniciado**~~ ✅ verificado e coberto por teste (§11).
+- ~~**Zona em duas agências**~~ ✅ não se aplica: `IdAgencia` só aparece
+  como campo de filtro, nunca como chave de agrupamento (§6).
+- ~~**Qual variante o usuário está vendo**~~ ✅ o painel se identifica
+  (§10.5).
 
 ## Como verificar
 
@@ -822,3 +830,16 @@ substituídos, cada um com o registro do que estava errado e por quê — o
 denominador declarado, a diferença entre enumerar um domínio (histórico
 cru) e contar uma população (estado atual), e a retratação do "~48% de
 cobertura" que era o argumento para ficar no proxy.
+
+**Últimos ajustes.** O painel passou a se identificar na barra (§10.5), e
+`Outro Motivo` ganhou a qualificação que a `Recusa` já tinha (§4). Dois
+itens não precisaram de código:
+
+- **Zonas sem campo iniciado** já apareciam — `aggregateZonas` semeia os
+  buckets a partir de `enderecosMap` antes de dobrar as linhas de
+  movimento. Comportamento agora fixado por teste, sozinho e ao lado de
+  uma zona com movimento.
+- **Zona em duas agências** não se aplica: `IdAgencia` só aparece aqui
+  como campo de filtro, nunca como chave de agrupamento — a agregação é
+  por `idZona` puro. A armadilha que inflava a demanda do PE no R depende
+  de um `left_join` que esta extensão não faz.
