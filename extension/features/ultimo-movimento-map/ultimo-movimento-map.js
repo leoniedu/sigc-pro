@@ -1371,13 +1371,18 @@
     #${PANEL_ID} .sigc-pro-panel-fonte { padding: 0 10px 0 6px; font-size: 12px;
       color: #555; border-right: 1px solid #ccc; margin-right: 4px;
       white-space: nowrap; cursor: help; }
-    /* Sits beside its own tab, deliberately quiet: it is a secondary
-       action next to a primary one, so it must not read as a third tab.
-       Negative left margin pulls it against the tab it belongs to. */
-    #${PANEL_ID} .sigc-pro-csv-btn { margin-left: -10px; padding: 4px 6px; border: 0;
-      background: transparent; cursor: pointer; font-size: 14px; line-height: 1;
-      color: #555; border-radius: 3px; }
-    #${PANEL_ID} .sigc-pro-csv-btn:hover { background: #e4e4e4; color: #000; }
+    /* Actions ON the table below them, so they sit in the tab panel
+       rather than on the tab strip — where they read as extra tabs. */
+    #${PANEL_ID} .sigc-pro-tab-toolbar { display: flex; gap: 6px; align-items: center;
+      margin: 0 0 6px; }
+    #${PANEL_ID} .sigc-pro-csv-btn,
+    #${PANEL_ID} .sigc-pro-slots-reload { padding: 3px 8px; border: 1px solid #ccc;
+      background: #fff; cursor: pointer; font-size: 12px; line-height: 1.6;
+      color: #333; border-radius: 3px; }
+    #${PANEL_ID} .sigc-pro-csv-btn:hover,
+    #${PANEL_ID} .sigc-pro-slots-reload:hover { background: #eef6ff; border-color: #005a9c; }
+    #${PANEL_ID} .sigc-pro-slots-reload[disabled] { opacity: .5; cursor: default; }
+    #${PANEL_ID} .sigc-pro-slots-stamp { font-size: 11px; color: #777; }
     #${PANEL_ID} .sigc-pro-tab-btn { padding: 8px 16px; border: 0; background: transparent;
       cursor: pointer; border-bottom: 3px solid transparent; }
     #${PANEL_ID} .sigc-pro-tab-active { background: #fff; border-bottom-color: #005a9c; font-weight: 600; }
@@ -1560,9 +1565,19 @@
     // would promise a file it cannot build. Sits beside its own tab
     // rather than in a corner, so which table it exports is never in
     // question; the icon keeps it from competing with the tab label.
+    // Beside the table it acts on, not on the tab strip. There it read as
+    // a third tab and its click had to be stopped from switching tabs;
+    // here it is plainly an action ON this table, and has room for a
+    // label instead of a bare glyph.
     const csvBtn = (aba, nome) =>
-      `      <button type="button" class="sigc-pro-csv-btn" data-csv-aba="${aba}"` +
-      ` title="Baixar a aba ${esc(nome)} em CSV">⤓</button>`;
+      `<button type="button" class="sigc-pro-csv-btn" data-csv-aba="${aba}"` +
+      ` title="Baixar a aba ${esc(nome)} em CSV">⤓ CSV</button>`;
+    // Slots go stale while the panel is open — someone else books one —
+    // and rebuilding the panel to see that costs three requests. This one
+    // re-asks only the agenda, over the same short window.
+    const recarregarBtn =
+      '<button type="button" class="sigc-pro-slots-reload"' +
+      ' title="Reconsultar os slots livres na agenda">↻ Slots</button>';
     // Only shown when at least one row is actually clickable — no point
     // telling the user to click a zona if none have mapped coordinates.
     // The demand sentences are dropped with the columns they describe:
@@ -1589,24 +1604,81 @@
       `      <span class="sigc-pro-panel-fonte" title="${esc(FONTE_TIP[m.id])}">${esc(FONTE_LABEL[m.id])}</span>`,
       '      <button type="button" class="sigc-pro-tab-btn sigc-pro-tab-active" data-tab="mapa">Mapa</button>',
       `      <button type="button" class="sigc-pro-tab-btn" data-tab="zonas">Zonas (${zonaRows.length})</button>`,
-      csvBtn('zonas', 'Zonas'),
       `      <button type="button" class="sigc-pro-tab-btn" data-tab="domicilios">Domicílios (${joined.length})${alertaLabel}</button>`,
-      csvBtn('domicilios', 'Domicílios'),
       '      <button type="button" class="sigc-pro-panel-close" title="Fechar">×</button>',
       '    </div>',
       '    <div id="sigc-pro-mapa-panel" class="sigc-pro-tab-panel sigc-pro-tab-panel-active">',
       '      <div id="sigc-pro-leaflet-map"></div>',
       '    </div>',
       '    <div id="sigc-pro-zonas-panel" class="sigc-pro-tab-panel">',
+      '      <div class="sigc-pro-tab-toolbar">' +
+        csvBtn('zonas', 'Zonas') +
+        (m.comSlots ? recarregarBtn : '') +
+        '<span class="sigc-pro-slots-stamp"></span></div>',
       `      ${zonasHint}`,
       `      ${zonasTable}`,
       '    </div>',
       '    <div id="sigc-pro-domicilios-panel" class="sigc-pro-tab-panel">',
+      `      <div class="sigc-pro-tab-toolbar">${csvBtn('domicilios', 'Domicílios')}</div>`,
       `      ${domiciliosTable}`,
       '    </div>',
       '  </div>',
       '</div>',
     ].join('\n');
+  }
+
+  // Re-asks the agenda alone and repaints the columns that depend on it.
+  // The households have not changed — only who booked what — so refetching
+  // the report, the coordinates and the posições would be three wasted
+  // requests and would reset the reader's sort and filter.
+  //
+  // Clears the agenda cache first: it holds a 5-minute TTL precisely
+  // because someone else's booking makes these counts wrong, and pressing
+  // a reload button that returns a cached answer is worse than no button.
+  async function recarregarSlots(panelEl, zonaRows, joined, modo, filtro, hojeIso) {
+    const AM = window.__sigcProAgendaLookups;
+    const hoje = hojeIso || new Date().toISOString().slice(0, 10);
+    const btn = panelEl.querySelector('.sigc-pro-slots-reload');
+    const stamp = panelEl.querySelector('.sigc-pro-slots-stamp');
+    if (btn) btn.disabled = true;
+    try {
+      AM.resetAgendaCache();
+      const minDateIso = primeiroDiaAgendavel(hoje);
+      const fimIso = fimDaJanela(hoje);
+      const agenda = await AM.fetchAgendaSlots(
+        filtro.IdUf, `${minDateIso}T00:00:00`, `${fimIso}T23:59:59`);
+      const slots = agenda.dados || [];
+      const slotsPorZona = new Map();
+      zonaRows.forEach((z) => {
+        const zonaKey = z.idZona || '';
+        slotsPorZona.set(zonaKey, AM.agruparPorDia(
+          AM.slotsLivresDaJanela(slots, zonaKey, minDateIso, fimIso)));
+      });
+      const turnosPorZona = AM.indexZonaLivres(slots, minDateIso, fimIso);
+      const zonasPanel = panelEl.querySelector('#sigc-pro-zonas-panel');
+      const domPanel = panelEl.querySelector('#sigc-pro-domicilios-panel');
+      const tabelaZonas = zonasPanel && zonasPanel.querySelector('table');
+      if (tabelaZonas) {
+        tabelaZonas.outerHTML = buildZonasTableHtml(
+          zonaRows, slotsPorZona, turnosPorZona, modo);
+      }
+      const tabelaDom = domPanel && domPanel.querySelector('table');
+      if (tabelaDom) {
+        tabelaDom.outerHTML = buildDomiciliosTabHtml(joined, modo, hoje, slotsPorZona);
+      }
+      initPanelTables(panelEl);
+      wireZonaRowClicks(panelEl, joined);
+      if (stamp) {
+        // Without this the reader cannot tell a fresh count from one read
+        // twenty minutes ago, which is the whole point of the button.
+        stamp.textContent = `slots lidos ${new Date().toTimeString().slice(0, 5)}`;
+      }
+    } catch (err) {
+      console.warn(`${TAG} recarga de slots falhou:`, err);
+      alert(`SIGC-PRO: não foi possível reconsultar os slots (${err && err.message}).`);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   function closePanel() {
@@ -1753,19 +1825,28 @@
       window.__sigcPro.buildCsv(dados.header, dados.rows));
   }
 
-  function wireTabs(panelEl, modo) {
+  // ctx carries what a slots reload needs (rows, filtro) — the tabs
+  // themselves need none of it, so it is optional.
+  function wireTabs(panelEl, modo, ctx) {
     panelEl.querySelectorAll('.sigc-pro-tab-btn').forEach((btn) => {
       btn.addEventListener('click', () => switchToTab(panelEl, btn.dataset.tab));
     });
-    // Exporting must not move the user: the button sits ON the tab bar,
-    // so a bubbling click would switch tabs out from under them.
+    // No stopPropagation needed any more: the button lives inside its own
+    // tab panel rather than on the tab strip, so its click was never
+    // going to switch tabs.
     panelEl.querySelectorAll('.sigc-pro-csv-btn').forEach((btn) => {
       btn.addEventListener('click', (event) => {
         event.preventDefault();
-        event.stopPropagation();
         baixarCsvDaAba(panelEl, btn.dataset.csvAba, modo);
       });
     });
+    const reload = panelEl.querySelector('.sigc-pro-slots-reload');
+    if (reload && ctx) {
+      reload.addEventListener('click', (event) => {
+        event.preventDefault();
+        recarregarSlots(panelEl, ctx.zonaRows, ctx.joined, modo, ctx.filtro, ctx.hoje);
+      });
+    }
     panelEl.querySelector('.sigc-pro-panel-close').addEventListener('click', closePanel);
   }
 
@@ -2674,7 +2755,9 @@
       document.body.insertAdjacentHTML('beforeend',
         buildPanelHtml(comAgenda, zonaRows, slotsPorZona, turnosPorZona, modo, todayIso));
       const panelEl = document.getElementById(PANEL_ID);
-      wireTabs(panelEl, modo);
+      wireTabs(panelEl, modo, {
+        zonaRows, joined: comAgenda, filtro, hoje: todayIso,
+      });
       wireZonaRowClicks(panelEl, comAgenda);
       initPanelTables(panelEl);
       mapInitialized = false;
@@ -2953,6 +3036,7 @@
     wireTabs,
     nomeCsvAba,
     baixarCsvDaAba,
+    recarregarSlots,
     primeiroDiaAgendavel,
     fimDaJanela,
     lerFiltro,

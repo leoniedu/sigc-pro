@@ -3944,3 +3944,117 @@ describe('the agenda request asks only for the window it uses', () => {
     expect(inicio > hoje).toBe(true);
   });
 });
+
+describe('panel toolbars', () => {
+  const zonaRows = [{
+    idZona: 'Z1', nomeZona: 'Z1', aEntrevistar: 0, emAndamento: 0,
+    semAgendamento: 0, agendamentoPendente: 1, agendadoBio: 0, coletado: 0,
+    recusaBio: 0, inelegivel: 0, semEntrevista: 0, vencidos: 0,
+    totalDomicilios: 1, semCoordenadas: 0,
+  }];
+  const joined = [{
+    controle: 'C1', domicilio: '1', idZona: 'Z1', temZona: true,
+    temCoordenadas: true, tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado',
+    status: 'A agendar', agendado: '', dataAgendada: '', dataFinalColeta: '20/08/2026',
+  }];
+  const painel = (modo) => UM.buildPanelHtml(
+    joined, zonaRows, new Map(), new Map(), modo, '2026-08-15');
+
+  test('the CSV button sits with the table, not on the tab strip', () => {
+    // On the tab strip it read as a third tab and its click had to be
+    // stopped from switching tabs; beside the table it is plainly an
+    // action ON that table.
+    const html = painel(UM.MODO_BIOMARCADORES);
+    const zonas = html.split('id="sigc-pro-zonas-panel"')[1].split('</div>')[0];
+    expect(zonas).toContain('data-csv-aba="zonas"');
+    const barra = html.split('sigc-pro-panel-bar')[1].split('</div>')[0];
+    expect(barra).not.toContain('data-csv-aba');
+  });
+
+  test('the CSV button is labelled, not a bare glyph', () => {
+    const html = painel(UM.MODO_BIOMARCADORES);
+    expect(html).toContain('CSV');
+  });
+
+  test('a slots refresh button sits with the Zonas table', () => {
+    // Slots go stale while the panel is open — someone else books one —
+    // and rebuilding the whole panel to see that costs three requests.
+    const zonas = painel(UM.MODO_BIOMARCADORES)
+      .split('id="sigc-pro-zonas-panel"')[1].split('</div>')[0];
+    expect(zonas).toContain('sigc-pro-slots-reload');
+  });
+
+  test('no slots refresh where there are no slots', () => {
+    // Último Movimento makes no agenda request at all.
+    const html = painel(UM.MODO_MOVIMENTO);
+    expect(html).not.toContain('sigc-pro-slots-reload');
+  });
+});
+
+describe('the slots reload re-asks only the agenda', () => {
+  const zonaRows = [{
+    idZona: 'Z1', nomeZona: 'Z1', aEntrevistar: 0, emAndamento: 0,
+    semAgendamento: 0, agendamentoPendente: 2, agendadoBio: 0, coletado: 0,
+    recusaBio: 0, inelegivel: 0, semEntrevista: 0, vencidos: 0,
+    totalDomicilios: 2, semCoordenadas: 0,
+  }];
+  const joined = [{
+    controle: 'C1', domicilio: '1', idZona: 'Z1', temZona: true,
+    temCoordenadas: true, tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado',
+    status: 'A agendar', agendado: '', dataAgendada: '', dataFinalColeta: '20/08/2026',
+  }];
+
+  test('fetches the agenda alone and repaints the slot columns', async () => {
+    document.body.innerHTML = UM.buildPanelHtml(
+      joined, zonaRows, new Map(), new Map(), UM.MODO_BIOMARCADORES, '2026-08-15');
+    const panelEl = document.getElementById('sigc-pro-ultimo-movimento-map-panel');
+    const chamadas = [];
+    const originalAM = window.__sigcProAgendaLookups;
+    window.__sigcProAgendaLookups = {
+      ...originalAM,
+      resetAgendaCache: () => {},
+      fetchEnderecosPorFiltro: async () => { chamadas.push('enderecos'); return new Map(); },
+      fetchPosicoesPorFiltro: async () => { chamadas.push('posicoes'); return new Map(); },
+      fetchBiomarcadoresPorFiltro: async () => { chamadas.push('bio'); return new Map(); },
+      fetchAgendaSlots: async () => {
+        chamadas.push('agenda');
+        return { dados: [
+          { aberto: true, isoDate: '2026-08-20', start: '2026-08-20T09:00:00', zonas: 'Z1 - x' },
+        ], em: Date.now(), cache: false };
+      },
+    };
+    try {
+      await UM.recarregarSlots(panelEl, zonaRows, joined, UM.MODO_BIOMARCADORES,
+        { IdUf: '29' }, '2026-08-15');
+      // The agenda, and nothing else: the households have not changed.
+      expect(chamadas).toEqual(['agenda']);
+      const zonasHtml = document.getElementById('sigc-pro-zonas-panel').innerHTML;
+      expect(zonasHtml).toContain('09:00');
+    } finally {
+      window.__sigcProAgendaLookups = originalAM;
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('stamps when the slots were last read', async () => {
+    document.body.innerHTML = UM.buildPanelHtml(
+      joined, zonaRows, new Map(), new Map(), UM.MODO_BIOMARCADORES, '2026-08-15');
+    const panelEl = document.getElementById('sigc-pro-ultimo-movimento-map-panel');
+    const originalAM = window.__sigcProAgendaLookups;
+    window.__sigcProAgendaLookups = {
+      ...originalAM,
+      resetAgendaCache: () => {},
+      fetchAgendaSlots: async () => ({ dados: [], em: Date.now(), cache: false }),
+    };
+    try {
+      await UM.recarregarSlots(panelEl, zonaRows, joined, UM.MODO_BIOMARCADORES,
+        { IdUf: '29' }, '2026-08-15');
+      // Without a timestamp the reader cannot tell a fresh count from one
+      // read twenty minutes ago — which is the whole reason to reload.
+      expect(panelEl.querySelector('.sigc-pro-slots-stamp').textContent).toMatch(/\d{2}:\d{2}/);
+    } finally {
+      window.__sigcProAgendaLookups = originalAM;
+      document.body.innerHTML = '';
+    }
+  });
+});
