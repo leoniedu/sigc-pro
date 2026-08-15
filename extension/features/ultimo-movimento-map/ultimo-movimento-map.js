@@ -2618,11 +2618,25 @@
       // would be a request whose result is thrown away.
       let agendaIdx = new Map();
       let agendaSlots = [];
+      // "Bookable now": from the first day still worth booking through
+      // +17 days. Computed HERE, before the fetch, so the request itself
+      // can be bounded by it — SIGC takes start/end as query parameters,
+      // so a year-wide call was fetching the state's whole calendar to
+      // keep about two weeks of it.
+      //
+      // Último Movimento still asks for the year: it joins bookings per
+      // household, which can sit any time.
+      const hojeParaJanela = new Date().toISOString().slice(0, 10);
+      const minDateIso = primeiroDiaAgendavel(hojeParaJanela);
+      const fimIso = fimDaJanela(hojeParaJanela);
       if (modo.comAgenda) {
         try {
           const ano = new Date().getFullYear();
-          const agenda = await AM.fetchAgendaSlots(
-            uf, `${ano}-01-01T00:00:00`, `${ano + 1}-01-01T00:00:00`);
+          const agenda = modo.comDemanda
+            ? await AM.fetchAgendaSlots(
+              uf, `${minDateIso}T00:00:00`, `${fimIso}T23:59:59`)
+            : await AM.fetchAgendaSlots(
+              uf, `${ano}-01-01T00:00:00`, `${ano + 1}-01-01T00:00:00`);
           agendaSlots = agenda.dados || [];
           // Only Último Movimento needs the per-household index: on the
           // biomarcadores page every booking comes from the report's own
@@ -2645,8 +2659,6 @@
       // capacity) through +17 days. A slot months out would overstate the
       // capacity a zona actually has; a slot tomorrow overstates it too,
       // for the opposite reason.
-      const minDateIso = primeiroDiaAgendavel(todayIso);
-      const fimIso = fimDaJanela(todayIso);
       const slotsPorZona = new Map();
       zonaRows.forEach((z) => {
         const zonaKey = z.idZona || '';

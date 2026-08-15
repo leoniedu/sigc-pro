@@ -3926,3 +3926,21 @@ describe('the agenda is fetched only for free slots', () => {
     expect(out[0].agendado).toContain('01/09/2026');
   });
 });
+
+describe('the agenda request asks only for the window it uses', () => {
+  test('the bookable window is under a month, never a year', () => {
+    // The slots outside this window are discarded client-side, so asking
+    // SIGC for January-to-December fetched a year of the state's agenda
+    // to keep about two weeks of it. SIGC takes start/end as query
+    // parameters, so the narrowing is free.
+    const hoje = '2026-08-15';
+    const inicio = UM.primeiroDiaAgendavel(hoje);
+    const fim = UM.fimDaJanela(hoje);
+    const dias = (Date.parse(`${fim}T00:00:00Z`) -
+      Date.parse(`${inicio}T00:00:00Z`)) / 86400000;
+    expect(dias).toBeGreaterThan(0);
+    expect(dias).toBeLessThan(31);
+    // And it starts in the future, not on 1 January.
+    expect(inicio > hoje).toBe(true);
+  });
+});
