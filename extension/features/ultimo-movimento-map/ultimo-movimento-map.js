@@ -1200,8 +1200,10 @@
   // joinAgenda) — the endereços map carries only {lat, lon, zona,
   // idZona}, no address — so Controle+Domicílio stands in as the row
   // identifier instead.
-  function buildDomiciliosTabHtml(rows, modo, hojeIso) {
+  function buildDomiciliosTabHtml(rows, modo, hojeIso, slotsPorZona) {
     const m = modo || MODO_BIOMARCADORES;
+    const AM = window.__sigcProAgendaLookups;
+    const slotsMap = slotsPorZona || new Map();
     const hoje = hojeIso || new Date().toISOString().slice(0, 10);
     const esc = window.__sigcPro.escapeHtml;
     const dash = (v) => (v ? esc(v) : '—');
@@ -1216,6 +1218,9 @@
       'Mesma classificação das colunas da aba Zonas — cada domicílio está ' +
       'em exatamente uma situação.';
     const TIP_AMOSTRAS = 'Situação de cada amostra: sangue / urina.';
+    const TIP_SLOTS_DOM =
+      'Slots livres da zona deste domicílio, na janela agendável. Só ' +
+      'aparece em quem ainda precisa de horário.';
     // Same header/body gating contract as buildZonasTableHtml: an
     // "Agendado" column of em-dashes would read as "nothing scheduled"
     // when no agenda was ever requested.
@@ -1234,7 +1239,12 @@
         `<th title="${esc(TIP_PRAZO)}">Prazo</th>` +
         '<th>Agendado</th><th>Coleta</th>' +
         `<th title="${esc(TIP_AMOSTRAS)}">Amostras</th>` +
-        '<th>Equipe</th><th>SIAPE</th></tr>'
+        '<th>Equipe</th><th>SIAPE</th>' +
+        // The zona's free slots, repeated on the household row: deciding
+        // whether this one can be fitted used to mean noting the zona,
+        // switching to the Zonas tab, finding the row and switching back
+        // — once per call. Same listing, same source, no extra request.
+        `<th title="${esc(TIP_SLOTS_DOM)}">Slots livres</th></tr>`
       : '<tr><th>Controle</th><th>Domicílio</th><th>Zona</th>' +
         (m.comAgenda ? '<th>Agendado</th>' : '') +
         '<th>Situação</th><th>Tipo</th>' +
@@ -1258,6 +1268,8 @@
       //
       // 'Recusa' keeps it, for the same reason it still alerts (see
       // emAlertaDePrazo): reverting a refusal is work the clock threatens.
+      const precisaSlot = m.comDemanda &&
+        classificaDomicilio(r, hoje) === 'agendamentoPendente';
       const prazoRelevante = m.comDemanda &&
         (coletaEmAberto(r, hoje) || (r && r.status) === 'Recusa');
       const dias = prazoRelevante ? diasParaPrazo(r, hoje) : null;
@@ -1295,7 +1307,13 @@
             // one was missed, but not which follow-up the other needs.
             `<td>${dash([r.statusSangue, r.statusUrina].filter(Boolean).join(' / '))}</td>` +
             `<td>${dash(r.nomeEquipe)}</td>` +
-            `<td>${dash(r.siapeColeta || r.siapeAgendamento)}</td>`
+            `<td>${dash(r.siapeColeta || r.siapeAgendamento)}</td>` +
+            // Only where a booking is the next step: a collected or
+            // terminal household needs no slot, and repeating the zona's
+            // whole agenda on its row is noise in a row-by-row read.
+            `<td class="sigc-pro-slots-cell">${
+              precisaSlot ? AM.buildSlotsLivresHtml(slotsMap.get(r.idZona || '') || []) : '—'
+            }</td>`
           : (m.comAgenda ? `<td data-order="${agendadoSort}">${agendadoCell}</td>` : '') +
             `<td>${dash(r.ultimaPosicao)}</td>` +
             `<td>${dash(r.tipoEntrevista)}</td>` +
@@ -1519,7 +1537,7 @@
     const esc = window.__sigcPro.escapeHtml;
     const hoje = hojeIso || new Date().toISOString().slice(0, 10);
     const zonasTable = buildZonasTableHtml(zonaRows, slotsPorZona, turnosPorZona, m);
-    const domiciliosTable = buildDomiciliosTabHtml(joined, m, hoje);
+    const domiciliosTable = buildDomiciliosTabHtml(joined, m, hoje, slotsPorZona);
     // Surfaced on the tab itself: an alert buried in a table of hundreds
     // that nobody scrolls to is not an alert. Sorting by Prazo then puts
     // them on top (overdue first, since the recomputed count goes

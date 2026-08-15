@@ -3836,3 +3836,56 @@ describe('the Zonas table opens on the zones that need attention', () => {
     expect(ordem).toEqual(['B', 'C', 'A']);
   });
 });
+
+describe('Domicílios shows its zona\'s free slots', () => {
+  const hoje = '2026-08-15';
+  const d = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', tipoEntrevista: 'Realizada',
+    ultimaPosicao: 'Descarregado', status: 'A agendar', agendado: '',
+    dataAgendada: '', dataFinalColeta: '20/08/2026', dataVisita: '',
+    nomeEquipe: '', siapeAgendamento: '', siapeColeta: '', statusSangue: '',
+    statusUrina: '', entrevistador: '', data: '', ...over,
+  });
+  const slots = new Map([['Z1', [
+    { isoDate: '2026-08-20', horas: ['08:30', '09:00'] },
+    { isoDate: '2026-08-25', horas: ['14:00'] },
+  ]]]);
+
+  test('the same slot listing the Zonas tab shows, on the household row', () => {
+    // Deciding whether a household can be fitted used to mean noting its
+    // zona, flipping to the Zonas tab, finding the row, then flipping
+    // back — once per phone call.
+    const html = UM.buildDomiciliosTabHtml([d()], UM.MODO_BIOMARCADORES, hoje, slots);
+    expect(html).toContain('>Slots livres</th>');
+    expect(html).toContain('08:30');
+    expect(html).toContain('14:00');
+  });
+
+  test('a household whose zona has none says so', () => {
+    const html = UM.buildDomiciliosTabHtml([d({ idZona: 'Z9' })],
+      UM.MODO_BIOMARCADORES, hoje, slots);
+    expect(html).toContain('Nenhum slot livre');
+  });
+
+  test('households with nothing to book do not carry the listing', () => {
+    // A collected household needs no slot; repeating the zona's whole
+    // agenda on its row is noise in a table read row by row.
+    const html = UM.buildDomiciliosTabHtml(
+      [d({ status: 'Coletado Sangue e Urina' })], UM.MODO_BIOMARCADORES, hoje, slots);
+    expect(html.split('<tbody>')[1]).not.toContain('08:30');
+  });
+
+  test('Último Movimento has no slot column', () => {
+    const html = UM.buildDomiciliosTabHtml([d()], UM.MODO_MOVIMENTO, hoje, slots);
+    expect(html).not.toContain('Slots livres');
+  });
+
+  test('header and body agree with the new column', () => {
+    [UM.MODO_MOVIMENTO, UM.MODO_BIOMARCADORES].forEach((modo) => {
+      const html = UM.buildDomiciliosTabHtml([d()], modo, hoje, slots);
+      const ths = (html.match(/<th[ >]/g) || []).length;
+      const tds = (html.match(/<td[ >]/g) || []).length;
+      expect(tds).toBe(ths);
+    });
+  });
+});
