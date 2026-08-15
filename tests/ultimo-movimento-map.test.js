@@ -2539,3 +2539,217 @@ describe('the panel names its own source', () => {
     expect(html).toContain('sem demanda estimada');
   });
 });
+
+describe('CSV export per tab', () => {
+  test('extracts a table to header + rows, matching what is on screen', () => {
+    // Read from the rendered DOM, not re-derived from the row objects:
+    // the two variants show different columns, and a CSV built from a
+    // separate code path would drift from the table beside it.
+    document.body.innerHTML =
+      '<table id="t"><thead><tr><th>A</th><th>B</th></tr></thead>' +
+      '<tbody><tr><td>1</td><td>2</td></tr><tr><td>3</td><td>4</td></tr></tbody></table>';
+    try {
+      const { header, rows } = UM.tabelaParaCsv(document.getElementById('t'));
+      expect(header).toEqual(['A', 'B']);
+      expect(rows).toEqual([['1', '2'], ['3', '4']]);
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('the pin column is dropped — it is a control, not data', () => {
+    document.body.innerHTML =
+      '<table id="t"><thead><tr>' +
+      '<th class="sigc-pro-zona-pin-col"></th><th>Zona</th></tr></thead>' +
+      '<tbody><tr><td class="sigc-pro-zona-pin-col">' +
+      '<span class="sigc-pro-zona-pin">📍</span></td><td>Z1</td></tr></tbody></table>';
+    try {
+      const { header, rows } = UM.tabelaParaCsv(document.getElementById('t'));
+      expect(header).toEqual(['Zona']);
+      expect(rows).toEqual([['Z1']]);
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('a slots cell collapses to one line instead of leaking markup', () => {
+    // The Slots livres cell is a block of per-day markup; flattened
+    // naively it drags newlines into the field and breaks the row.
+    document.body.innerHTML =
+      '<table id="t"><thead><tr><th>Slots</th></tr></thead><tbody><tr>' +
+      '<td class="sigc-pro-slots-cell"><div>01/09\n09:00</div><div>02/09\n14:00</div>' +
+      '</td></tr></tbody></table>';
+    try {
+      const { rows } = UM.tabelaParaCsv(document.getElementById('t'));
+      expect(rows[0][0]).not.toContain('\n');
+      expect(rows[0][0]).toContain('01/09');
+      expect(rows[0][0]).toContain('02/09');
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('DataTables paging does not truncate the export', () => {
+    // The panel's tables are DataTables-backed; a naive tbody scrape
+    // exports only the visible page, which is the exact bug
+    // readDataTable() exists to avoid elsewhere in this file.
+    document.body.innerHTML =
+      '<table id="t"><thead><tr><th>A</th></tr></thead>' +
+      '<tbody><tr><td>visivel</td></tr></tbody></table>';
+    const tbl = document.getElementById('t');
+    const jq = () => ({
+      DataTable: () => ({
+        rows: () => ({ nodes: () => [
+          Object.assign(document.createElement('tr'), { innerHTML: '<td>pagina1</td>' }),
+          Object.assign(document.createElement('tr'), { innerHTML: '<td>pagina2</td>' }),
+        ] }),
+      }),
+    });
+    jq.fn = { dataTable: { isDataTable: () => true } };
+    const original = window.jQuery;
+    window.jQuery = window.$ = jq;
+    try {
+      const { rows } = UM.tabelaParaCsv(tbl);
+      expect(rows).toEqual([['pagina1'], ['pagina2']]);
+    } finally {
+      window.jQuery = window.$ = original;
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('the filename names the tab and the variant', () => {
+    expect(UM.nomeCsvAba('zonas', UM.MODO_BIOMARCADORES, '2026-08-15'))
+      .toBe('sigc-pro-biomarcadores-zonas-2026-08-15.csv');
+    expect(UM.nomeCsvAba('domicilios', UM.MODO_MOVIMENTO, '2026-08-15'))
+      .toBe('sigc-pro-ultimo-movimento-domicilios-2026-08-15.csv');
+  });
+});
+
+describe('CSV buttons in the panel', () => {
+  const zonaRows = [{
+    idZona: 'Z1', nomeZona: 'Zona 1', realizada: 1, naoIniciada: 0,
+    domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 1,
+    semCoordenadas: 0, agendados: 0, realizadasSemAgendamento: 1, pendentes: 1,
+  }];
+  const joined = [{
+    controle: 'C1', domicilio: '1', idZona: 'Z1', temZona: true,
+    temCoordenadas: true, tipoEntrevista: 'Realizada', status: 'A agendar',
+    ultimaPosicao: '', agendado: '', dataAgendada: '',
+    dataFinalColeta: '20/08/2026', entrevistador: 'F', data: '',
+  }];
+
+  test('every data tab gets a CSV button, and the Mapa tab does not', () => {
+    // Nothing tabular to export from a map — a CSV button there would
+    // promise a file it cannot build.
+    const html = UM.buildPanelHtml(
+      joined, zonaRows, new Map(), new Map(), UM.MODO_BIOMARCADORES, '2026-08-15');
+    expect(html).toContain('data-csv-aba="zonas"');
+    expect(html).toContain('data-csv-aba="domicilios"');
+    expect(html).not.toContain('data-csv-aba="mapa"');
+  });
+
+  test('the button downloads the tab it belongs to', async () => {
+    document.body.innerHTML = UM.buildPanelHtml(
+      joined, zonaRows, new Map(), new Map(), UM.MODO_BIOMARCADORES, '2026-08-15');
+    const panelEl = document.getElementById('sigc-pro-ultimo-movimento-map-panel');
+    const baixados = [];
+    const originalDownload = window.__sigcPro.downloadFile;
+    window.__sigcPro.downloadFile = (nome, texto) => baixados.push({ nome, texto });
+    try {
+      UM.wireTabs(panelEl, UM.MODO_BIOMARCADORES);
+      panelEl.querySelector('[data-csv-aba="zonas"]').click();
+      expect(baixados).toHaveLength(1);
+      expect(baixados[0].nome).toMatch(/^sigc-pro-biomarcadores-zonas-/);
+      // Semicolon-delimited, header first, one row of data.
+      const linhas = baixados[0].texto.trim().split('\r\n');
+      expect(linhas[0]).toContain('Zona;Nome');
+      expect(linhas[1]).toContain('Z1;Zona 1');
+      // The pin column is gone from both.
+      expect(baixados[0].texto).not.toContain('📍');
+    } finally {
+      window.__sigcPro.downloadFile = originalDownload;
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('clicking the CSV button does not switch tabs', async () => {
+    // The button lives on the tab bar next to the tab itself; if the
+    // click bubbled, exporting would yank the user to another tab.
+    document.body.innerHTML = UM.buildPanelHtml(
+      joined, zonaRows, new Map(), new Map(), UM.MODO_BIOMARCADORES, '2026-08-15');
+    const panelEl = document.getElementById('sigc-pro-ultimo-movimento-map-panel');
+    const originalDownload = window.__sigcPro.downloadFile;
+    window.__sigcPro.downloadFile = () => {};
+    try {
+      UM.wireTabs(panelEl, UM.MODO_BIOMARCADORES);
+      const mapaAtivo = () =>
+        panelEl.querySelector('#sigc-pro-mapa-panel').classList.contains('sigc-pro-tab-panel-active');
+      expect(mapaAtivo()).toBe(true);
+      panelEl.querySelector('[data-csv-aba="domicilios"]').click();
+      expect(mapaAtivo()).toBe(true);
+    } finally {
+      window.__sigcPro.downloadFile = originalDownload;
+      document.body.innerHTML = '';
+    }
+  });
+});
+
+describe('CSV keeps the prazo numeric', () => {
+  test('an overdue prazo exports as a plain negative number', () => {
+    // "-22 (vencido)" is not a plain number, so the CSV
+    // formula-injection guard quotes it as text — and Excel then cannot
+    // sort the very rows that matter most. The suffix is display sugar;
+    // the number is the data, so the export carries the number and the
+    // sort survives.
+    document.body.innerHTML =
+      '<table id="t"><thead><tr><th>Prazo</th></tr></thead><tbody><tr>' +
+      '<td data-order="-22" class="sigc-pro-prazo-cell sigc-pro-prazo-alerta">-22 (vencido)</td>' +
+      '</tr></tbody></table>';
+    try {
+      const { rows } = UM.tabelaParaCsv(document.getElementById('t'));
+      expect(rows[0][0]).toBe('-22');
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('cells without a numeric sort key are untouched', () => {
+    document.body.innerHTML =
+      '<table id="t"><thead><tr><th>Agendado</th></tr></thead><tbody><tr>' +
+      '<td data-order="2026-09-01T09:00:00">01/09/2026 09:00</td>' +
+      '</tr></tbody></table>';
+    try {
+      const { rows } = UM.tabelaParaCsv(document.getElementById('t'));
+      expect(rows[0][0]).toBe('01/09/2026 09:00');
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+});
+
+describe('CSV keeps the slots list intact', () => {
+  test('the Slots livres cell exports its days, not its count', () => {
+    // This cell also carries a numeric data-order (the slot COUNT), so a
+    // rule of "any numeric sort key wins" would replace a day-by-day
+    // list with a bare "2" — losing the column's entire content. The
+    // substitution is opt-in by class for exactly this reason.
+    const zonaRows = [{
+      idZona: 'Z1', nomeZona: 'Pituba', realizada: 1, naoIniciada: 0,
+      domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 1,
+      semCoordenadas: 0, agendados: 0, realizadasSemAgendamento: 1, pendentes: 1,
+    }];
+    const slots = new Map([['Z1', [{ isoDate: '2026-09-01', horas: ['09:00', '14:00'] }]]]);
+    const turnos = new Map([['Z1', { manha: 1, tarde: 1 }]]);
+    document.body.innerHTML = '<div>' +
+      UM.buildZonasTableHtml(zonaRows, slots, turnos, UM.MODO_BIOMARCADORES) + '</div>';
+    try {
+      const { header, rows } = UM.tabelaParaCsv(document.querySelector('table'));
+      const celula = rows[0][header.indexOf('Slots livres')];
+      expect(celula).not.toBe('2');
+      expect(celula).toContain('09:00');
+      expect(celula).toContain('14:00');
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+});

@@ -867,10 +867,13 @@
       // key and sorts last either way — it is not "due today".
       const dias = m.comDemanda ? diasParaPrazo(r, hoje) : null;
       const alerta = m.comDemanda && emAlertaDePrazo(r, hoje);
+      // sigc-pro-prazo-cell marks this cell as "export the sort key, not
+      // the text" — see celulaParaTexto, which needs the bare number so a
+      // spreadsheet can still sort the overdue rows.
       const prazoCell = dias === null
         ? '<td>—</td>'
-        : `<td data-order="${dias}"${alerta ? ' class="sigc-pro-prazo-alerta"' : ''}>` +
-          `${dias < 0 ? `${dias} (vencido)` : dias}</td>`;
+        : `<td class="sigc-pro-prazo-cell${alerta ? ' sigc-pro-prazo-alerta' : ''}"` +
+          ` data-order="${dias}">${dias < 0 ? `${dias} (vencido)` : dias}</td>`;
       return (
         `<tr${alerta ? ' class="sigc-pro-prazo-alerta-row"' : ''}>` +
         `<td>${dash(r.controle)}</td>` +
@@ -930,6 +933,13 @@
     #${PANEL_ID} .sigc-pro-panel-fonte { padding: 0 10px 0 6px; font-size: 12px;
       color: #555; border-right: 1px solid #ccc; margin-right: 4px;
       white-space: nowrap; cursor: help; }
+    /* Sits beside its own tab, deliberately quiet: it is a secondary
+       action next to a primary one, so it must not read as a third tab.
+       Negative left margin pulls it against the tab it belongs to. */
+    #${PANEL_ID} .sigc-pro-csv-btn { margin-left: -10px; padding: 4px 6px; border: 0;
+      background: transparent; cursor: pointer; font-size: 14px; line-height: 1;
+      color: #555; border-radius: 3px; }
+    #${PANEL_ID} .sigc-pro-csv-btn:hover { background: #e4e4e4; color: #000; }
     #${PANEL_ID} .sigc-pro-tab-btn { padding: 8px 16px; border: 0; background: transparent;
       cursor: pointer; border-bottom: 3px solid transparent; }
     #${PANEL_ID} .sigc-pro-tab-active { background: #fff; border-bottom-color: #005a9c; font-weight: 600; }
@@ -1100,6 +1110,13 @@
       : 0;
     const alertaLabel = nAlertas > 0
       ? ` — ${nAlertas} com prazo a vencer` : '';
+    // One per DATA tab — the Mapa has no table, and a CSV button there
+    // would promise a file it cannot build. Sits beside its own tab
+    // rather than in a corner, so which table it exports is never in
+    // question; the icon keeps it from competing with the tab label.
+    const csvBtn = (aba, nome) =>
+      `      <button type="button" class="sigc-pro-csv-btn" data-csv-aba="${aba}"` +
+      ` title="Baixar a aba ${esc(nome)} em CSV">⤓</button>`;
     // Only shown when at least one row is actually clickable — no point
     // telling the user to click a zona if none have mapped coordinates.
     // The demand sentences are dropped with the columns they describe:
@@ -1126,7 +1143,9 @@
       `      <span class="sigc-pro-panel-fonte" title="${esc(FONTE_TIP[m.id])}">${esc(FONTE_LABEL[m.id])}</span>`,
       '      <button type="button" class="sigc-pro-tab-btn sigc-pro-tab-active" data-tab="mapa">Mapa</button>',
       `      <button type="button" class="sigc-pro-tab-btn" data-tab="zonas">Zonas (${zonaRows.length})</button>`,
+      csvBtn('zonas', 'Zonas'),
       `      <button type="button" class="sigc-pro-tab-btn" data-tab="domicilios">Domicílios (${joined.length})${alertaLabel}</button>`,
+      csvBtn('domicilios', 'Domicílios'),
       '      <button type="button" class="sigc-pro-panel-close" title="Fechar">×</button>',
       '    </div>',
       '    <div id="sigc-pro-mapa-panel" class="sigc-pro-tab-panel sigc-pro-tab-panel-active">',
@@ -1163,9 +1182,108 @@
     if (tabName === 'mapa') maybeLoadTiles();
   }
 
-  function wireTabs(panelEl) {
+  // --- CSV export per tab ----------------------------------------------
+  //
+  // Read from the RENDERED table, not re-derived from the row objects.
+  // The two variants show different columns, so a CSV built from its own
+  // code path would drift from the table sitting next to the button —
+  // and the whole promise of this feature is "what you see, in a file".
+  //
+  // Goes through the DataTables API when the table is initialized:
+  // DataTables renders only the current page into the DOM, so scraping
+  // tbody would silently export 25 rows out of hundreds. Same reason
+  // readUltimoMovimentoTable() reads the report that way.
+  const CSV_COL_IGNORADA = 'sigc-pro-zona-pin-col';
+
+  function celulaParaTexto(td) {
+    // Cells that opt in export their sort key instead of their text.
+    // "Prazo" renders "-22 (vencido)", which is not a plain number, so
+    // buildCsv's formula-injection guard quotes it as text — and a
+    // spreadsheet then cannot sort exactly the overdue rows that matter
+    // most. The suffix is display sugar; the number is the data.
+    //
+    // Opt-in by class, NOT "any numeric data-order": the Slots livres
+    // cell also carries a numeric key (its slot COUNT), and substituting
+    // it would replace a day-by-day list with a bare "2" — losing the
+    // column's whole content.
+    if (td.classList && td.classList.contains('sigc-pro-prazo-cell')) {
+      const ordem = td.getAttribute('data-order');
+      if (ordem) return ordem;
+    }
+    // Whitespace-collapsed: the Slots livres cell is a block of per-day
+    // markup whose newlines would otherwise break the CSV row.
+    return String(td.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function linhasDaTabela(tabela) {
+    const jq = window.jQuery || window.$;
+    if (jq && jq.fn && jq.fn.dataTable && jq.fn.dataTable.isDataTable &&
+        jq.fn.dataTable.isDataTable(tabela)) {
+      try {
+        return [...jq(tabela).DataTable().rows().nodes()];
+      } catch (err) {
+        // Fall through to the DOM: a partial export beats none, and the
+        // caller has no way to act on this failure.
+        console.warn(`${TAG} DataTables rows() falhou, lendo o DOM:`, err);
+      }
+    }
+    return [...tabela.querySelectorAll('tbody tr')];
+  }
+
+  function tabelaParaCsv(tabela) {
+    if (!tabela) return null;
+    const ths = [...tabela.querySelectorAll('thead th')];
+    // The pin column is a control, not data — exporting a 📍 glyph as a
+    // field would be noise in every row.
+    const manter = ths.map((th) => !th.classList.contains(CSV_COL_IGNORADA));
+    const header = ths.filter((_, i) => manter[i]).map(celulaParaTexto);
+    const rows = linhasDaTabela(tabela).map((tr) =>
+      [...tr.querySelectorAll('td')]
+        .filter((_, i) => manter[i] !== false)
+        .map(celulaParaTexto));
+    return { header, rows };
+  }
+
+  const CSV_FONTE_SLUG = {
+    biomarcadores: 'biomarcadores',
+    movimento: 'ultimo-movimento',
+  };
+
+  // Names the variant as well as the tab: the same "zonas" tab exports
+  // different columns from each page, and two files called
+  // sigc-pro-zonas-<date>.csv would be indistinguishable in a downloads
+  // folder.
+  function nomeCsvAba(aba, modo, hojeIso) {
+    const m = modo || MODO_MOVIMENTO;
+    const dia = hojeIso || new Date().toISOString().slice(0, 10);
+    return `sigc-pro-${CSV_FONTE_SLUG[m.id]}-${aba}-${dia}.csv`;
+  }
+
+  function baixarCsvDaAba(panelEl, aba, modo) {
+    const painel = panelEl.querySelector(`#sigc-pro-${aba}-panel`);
+    const tabela = painel && painel.querySelector('table');
+    const dados = tabelaParaCsv(tabela);
+    if (!dados || dados.rows.length === 0) {
+      alert('SIGC-PRO: nada para exportar nesta aba.');
+      return;
+    }
+    window.__sigcPro.downloadFile(
+      nomeCsvAba(aba, modo),
+      window.__sigcPro.buildCsv(dados.header, dados.rows));
+  }
+
+  function wireTabs(panelEl, modo) {
     panelEl.querySelectorAll('.sigc-pro-tab-btn').forEach((btn) => {
       btn.addEventListener('click', () => switchToTab(panelEl, btn.dataset.tab));
+    });
+    // Exporting must not move the user: the button sits ON the tab bar,
+    // so a bubbling click would switch tabs out from under them.
+    panelEl.querySelectorAll('.sigc-pro-csv-btn').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        baixarCsvDaAba(panelEl, btn.dataset.csvAba, modo);
+      });
     });
     panelEl.querySelector('.sigc-pro-panel-close').addEventListener('click', closePanel);
   }
@@ -1954,7 +2072,7 @@
       document.body.insertAdjacentHTML('beforeend',
         buildPanelHtml(comAgenda, zonaRows, slotsPorZona, turnosPorZona, modo, todayIso));
       const panelEl = document.getElementById(PANEL_ID);
-      wireTabs(panelEl);
+      wireTabs(panelEl, modo);
       wireZonaRowClicks(panelEl, comAgenda);
       initPanelTables(panelEl);
       mapInitialized = false;
@@ -2221,6 +2339,10 @@
     agendavelDePrazo,
     PRAZO_ALERTA,
     modoAtual,
+    tabelaParaCsv,
+    wireTabs,
+    nomeCsvAba,
+    baixarCsvDaAba,
     primeiroDiaAgendavel,
     fimDaJanela,
     lerFiltro,
