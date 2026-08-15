@@ -686,9 +686,11 @@ describe('Domicílios tab — Zona column', () => {
       controle: 'C1', domicilio: '1', idZona: '', zona: '',
       agendado: '', futura: false, ultimaPosicao: '', tipoEntrevista: '',
       entrevistador: '', data: '',
-    }]);
+    }], I.MODO_MOVIMENTO);
     const row = html.split('<tbody>')[1];
-    expect((row.match(/—/g) || []).length).toBe(6);
+    // Every empty cell in this variant's 5 nullable columns (no Agendado
+    // here — MODO_MOVIMENTO makes no agenda request).
+    expect((row.match(/—/g) || []).length).toBe(5);
   });
 });
 
@@ -2268,5 +2270,184 @@ describe('palette integrity', () => {
       const cor = UM.statusColor({ status, tipoEntrevista, dataAgendada }, UM.MODO_BIOMARCADORES, hoje);
       expect(naLegenda.has(cor)).toBe(true);
     })));
+  });
+});
+
+describe('alerta de prazo', () => {
+  const hoje = '2026-08-14';
+  const dom = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', nomeZona: 'Zona 1',
+    status: 'A agendar', tipoEntrevista: 'Realizada', dataAgendada: '',
+    dataFinalColeta: '20/08/2026', diasPrazoFinal: '6', nomeEquipe: 'EQ1',
+    ...over,
+  });
+
+  test('dias para o prazo is recomputed, going negative when overdue', () => {
+    // The SIGC field is truncated at zero, so a household three weeks
+    // overdue reports 0, the same as one due today. Sorting by it puts
+    // the most urgent work nowhere near the top.
+    expect(UM.diasParaPrazo(dom({ dataFinalColeta: '20/08/2026' }), hoje)).toBe(6);
+    expect(UM.diasParaPrazo(dom({ dataFinalColeta: '14/08/2026' }), hoje)).toBe(0);
+    expect(UM.diasParaPrazo(dom({ dataFinalColeta: '24/07/2026' }), hoje)).toBe(-21);
+    // No deadline at all is not "zero days left".
+    expect(UM.diasParaPrazo(dom({ dataFinalColeta: '' }), hoje)).toBeNull();
+  });
+
+  test('a collected household never alerts, however close its prazo', () => {
+    // The R's first version alerted on "prazo < 10 dias" alone, and 75 of
+    // 138 highlighted households were already collected, 24 refused.
+    // Highlighting finished work is worse than highlighting nothing.
+    ['Coletado Sangue e Urina', 'Coletado apenas Sangue', 'Coletado apenas Urina']
+      .forEach((status) => {
+        expect(UM.emAlertaDePrazo(dom({ status, dataFinalColeta: '15/08/2026' }), hoje))
+          .toBe(false);
+      });
+  });
+
+  test('a household with no prazo never alerts', () => {
+    expect(UM.emAlertaDePrazo(dom({ dataFinalColeta: '' }), hoje)).toBe(false);
+    // "Não iniciado" cannot have one: the deadline is born from the 25A.01
+    // answer, which only exists once collection has begun.
+    expect(UM.emAlertaDePrazo(dom({ status: 'Não iniciado', dataFinalColeta: '' }), hoje))
+      .toBe(false);
+  });
+
+  test('alerts inside the 10-day window and once overdue', () => {
+    expect(UM.emAlertaDePrazo(dom({ dataFinalColeta: '20/08/2026' }), hoje)).toBe(true);
+    expect(UM.emAlertaDePrazo(dom({ dataFinalColeta: '01/08/2026' }), hoje)).toBe(true);
+    // Outside the window, there is still time — not an alert.
+    expect(UM.emAlertaDePrazo(dom({ dataFinalColeta: '30/08/2026' }), hoje)).toBe(false);
+  });
+
+  test('Recusa alerts even though it is a closed status', () => {
+    // Closed without collection, but still actionable while the clock
+    // runs: reverting it is exactly the work the deadline threatens.
+    expect(UM.emAlertaDePrazo(dom({ status: 'Recusa', dataFinalColeta: '20/08/2026' }), hoje))
+      .toBe(true);
+    // The other two closed-without-collection statuses do NOT: there is
+    // nothing to revert.
+    ['Outro Motivo', 'Não elegível'].forEach((status) => {
+      expect(UM.emAlertaDePrazo(dom({ status, dataFinalColeta: '20/08/2026' }), hoje))
+        .toBe(false);
+    });
+  });
+
+  test('a lapsed booking alerts, a live one does not', () => {
+    expect(UM.emAlertaDePrazo(
+      dom({ status: 'Agendado', dataAgendada: '01/08/2026', dataFinalColeta: '20/08/2026' }),
+      hoje)).toBe(true);
+    expect(UM.emAlertaDePrazo(
+      dom({ status: 'Agendado', dataAgendada: '18/08/2026', dataFinalColeta: '20/08/2026' }),
+      hoje)).toBe(false);
+  });
+
+  test('acao separates agenda work from persuasion work', () => {
+    // Without this split, 24 of BA's 39 rows were refusals and the
+    // genuinely bookable households were a minority in their own list.
+    expect(UM.acaoDePrazo(dom({ status: 'Recusa' }), hoje)).toBe('reverter recusa');
+    expect(UM.acaoDePrazo(dom({ status: 'A agendar' }), hoje)).toBe('agendar');
+    expect(UM.acaoDePrazo(dom({ status: 'Indefinido' }), hoje)).toBe('definir situação');
+    expect(UM.acaoDePrazo(
+      dom({ status: 'Agendado', dataAgendada: '01/08/2026' }), hoje)).toBe('reagendar');
+  });
+
+  test('only agenda work is agendável', () => {
+    expect(UM.agendavelDePrazo(dom({ status: 'Recusa' }))).toBe(false);
+    expect(UM.agendavelDePrazo(dom({ status: 'A agendar' }))).toBe(true);
+  });
+});
+
+describe('prazo in the Domicílios tab', () => {
+  const linha = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', entrevistador: 'F',
+    tipoEntrevista: 'Realizada', ultimaPosicao: '', status: 'A agendar',
+    agendado: '', dataAgendada: '', dataFinalColeta: '20/08/2026',
+    data: '01/08/2026', ...over,
+  });
+  const hoje = '2026-08-14';
+
+  test('biomarcadores tab shows prazo and the action to take', () => {
+    const html = UM.buildDomiciliosTabHtml([linha()], UM.MODO_BIOMARCADORES, hoje);
+    expect(html).toContain('Prazo');
+    expect(html).toContain('Ação');
+    expect(html).toContain('agendar');
+    // Sortable by urgency: the sort key is the recomputed day count, so
+    // overdue rows lead under an ascending sort.
+    expect(html).toMatch(/data-order="6"/);
+  });
+
+  test('an overdue household sorts ahead of one due today', () => {
+    const html = UM.buildDomiciliosTabHtml(
+      [linha({ dataFinalColeta: '24/07/2026' })], UM.MODO_BIOMARCADORES, hoje);
+    expect(html).toMatch(/data-order="-21"/);
+  });
+
+  test('no prazo renders as an em-dash, not as zero', () => {
+    const html = UM.buildDomiciliosTabHtml(
+      [linha({ status: 'Não iniciado', dataFinalColeta: '' })],
+      UM.MODO_BIOMARCADORES, hoje);
+    expect(html).not.toMatch(/data-order="0"/);
+  });
+
+  test('alerted rows are marked so they can be spotted', () => {
+    const alerta = UM.buildDomiciliosTabHtml([linha()], UM.MODO_BIOMARCADORES, hoje);
+    expect(alerta).toContain('sigc-pro-prazo-alerta');
+    const calmo = UM.buildDomiciliosTabHtml(
+      [linha({ dataFinalColeta: '30/09/2026' })], UM.MODO_BIOMARCADORES, hoje);
+    expect(calmo).not.toContain('sigc-pro-prazo-alerta');
+  });
+
+  test('MODO_MOVIMENTO has no prazo columns at all', () => {
+    const html = UM.buildDomiciliosTabHtml([linha()], UM.MODO_MOVIMENTO, hoje);
+    expect(html).not.toContain('Prazo');
+    expect(html).not.toContain('Ação');
+    // Header and body still agree.
+    const ths = (html.match(/<th[ >]/g) || []).length;
+    const tds = (html.match(/<td[ >]/g) || []).length;
+    expect(tds).toBe(ths);
+  });
+
+  test('header and body agree in the biomarcadores tab too', () => {
+    const html = UM.buildDomiciliosTabHtml([linha()], UM.MODO_BIOMARCADORES, hoje);
+    const ths = (html.match(/<th[ >]/g) || []).length;
+    const tds = (html.match(/<td[ >]/g) || []).length;
+    expect(tds).toBe(ths);
+  });
+});
+
+describe('prazo alert is discoverable', () => {
+  const linha = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', entrevistador: 'F',
+    tipoEntrevista: 'Realizada', status: 'A agendar', agendado: '',
+    dataAgendada: '', dataFinalColeta: '20/08/2026', temZona: true,
+    temCoordenadas: true, data: '', ...over,
+  });
+  const zonaRows = [{
+    idZona: 'Z1', nomeZona: 'Z1', realizada: 1, naoIniciada: 0,
+    domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 1,
+    semCoordenadas: 0, agendados: 0, realizadasSemAgendamento: 1, pendentes: 1,
+  }];
+
+  test('the Domicílios tab label counts the alerts', () => {
+    // Buried in a table of hundreds, an alert nobody scrolls to is not an
+    // alert. The count on the tab is what makes it findable.
+    const html = UM.buildPanelHtml(
+      [linha(), linha({ domicilio: '2', dataFinalColeta: '30/09/2026' })],
+      zonaRows, new Map(), new Map(), UM.MODO_BIOMARCADORES, '2026-08-14');
+    expect(html).toMatch(/Domicílios \(2\)/);
+    expect(html).toContain('1 com prazo');
+  });
+
+  test('no alerts, no warning', () => {
+    const html = UM.buildPanelHtml(
+      [linha({ dataFinalColeta: '30/09/2026' })],
+      zonaRows, new Map(), new Map(), UM.MODO_BIOMARCADORES, '2026-08-14');
+    expect(html).not.toContain('com prazo');
+  });
+
+  test('MODO_MOVIMENTO never claims a prazo count', () => {
+    const html = UM.buildPanelHtml(
+      [linha()], zonaRows, new Map(), new Map(), UM.MODO_MOVIMENTO, '2026-08-14');
+    expect(html).not.toContain('com prazo');
   });
 });

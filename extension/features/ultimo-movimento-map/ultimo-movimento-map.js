@@ -473,6 +473,74 @@
     return coletaEmAberto(r, hojeIso) && (r && r.tipoEntrevista) === 'Realizada';
   }
 
+  // --- Prazo final da coleta -------------------------------------------
+  //
+  // Days until the collection deadline, RECOMPUTED from data_final_coleta
+  // rather than read from the report's `Dias Prazo Final`.
+  //
+  // SIGC truncates that field at zero: a household three weeks overdue
+  // reports 0, exactly like one due today. Sorting or filtering by it puts
+  // the most urgent work nowhere near the top. Here overdue goes negative,
+  // which is what makes it sortable. (On the BA snapshot, 40 of 253 rows
+  // disagreed with the recomputed value; 39 of them by truncation.)
+  //
+  // null — not zero — when there is no deadline: ~86% of households have
+  // none, because it is born from the 25A.01 answer, and "no deadline" is
+  // not "due today".
+  const MS_POR_DIA = 86400000;
+
+  function diasParaPrazo(r, hojeIso) {
+    const iso = isoDeDataBr(r && r.dataFinalColeta);
+    if (!iso) return null;
+    const hoje = hojeIso || new Date().toISOString().slice(0, 10);
+    return Math.round(
+      (Date.parse(`${iso}T00:00:00Z`) - Date.parse(`${hoje}T00:00:00Z`)) / MS_POR_DIA);
+  }
+
+  // Within this many days of the deadline (or already past it) is worth
+  // flagging. pns.zonas' PRAZO_ALERTA (relatorio_agenda.R:521).
+  const PRAZO_ALERTA = 10;
+
+  // Needs action before the deadline closes.
+  //
+  // The collected check is not redundant with the open-collection one: a
+  // collected household KEEPS its deadline, so "prazo < 10 dias" alone
+  // flags finished work. That was the R's first version, and 75 of its 138
+  // highlights were already collected, 24 refused — highlighting finished
+  // work is worse than highlighting nothing.
+  //
+  // 'Recusa' is included by exception. It is a closed status, so
+  // coletaEmAberto excludes it, but reverting a refusal is exactly the
+  // work the running clock threatens. 'Outro Motivo' and 'Não elegível'
+  // are not: there is nothing to revert.
+  function emAlertaDePrazo(r, hojeIso) {
+    const s = (r && r.status) || '';
+    if (STATUS_COLETADO.has(s)) return false;
+    const dias = diasParaPrazo(r, hojeIso);
+    if (dias === null) return false;
+    if (!coletaEmAberto(r, hojeIso) && s !== 'Recusa') return false;
+    return dias < PRAZO_ALERTA;
+  }
+
+  // What to actually DO, which is not the same for every alerted
+  // household. Agendar and reagendar are agenda work; reverting a refusal
+  // is persuasion and supervision, and no free slot resolves it.
+  //
+  // Without this split, 24 of BA's 39 alerted rows were refusals, and the
+  // genuinely bookable households were a minority in their own list.
+  function acaoDePrazo(r, hojeIso) {
+    const s = (r && r.status) || '';
+    if (s === 'Recusa') return 'reverter recusa';
+    if (s === STATUS_AGENDADO) return 'reagendar';
+    if (s === 'A agendar') return 'agendar';
+    if (s === 'Indefinido') return 'definir situação';
+    return 'verificar';
+  }
+
+  function agendavelDePrazo(r) {
+    return ((r && r.status) || '') !== 'Recusa';
+  }
+
   // The Relatório de Acompanhamento de Biomarcadores, where the map is
   // moving to (docs/mapa-biomarcadores.md). Unlike Último Movimento this
   // page has no <h6> report title — the live capture (2026-08-14) names
@@ -722,17 +790,34 @@
   // joinAgenda) — the endereços map carries only {lat, lon, zona,
   // idZona}, no address — so Controle+Domicílio stands in as the row
   // identifier instead.
-  function buildDomiciliosTabHtml(rows, modo) {
+  function buildDomiciliosTabHtml(rows, modo, hojeIso) {
     const m = modo || MODO_BIOMARCADORES;
+    const hoje = hojeIso || new Date().toISOString().slice(0, 10);
     const esc = window.__sigcPro.escapeHtml;
     const dash = (v) => (v ? esc(v) : '—');
+    const TIP_PRAZO =
+      'Dias até o prazo final do biomarcador, recalculado — negativo quando ' +
+      'vencido. O campo do SIGC trunca em zero e não distingue "vence hoje" ' +
+      'de "venceu há três semanas".';
+    const TIP_ACAO =
+      'Agendar e reagendar são trabalho de agenda; reverter recusa é ' +
+      'convencimento, e nenhum slot resolve.';
     // Same header/body gating contract as buildZonasTableHtml: an
     // "Agendado" column of em-dashes would read as "nothing scheduled"
     // when no agenda was ever requested.
+    //
+    // "Situação" carries ultimaPosicao on Último Movimento and the
+    // biomarcador status on the other page — the same question ("where
+    // does this household stand?") answered from each report's own field.
     const head =
       '<tr><th>Controle</th><th>Domicílio</th><th>Zona</th>' +
       (m.comAgenda ? '<th>Agendado</th>' : '') +
-      '<th>Situação</th><th>Tipo</th><th>Entrevistador</th><th>Data</th></tr>';
+      '<th>Situação</th><th>Tipo</th>' +
+      (m.comDemanda
+        ? `<th title="${esc(TIP_PRAZO)}">Prazo</th>` +
+          `<th title="${esc(TIP_ACAO)}">Ação</th>`
+        : '') +
+      '<th>Entrevistador</th><th>Data</th></tr>';
     const body = (rows || []).map((r) => {
       // data-order: the raw ISO timestamp, so DataTables sorts this column
       // chronologically instead of lexicographically on "dd/mm/yyyy HH:MM"
@@ -742,8 +827,17 @@
         ? `<span class="${r.futura ? 'sigc-pro-futura' : 'sigc-pro-passada'}">${esc(r.agendado)}</span>`
         : '—';
       const agendadoSort = esc(r.agendadoOrdenavel || '');
+      // Sorted by the recomputed day count, so overdue rows (negative)
+      // lead an ascending sort. A household with no deadline gets an empty
+      // key and sorts last either way — it is not "due today".
+      const dias = m.comDemanda ? diasParaPrazo(r, hoje) : null;
+      const alerta = m.comDemanda && emAlertaDePrazo(r, hoje);
+      const prazoCell = dias === null
+        ? '<td>—</td>'
+        : `<td data-order="${dias}"${alerta ? ' class="sigc-pro-prazo-alerta"' : ''}>` +
+          `${dias < 0 ? `${dias} (vencido)` : dias}</td>`;
       return (
-        '<tr>' +
+        `<tr${alerta ? ' class="sigc-pro-prazo-alerta-row"' : ''}>` +
         `<td>${dash(r.controle)}</td>` +
         `<td>${dash(r.domicilio)}</td>` +
         // The zona ID alone, not the full "ID - nome" label: the Zonas tab
@@ -751,8 +845,11 @@
         // to sort/filter by zona, which the short ID does in far less width.
         `<td>${dash(r.idZona)}</td>` +
         (m.comAgenda ? `<td data-order="${agendadoSort}">${agendadoCell}</td>` : '') +
-        `<td>${dash(r.ultimaPosicao)}</td>` +
+        `<td>${dash(m.comDemanda ? r.status : r.ultimaPosicao)}</td>` +
         `<td>${dash(r.tipoEntrevista)}</td>` +
+        (m.comDemanda
+          ? prazoCell + `<td>${alerta ? esc(acaoDePrazo(r, hoje)) : '—'}</td>`
+          : '') +
         `<td>${dash(r.entrevistador)}</td>` +
         `<td>${dash(r.data)}</td>` +
         '</tr>'
@@ -821,6 +918,12 @@
     .sigc-pro-domicilios-table th { background: #f4f4f4; }
     .sigc-pro-futura { font-weight: 700; color: #161; }
     .sigc-pro-passada { color: #777; }
+    /* Deadline within the alert window or already past. Colour is not the
+       only signal: the Prazo cell shows the number (negative when
+       overdue), the Ação cell says what to do, and the row is sortable by
+       urgency — so this survives being printed or read colourblind. */
+    .sigc-pro-prazo-alerta-row { background: #fff4e0; }
+    .sigc-pro-prazo-alerta { font-weight: 700; color: #A63603; }
     /* Slots livres cell: inline, left-aligned against the numeric columns
        around it, and compact enough that a fortnight of open times still
        fits one table cell — one line per day, "dd/mm HH:MM HH:MM". */
@@ -921,10 +1024,20 @@
       window.__sigcProUltimoMovimentoExportInternals.onUltimoMovimento();
   }
 
-  function buildPanelHtml(joined, zonaRows, slotsPorZona, turnosPorZona, modo) {
+  function buildPanelHtml(joined, zonaRows, slotsPorZona, turnosPorZona, modo, hojeIso) {
     const m = modo || MODO_BIOMARCADORES;
+    const hoje = hojeIso || new Date().toISOString().slice(0, 10);
     const zonasTable = buildZonasTableHtml(zonaRows, slotsPorZona, turnosPorZona, m);
-    const domiciliosTable = buildDomiciliosTabHtml(joined, m);
+    const domiciliosTable = buildDomiciliosTabHtml(joined, m, hoje);
+    // Surfaced on the tab itself: an alert buried in a table of hundreds
+    // that nobody scrolls to is not an alert. Sorting by Prazo then puts
+    // them on top (overdue first, since the recomputed count goes
+    // negative).
+    const nAlertas = m.comDemanda
+      ? (joined || []).filter((r) => emAlertaDePrazo(r, hoje)).length
+      : 0;
+    const alertaLabel = nAlertas > 0
+      ? ` — ${nAlertas} com prazo a vencer` : '';
     // Only shown when at least one row is actually clickable — no point
     // telling the user to click a zona if none have mapped coordinates.
     // The demand sentences are dropped with the columns they describe:
@@ -946,7 +1059,7 @@
       '    <div class="sigc-pro-panel-bar">',
       '      <button type="button" class="sigc-pro-tab-btn sigc-pro-tab-active" data-tab="mapa">Mapa</button>',
       `      <button type="button" class="sigc-pro-tab-btn" data-tab="zonas">Zonas (${zonaRows.length})</button>`,
-      `      <button type="button" class="sigc-pro-tab-btn" data-tab="domicilios">Domicílios (${joined.length})</button>`,
+      `      <button type="button" class="sigc-pro-tab-btn" data-tab="domicilios">Domicílios (${joined.length})${alertaLabel}</button>`,
       '      <button type="button" class="sigc-pro-panel-close" title="Fechar">×</button>',
       '    </div>',
       '    <div id="sigc-pro-mapa-panel" class="sigc-pro-tab-panel sigc-pro-tab-panel-active">',
@@ -1769,7 +1882,7 @@
 
       closePanel();
       document.body.insertAdjacentHTML('beforeend',
-        buildPanelHtml(comAgenda, zonaRows, slotsPorZona, turnosPorZona, modo));
+        buildPanelHtml(comAgenda, zonaRows, slotsPorZona, turnosPorZona, modo, todayIso));
       const panelEl = document.getElementById(PANEL_ID);
       wireTabs(panelEl);
       wireZonaRowClicks(panelEl, comAgenda);
@@ -2032,6 +2145,11 @@
     isoDeDataBr,
     biomarcadoresParaLinhas,
     deveColeta,
+    diasParaPrazo,
+    emAlertaDePrazo,
+    acaoDePrazo,
+    agendavelDePrazo,
+    PRAZO_ALERTA,
     modoAtual,
     primeiroDiaAgendavel,
     fimDaJanela,
