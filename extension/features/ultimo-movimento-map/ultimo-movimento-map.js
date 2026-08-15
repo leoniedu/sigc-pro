@@ -220,7 +220,8 @@
   // whose temZona is false (non-biomarcador selecionados — see spec
   // "Selecionados without zona"). Never silently drops a movimento row:
   // every row in `joined` lands in exactly one output row.
-  function aggregateZonas(joined, enderecosMap) {
+  function aggregateZonas(joined, enderecosMap, modo, hojeIso) {
+    const m = modo || MODO_MOVIMENTO;
     const byZona = new Map(); // key: idZona || special string
     const SEM_ZONA_KEY = '__SEM_ZONA__';
     const novoBucket = (idZona, nomeZona) => ({
@@ -248,8 +249,15 @@
       bucket.totalDomicilios += 1;
       if (!r.temCoordenadas) bucket.semCoordenadas += 1;
       if (r.agendado) bucket.agendados += 1;
-      if (isRealizadaSemAgendamento(r)) bucket.realizadasSemAgendamento += 1;
-      if (isPendente(r)) bucket.pendentes += 1;
+      // On the biomarcadores page the demand is the literal `status`, not
+      // the ultimaPosicao proxy — which is empty there anyway, so keeping
+      // the proxy rule would silently report zero demand.
+      if (m.comDemanda ? deveColeta(r, hojeIso) : isRealizadaSemAgendamento(r)) {
+        bucket.realizadasSemAgendamento += 1;
+      }
+      if (m.comDemanda ? coletaEmAberto(r, hojeIso) : isPendente(r)) {
+        bucket.pendentes += 1;
+      }
     });
 
     return Array.from(byZona.values());
@@ -308,6 +316,102 @@
     return r.totalDomicilios > r.semCoordenadas;
   }
 
+  // --- The two map variants --------------------------------------------
+  //
+  // Same panel, same joins, two hosts — deliberately NOT a migration.
+  //
+  // MODO_MOVIMENTO (Último Movimento): the report on screen carries
+  // tipoEntrevista/ultimaPosicao but nothing about biomarcador
+  // collection, and this variant makes NO agenda request. One fetch
+  // (Lista de Endereços, for coordinates), so it works for any
+  // controle/município/agência at the cost of every agenda-derived
+  // column.
+  //
+  // MODO_BIOMARCADORES (Relatório de Acompanhamento de Biomarcadores):
+  // demand comes from the literal `status`, and `agendado` from the
+  // report's own Data Agendada — authoritative and free, no agenda
+  // needed for it. The agenda is still fetched, but ONLY for free slots
+  // per zona, which the report cannot know.
+  //
+  // Columns are declared here rather than branched at each use: a column
+  // present in the header and missing from the body (or the reverse)
+  // silently shifts every later cell, so both come from one list.
+  const MODO_MOVIMENTO = {
+    id: 'movimento',
+    comAgenda: false,     // no agenda request at all
+    comDemanda: false,    // no agenda -> "sem agendamento" is unknowable
+    comSlots: false,
+  };
+
+  const MODO_BIOMARCADORES = {
+    id: 'biomarcadores',
+    comAgenda: true,      // for free slots only
+    comDemanda: true,
+    comSlots: true,
+  };
+
+  // --- Biomarcador collection status ------------------------------------
+  //
+  // Matched POSITIVELY, exactly as the posições are: a status SIGC adds
+  // tomorrow must fall out of the counts and be reported, never be
+  // absorbed by a negation of "Coletado". Mirrors pns.zonas'
+  // STATUS_BIOMARCADOR_ABERTO / _FECHADO_SEM_COLETA
+  // (R/sigc_biomarcadores.R:52,68).
+  const STATUS_ABERTO = new Set(['A agendar', 'Não iniciado', 'Indefinido']);
+  const STATUS_COLETADO = new Set([
+    'Coletado Sangue e Urina', 'Coletado apenas Sangue', 'Coletado apenas Urina',
+  ]);
+  const STATUS_FECHADO_SEM_COLETA = new Set(['Recusa', 'Outro Motivo', 'Não elegível']);
+  const STATUS_AGENDADO = 'Agendado';
+
+  function statusDesconhecido(r) {
+    const s = (r && r.status) || '';
+    return !STATUS_ABERTO.has(s) && !STATUS_COLETADO.has(s) &&
+      !STATUS_FECHADO_SEM_COLETA.has(s) && s !== STATUS_AGENDADO;
+  }
+
+  // dd/mm/yyyy (the report's format) -> yyyy-mm-dd, for comparing against
+  // an ISO today. Returns '' for anything else, including an empty cell —
+  // which is the common case, since a "Não iniciado" household has no
+  // dates at all.
+  function isoDeDataBr(s) {
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(String(s || '').trim());
+    return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+  }
+
+  // 'Agendado' is the one conditional status: it closes the household
+  // only while the booked date has not passed. A booking that lapsed
+  // without a collection is demand again — otherwise a visit missed in
+  // March would still read as "on its way" in August.
+  function coletaEmAberto(r, hojeIso) {
+    const s = (r && r.status) || '';
+    if (STATUS_ABERTO.has(s)) return true;
+    if (s !== STATUS_AGENDADO) return false;
+    const hoje = hojeIso || new Date().toISOString().slice(0, 10);
+    const marcada = isoDeDataBr(r && r.dataAgendada);
+    // No date on an 'Agendado' row: treat as still booked rather than
+    // inventing demand from a missing cell.
+    return marcada ? marcada < hoje : false;
+  }
+
+  // The operative demand: the interview came through AND the collection
+  // is still open. pns.zonas' `realizadas_sem_agendamento`
+  // (relatorio_agenda.R:345) — `entrevista_feita & coleta_em_aberto`,
+  // unbooked.
+  //
+  // The broader column (pendentes) drops the interview requirement and
+  // asks only that the household be in the field with its collection
+  // open, so the narrow measure is nested inside it by construction —
+  // exactly the relation isRealizadaSemAgendamento ⊂ isPendente has on
+  // the Último Movimento side, and what the header tooltip promises.
+  //
+  // "Unbooked" is not tested separately: coletaEmAberto already returns
+  // false for a live 'Agendado' and true once its date has lapsed, so a
+  // stale Data Agendada can neither hide demand nor invent it.
+  function deveColeta(r, hojeIso) {
+    return coletaEmAberto(r, hojeIso) && (r && r.tipoEntrevista) === 'Realizada';
+  }
+
   // The Relatório de Acompanhamento de Biomarcadores, where the map is
   // moving to (docs/mapa-biomarcadores.md). Unlike Último Movimento this
   // page has no <h6> report title — the live capture (2026-08-14) names
@@ -328,6 +432,13 @@
     return [...document.querySelectorAll(sel)].some((el) => window.__sigcPro
       .normalizeLabel(AM.stripAccents(el.textContent))
       .includes(NOME_RELATORIO_BIOMARCADORES));
+  }
+
+  // Which variant this page gets. Biomarcadores is checked first: it is
+  // the specific page, and its breadcrumb could in principle coexist with
+  // an Último Movimento string somewhere in a shared chrome.
+  function modoAtual() {
+    return onBiomarcadores() ? MODO_BIOMARCADORES : MODO_MOVIMENTO;
   }
 
   // A slot needs lead time to be filled: the lab has to be arranged and
@@ -403,7 +514,10 @@
   // agenda-lookups' indexZonaLivres — the SAME selection the day-by-day
   // slots cell is built from, so the turno columns and the list under
   // them can never disagree.
-  function buildZonasTableHtml(zonaRows, slotsPorZona, turnosPorZona) {
+  // modo defaults to MODO_BIOMARCADORES (the full table) so existing
+  // callers keep every column.
+  function buildZonasTableHtml(zonaRows, slotsPorZona, turnosPorZona, modo) {
+    const m = modo || MODO_BIOMARCADORES;
     const esc = window.__sigcPro.escapeHtml;
     const AM = window.__sigcProAgendaLookups;
     const slotsMap = slotsPorZona || new Map();
@@ -448,6 +562,9 @@
     // renumbered when a column is added — which is exactly the trap a
     // positional config would have set here.
     const TIP_PIN = 'Ver esta zona no mapa';
+    // Header and body segments are gated by the SAME flags, so a column
+    // can never appear in one and not the other — the failure mode that
+    // silently shifts every later cell into the wrong column.
     const head =
       '<tr>' +
       `<th class="sigc-pro-zona-pin-col" data-orderable="false" title="${esc(TIP_PIN)}"></th>` +
@@ -455,17 +572,26 @@
       '<th>Dom. Fechado</th>' +
       `<th title="${esc(TIP_RECUSA)}">Recusa entrev.</th>` +
       '<th>Outros</th><th>Total</th>' +
-      '<th>Sem coordenadas</th><th>Agendados</th>' +
-      `<th title="${esc(TIP_REALIZADAS)}">Realizadas sem agend.</th>` +
-      `<th title="${esc(TIP_PENDENTES)}">Pendentes</th>` +
-      `<th title="${esc(TIP_TURNO)}">Manhã</th>` +
-      `<th title="${esc(TIP_TURNO)}">Tarde</th>` +
-      '<th>Slots livres</th></tr>';
+      '<th>Sem coordenadas</th>' +
+      (m.comAgenda ? '<th>Agendados</th>' : '') +
+      (m.comDemanda
+        ? `<th title="${esc(TIP_REALIZADAS)}">Realizadas sem agend.</th>` +
+          `<th title="${esc(TIP_PENDENTES)}">Pendentes</th>`
+        : '') +
+      (m.comSlots
+        ? `<th title="${esc(TIP_TURNO)}">Manhã</th>` +
+          `<th title="${esc(TIP_TURNO)}">Tarde</th>` +
+          '<th>Slots livres</th>'
+        : '') +
+      '</tr>';
     const body = zonaRows.map((r) => {
       const clickable = zonaRowIsClickable(r);
       const zonaKey = r.idZona || '';
       const turnos = turnosMap.get(zonaKey) || { manha: 0, tarde: 0 };
-      const semCapacidade = zonaSemCapacidade(r, turnos);
+      // The flag compares demand against free slots; without the agenda
+      // there is neither, so it must not fire — a shortfall painted from
+      // absent data reads as "0 slots free" when the truth is "not asked".
+      const semCapacidade = m.comSlots && zonaSemCapacidade(r, turnos);
       const classes = [
         clickable ? 'sigc-pro-zona-row-clickable' : '',
         semCapacidade ? 'sigc-pro-zona-sem-capacidade' : '',
@@ -506,11 +632,15 @@
         `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
         `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
         `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>` +
-        `<td>${r.agendados}</td>` +
-        `<td class="sigc-pro-devidas">${r.realizadasSemAgendamento}</td>` +
-        `<td>${r.pendentes}</td>` +
-        `<td>${turnos.manha || 0}</td><td>${turnos.tarde || 0}</td>` +
-        `<td class="sigc-pro-slots-cell" data-order="${slotsCount}">${slotsCell}</td>` +
+        (m.comAgenda ? `<td>${r.agendados}</td>` : '') +
+        (m.comDemanda
+          ? `<td class="sigc-pro-devidas">${r.realizadasSemAgendamento}</td>` +
+            `<td>${r.pendentes}</td>`
+          : '') +
+        (m.comSlots
+          ? `<td>${turnos.manha || 0}</td><td>${turnos.tarde || 0}</td>` +
+            `<td class="sigc-pro-slots-cell" data-order="${slotsCount}">${slotsCell}</td>`
+          : '') +
         '</tr>'
       );
     }).join('');
@@ -523,11 +653,16 @@
   // joinAgenda) — the endereços map carries only {lat, lon, zona,
   // idZona}, no address — so Controle+Domicílio stands in as the row
   // identifier instead.
-  function buildDomiciliosTabHtml(rows) {
+  function buildDomiciliosTabHtml(rows, modo) {
+    const m = modo || MODO_BIOMARCADORES;
     const esc = window.__sigcPro.escapeHtml;
     const dash = (v) => (v ? esc(v) : '—');
+    // Same header/body gating contract as buildZonasTableHtml: an
+    // "Agendado" column of em-dashes would read as "nothing scheduled"
+    // when no agenda was ever requested.
     const head =
-      '<tr><th>Controle</th><th>Domicílio</th><th>Zona</th><th>Agendado</th>' +
+      '<tr><th>Controle</th><th>Domicílio</th><th>Zona</th>' +
+      (m.comAgenda ? '<th>Agendado</th>' : '') +
       '<th>Situação</th><th>Tipo</th><th>Entrevistador</th><th>Data</th></tr>';
     const body = (rows || []).map((r) => {
       // data-order: the raw ISO timestamp, so DataTables sorts this column
@@ -546,7 +681,7 @@
         // carries the names, and this column exists to tell rows apart and
         // to sort/filter by zona, which the short ID does in far less width.
         `<td>${dash(r.idZona)}</td>` +
-        `<td data-order="${agendadoSort}">${agendadoCell}</td>` +
+        (m.comAgenda ? `<td data-order="${agendadoSort}">${agendadoCell}</td>` : '') +
         `<td>${dash(r.ultimaPosicao)}</td>` +
         `<td>${dash(r.tipoEntrevista)}</td>` +
         `<td>${dash(r.entrevistador)}</td>` +
@@ -636,10 +771,18 @@
     cssInjected = true;
   }
 
+  // The prompt must name what is actually requested: MODO_MOVIMENTO makes
+  // ONE call, and asking permission for an agenda fetch that never happens
+  // trains the user to click through a prompt that didn't mean anything.
   const FETCH_CONSENT_MSG =
     'SIGC-PRO: isto fará duas consultas ao próprio servidor do SIGC — a ' +
     'Lista de Endereços (coordenadas e zona) do mesmo recorte filtrado no ' +
     'relatório e a agenda da UF. Nenhum dado sai do IBGE. Continuar?';
+
+  const FETCH_CONSENT_MSG_SEM_AGENDA =
+    'SIGC-PRO: isto fará uma consulta ao próprio servidor do SIGC — a ' +
+    'Lista de Endereços (coordenadas e zona) do mesmo recorte filtrado no ' +
+    'relatório. Nenhum dado sai do IBGE. Continuar?';
 
   // In-memory only (zero-storage guarantee): re-asked on every page
   // load, but not on every click within one.
@@ -709,16 +852,25 @@
       window.__sigcProUltimoMovimentoExportInternals.onUltimoMovimento();
   }
 
-  function buildPanelHtml(joined, zonaRows, slotsPorZona, turnosPorZona) {
-    const zonasTable = buildZonasTableHtml(zonaRows, slotsPorZona, turnosPorZona);
-    const domiciliosTable = buildDomiciliosTabHtml(joined);
+  function buildPanelHtml(joined, zonaRows, slotsPorZona, turnosPorZona, modo) {
+    const m = modo || MODO_BIOMARCADORES;
+    const zonasTable = buildZonasTableHtml(zonaRows, slotsPorZona, turnosPorZona, m);
+    const domiciliosTable = buildDomiciliosTabHtml(joined, m);
     // Only shown when at least one row is actually clickable — no point
     // telling the user to click a zona if none have mapped coordinates.
+    // The demand sentences are dropped with the columns they describe:
+    // explaining a highlight this variant never paints is worse than
+    // saying nothing.
     const zonasHint = zonaRows.some(zonaRowIsClickable)
-      ? '<p class="sigc-pro-zonas-hint">Clique no 📍 de uma zona para vê-la no mapa. ' +
-        'Linhas destacadas têm mais realizadas sem agendamento do que slots livres na janela. ' +
-        'As contagens de demanda excluem Distribuído (ainda não é demanda de campo) e ' +
-        'Realizada já descarregada (encerrada).</p>'
+      ? '<p class="sigc-pro-zonas-hint">Clique no 📍 de uma zona para vê-la no mapa.' +
+        (m.comSlots
+          ? ' Linhas destacadas têm mais realizadas sem agendamento do que slots livres na janela.'
+          : '') +
+        (m.comDemanda
+          ? ' As contagens de demanda excluem Distribuído (ainda não é demanda de campo) e ' +
+            'Realizada já descarregada (encerrada).'
+          : ' Sem consulta à agenda: este recorte não traz agendamentos nem slots livres.') +
+        '</p>'
       : '';
     return [
       // data-sigc-pro marks the whole subtree as ours, so sigc-common.js's
@@ -1197,6 +1349,40 @@
     control.addTo(map);
   }
 
+  // The biomarcadores report's own rows, shaped like the movimento rows
+  // the rest of this file consumes (same controle|domicilio key, same
+  // {tipoEntrevista, idZona} fields), so joinEnderecos and aggregateZonas
+  // need no variant of their own.
+  //
+  // Two fields come straight from the report and cost no request:
+  //   status  — the literal collection outcome, replacing the
+  //             ultimaPosicao proxy that erred in both directions.
+  //   agendado — from Data Agendada. The agenda IS still fetched in this
+  //             mode, but only for free slots per zona; the booking of a
+  //             specific household is authoritative here.
+  //
+  // ultimaPosicao stays empty: this report has no such column, and the
+  // Domicílios tab's "Situação" renders '—' for it rather than borrowing
+  // a value from a different report.
+  function biomarcadoresParaLinhas(headers, rows) {
+    const AM = window.__sigcProAgendaLookups;
+    const base = AM.tableToBiomarcadoresMap(headers, rows);
+    if (!base) return null;
+    const out = new Map();
+    base.forEach((r, key) => {
+      const iso = isoDeDataBr(r.dataAgendada);
+      out.set(key, {
+        ...r,
+        ultimaPosicao: '',
+        // Rendered as-is (dd/mm/yyyy); the report carries no time.
+        agendado: r.dataAgendada || '',
+        agendadoOrdenavel: iso,
+        futura: iso ? iso >= new Date().toISOString().slice(0, 10) : false,
+      });
+    });
+    return out;
+  }
+
   // Reads via the DataTables JS API (window.__sigcPro.readDataTable),
   // not raw DOM tr/td scraping: DataTables only renders the CURRENT
   // page's rows into the DOM (25/50/100 entries per page), so a raw
@@ -1205,10 +1391,15 @@
   // the table's full dataset (rows().data()), all pages, same helper
   // csv-export.js already relies on for exactly this reason — see its
   // own comment for the F5-gateway DOM-scraping caveat this also avoids.
-  function readUltimoMovimentoTable() {
+  // Which parser applies is the page's, not a guess: the two reports
+  // share the #tableRelatorio id but not a single column name.
+  function readUltimoMovimentoTable(modo) {
+    const m = modo || modoAtual();
     const result = window.__sigcPro.readDataTable();
     if (!result) return null;
-    return parseUltimoMovimentoRows(result.header, result.rows);
+    return m.comDemanda
+      ? biomarcadoresParaLinhas(result.header, result.rows)
+      : parseUltimoMovimentoRows(result.header, result.rows);
   }
 
   // '*' is SIGC's "all" wildcard for a filtro field; a blank is the
@@ -1374,7 +1565,11 @@
       return;
     }
     ensureCss();
-    const movimentoMap = readUltimoMovimentoTable();
+    // Resolved once, up front: it selects the parser for the table on
+    // screen as well as everything downstream, so a single source of
+    // truth beats asking the DOM again at each step.
+    const modo = modoAtual();
+    const movimentoMap = readUltimoMovimentoTable(modo);
     if (!movimentoMap || movimentoMap.size === 0) {
       alert('SIGC-PRO: nenhum dado encontrado no relatório — rode um Filtrar primeiro.');
       return;
@@ -1387,7 +1582,7 @@
     const uf = filtro.IdUf;
 
     if (!consentState.fetch) {
-      if (!confirm(FETCH_CONSENT_MSG)) return;
+      if (!confirm(modo.comAgenda ? FETCH_CONSENT_MSG : FETCH_CONSENT_MSG_SEM_AGENDA)) return;
       consentState.fetch = true;
     }
 
@@ -1421,22 +1616,28 @@
       // coordinate join above) — a rejected agenda fetch must never cost
       // the map. Falls back to an empty index, leaving every `agendado`
       // blank, same fail-open shape as the Lista de Endereços fetch above.
+      //
+      // Skipped entirely in MODO_MOVIMENTO: that variant makes one request
+      // and renders no agenda-derived column, so asking for the UF agenda
+      // would be a request whose result is thrown away.
       let agendaIdx = new Map();
       let agendaSlots = [];
-      try {
-        const ano = new Date().getFullYear();
-        const agenda = await AM.fetchAgendaSlots(
-          uf, `${ano}-01-01T00:00:00`, `${ano + 1}-01-01T00:00:00`);
-        agendaSlots = agenda.dados || [];
-        agendaIdx = AM.indexByControle(agendaSlots);
-      } catch (err) {
-        console.warn(`${TAG} agenda fetch failed:`, err);
+      if (modo.comAgenda) {
+        try {
+          const ano = new Date().getFullYear();
+          const agenda = await AM.fetchAgendaSlots(
+            uf, `${ano}-01-01T00:00:00`, `${ano + 1}-01-01T00:00:00`);
+          agendaSlots = agenda.dados || [];
+          agendaIdx = AM.indexByControle(agendaSlots);
+        } catch (err) {
+          console.warn(`${TAG} agenda fetch failed:`, err);
+        }
       }
       const todayIso = new Date().toISOString().slice(0, 10);
       const comAgenda = joinAgenda(joined, agendaIdx, todayIso);
 
       pendingJoined = comAgenda;
-      const zonaRows = aggregateZonas(comAgenda, enderecosMap);
+      const zonaRows = aggregateZonas(comAgenda, enderecosMap, modo, todayIso);
 
       // "Bookable now": from the first day still worth booking (see
       // primeiroDiaAgendavel — today and the next two days are dead
@@ -1458,7 +1659,7 @@
 
       closePanel();
       document.body.insertAdjacentHTML('beforeend',
-        buildPanelHtml(comAgenda, zonaRows, slotsPorZona, turnosPorZona));
+        buildPanelHtml(comAgenda, zonaRows, slotsPorZona, turnosPorZona, modo));
       const panelEl = document.getElementById(PANEL_ID);
       wireTabs(panelEl);
       wireZonaRowClicks(panelEl, comAgenda);
@@ -1660,7 +1861,9 @@
     // The bind rides along on the mount tick: it's idempotent, and this
     // is already the one place guaranteed to run repeatedly on the page.
     when: () => {
-      if (!onUltimoMovimento()) return false;
+      // Both hosts mount the same button; modoAtual() decides which
+      // variant the click renders.
+      if (!onUltimoMovimento() && !onBiomarcadores()) return false;
       bindFiltrarCapture();
       const hasTable = !!window.__sigcPro.getDataTable();
       adoptRenderedFiltro(hasTable);
@@ -1711,6 +1914,14 @@
     isPendente,
     zonaSemCapacidade,
     onBiomarcadores,
+    MODO_MOVIMENTO,
+    MODO_BIOMARCADORES,
+    coletaEmAberto,
+    statusDesconhecido,
+    isoDeDataBr,
+    biomarcadoresParaLinhas,
+    deveColeta,
+    modoAtual,
     primeiroDiaAgendavel,
     fimDaJanela,
     lerFiltro,

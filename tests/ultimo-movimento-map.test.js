@@ -1407,8 +1407,16 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
     return api;
   }
 
-  function setUpDom({ header, rows }) {
+  // biomarcadores: renders the breadcrumb that puts the panel in
+  // MODO_BIOMARCADORES, the only variant that fetches the agenda. Without
+  // it the page reads as Último Movimento, which makes no agenda request
+  // at all — so every agenda-joining test has to opt in.
+  function setUpDom({ header, rows, biomarcadores }) {
     document.body.innerHTML =
+      (biomarcadores
+        ? '<ol class="breadcrumb"><li class="breadcrumb-item active" ' +
+          'aria-current="page">Relatório de Acompanhamento de Biomarcadores</li></ol>'
+        : '') +
       // The filter SIGC assembles for its own POST — the Mapa's primary
       // source of scope. An agência-scoped filter here, so the gate is open.
       `<input type="hidden" id="filtroJson" value='${JSON.stringify({
@@ -1432,9 +1440,27 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
   const HEADER = ['Controle', 'Domicilio', 'Entrevistador', 'Tipo Entrevista', 'Última Posição', 'Data'];
   const ROWS = [['C1', '1', 'Fulano', 'Realizada', 'Transmitido', '01/08/2026']];
 
+  // The agenda is only fetched in MODO_BIOMARCADORES, whose on-screen
+  // table is the biomarcadores report — so those tests need its columns,
+  // not Último Movimento's. Same household key (C1|1) either way.
+  const HEADER_BIO = [
+    'UF', 'Agência', 'Município', 'ID Zona', 'Nome Zona', '#!Controle',
+    '!N.º Domicílio', 'Tipo Entrevista', 'Nome Equipe', 'Status',
+    'Siape Agendamento', 'Data Resposta 25A.01', 'Data Agendada',
+    'Data Visita Biomarcadores', 'Siape Coleta Biomarcadores',
+    'Data Final para Coleta', 'Dias Prazo Final', 'Data/hora coleta sangue',
+    'Status sangue', 'Motivo sangue', 'Data/hora coleta urina',
+    'Status urina', 'Motivo urina', 'Dias entre 1° agendamento e coleta',
+  ];
+  const ROWS_BIO = [[
+    '29', '0570', '2927408', 'Z1', 'Zona 1', 'C1', '1', 'Realizada', 'EQ1',
+    'A agendar', '', '20/07/2026', '', '', '', '14/08/2026', '0',
+    '', '', '', '', '', '', '',
+  ]];
+
   test('the map panel still renders when the agenda fetch rejects', async () => {
     const I = window.__sigcProUltimoMovimentoMapInternals;
-    setUpDom({ header: HEADER, rows: ROWS });
+    setUpDom({ header: HEADER_BIO, rows: ROWS_BIO, biomarcadores: true });
     I.resetFiltroCapturado();
     I.captureFiltro();
 
@@ -1495,7 +1521,7 @@ describe('onMapaClick — agenda fetch is non-fatal', () => {
   // onMapaClick call site stays covered against a shape change.
   test('a resolving agenda fetch joins a matching scheduled visit onto its household, visible in the Domicílios tab', async () => {
     const I = window.__sigcProUltimoMovimentoMapInternals;
-    setUpDom({ header: HEADER, rows: ROWS });
+    setUpDom({ header: HEADER_BIO, rows: ROWS_BIO, biomarcadores: true });
     I.resetFiltroCapturado();
     I.resetTileState();
     I.captureFiltro();
@@ -1865,5 +1891,222 @@ describe('zona pin instead of whole-row click', () => {
     // relying on a positional columnDefs entry elsewhere.
     expect(html).toMatch(/<thead><tr><th[^>]*class="[^"]*sigc-pro-zona-pin-col/);
     expect(html).toMatch(/<th[^>]*data-orderable="false"/);
+  });
+});
+
+describe('modo (map variants)', () => {
+  const ZONA = {
+    idZona: 'Z1', nomeZona: 'Bairro X', realizada: 1, naoIniciada: 0,
+    domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 2,
+    semCoordenadas: 0, agendados: 1, realizadasSemAgendamento: 1, pendentes: 1,
+  };
+
+  test('MODO_MOVIMENTO drops every agenda-derived column', () => {
+    // Último Movimento makes no agenda request, so Agendados, the two
+    // demand columns and the slot columns have no data behind them.
+    // Rendering them as zeros would assert "nothing scheduled" when the
+    // truth is "not asked".
+    const html = UM.buildZonasTableHtml([ZONA], new Map(), new Map(), UM.MODO_MOVIMENTO);
+    expect(html).not.toContain('Agendados');
+    expect(html).not.toContain('Realizadas sem agend.');
+    expect(html).not.toContain('Slots livres');
+    expect(html).not.toContain('Manhã');
+    // But the tipo counts and coordinate columns stay.
+    expect(html).toContain('Recusa entrev.');
+    expect(html).toContain('Sem coordenadas');
+  });
+
+  test('MODO_BIOMARCADORES keeps the slot columns', () => {
+    const html = UM.buildZonasTableHtml([ZONA], new Map(), new Map(), UM.MODO_BIOMARCADORES);
+    expect(html).toContain('Slots livres');
+    expect(html).toContain('Manhã');
+    expect(html).toContain('Agendados');
+  });
+
+  test('every row has the same cell count as the header', () => {
+    // A column dropped from the header but not the body (or vice versa)
+    // silently shifts every later cell into the wrong column.
+    [UM.MODO_MOVIMENTO, UM.MODO_BIOMARCADORES].forEach((modo) => {
+      const html = UM.buildZonasTableHtml([ZONA], new Map(), new Map(), modo);
+      // <thead> also matches /<th/, so count the real cells only.
+      const ths = (html.match(/<th[ >]/g) || []).length;
+      const tds = (html.match(/<td[ >]/g) || []).length;
+      expect(tds).toBe(ths);
+    });
+  });
+
+  test('defaults to the biomarcadores shape when no modo is passed', () => {
+    // Existing callers/tests pass no modo; they must keep the full table.
+    const html = UM.buildZonasTableHtml([ZONA], new Map(), new Map());
+    expect(html).toContain('Slots livres');
+  });
+});
+
+describe('biomarcadores demand from status', () => {
+  const linha = (over) => ({
+    controle: 'C1', domicilio: '1', status: 'Não iniciado',
+    dataAgendada: '', dataFinalColeta: '', ...over,
+  });
+
+  test('open statuses owe a collection', () => {
+    ['A agendar', 'Não iniciado', 'Indefinido'].forEach((status) => {
+      expect(UM.coletaEmAberto(linha({ status }))).toBe(true);
+    });
+  });
+
+  test('collected and closed-without-collection statuses do not', () => {
+    ['Coletado Sangue e Urina', 'Coletado apenas Sangue', 'Coletado apenas Urina',
+      'Recusa', 'Outro Motivo', 'Não elegível'].forEach((status) => {
+      expect(UM.coletaEmAberto(linha({ status }))).toBe(false);
+    });
+  });
+
+  test('Agendado is conditional on the date not having passed', () => {
+    const hoje = '2026-08-14';
+    // Future booking: closed, it is on its way.
+    expect(UM.coletaEmAberto(linha({ status: 'Agendado', dataAgendada: '20/08/2026' }), hoje))
+      .toBe(false);
+    // Today still counts as booked.
+    expect(UM.coletaEmAberto(linha({ status: 'Agendado', dataAgendada: '14/08/2026' }), hoje))
+      .toBe(false);
+    // Lapsed without a collection: back to being demand.
+    expect(UM.coletaEmAberto(linha({ status: 'Agendado', dataAgendada: '01/08/2026' }), hoje))
+      .toBe(true);
+  });
+
+  test('an unknown status is left out of the counts, not absorbed', () => {
+    // Matched positively: a status SIGC adds tomorrow must not silently
+    // land in "owed" (or in "closed") through a negation.
+    expect(UM.coletaEmAberto(linha({ status: 'Status Novo Do SIGC' }))).toBe(false);
+    expect(UM.statusDesconhecido(linha({ status: 'Status Novo Do SIGC' }))).toBe(true);
+    expect(UM.statusDesconhecido(linha({ status: 'A agendar' }))).toBe(false);
+  });
+});
+
+describe('capacity flag is agenda-derived', () => {
+  test('MODO_MOVIMENTO never flags a zona as sem capacidade', () => {
+    // The flag compares demand against free slots. With no agenda fetch
+    // there is neither, so flagging would paint a shortfall the data
+    // cannot support — and the tooltip would read "0 slot(s) livre(s)"
+    // when the truth is that nothing was asked.
+    const zona = {
+      idZona: 'Z1', nomeZona: 'B', realizada: 1, naoIniciada: 0,
+      domicilioFechado: 0, recusa: 0, outros: 0, totalDomicilios: 2,
+      semCoordenadas: 0, agendados: 1, realizadasSemAgendamento: 5, pendentes: 5,
+    };
+    const html = UM.buildZonasTableHtml([zona], new Map(), new Map(), UM.MODO_MOVIMENTO);
+    expect(html).not.toContain('sigc-pro-zona-sem-capacidade');
+    expect(html).not.toContain('slot(s) livre(s)');
+    // The pin's own tooltip survives.
+    expect(html).toContain('Ver esta zona no mapa');
+  });
+});
+
+describe('reading the on-screen table per modo', () => {
+  const BIO_HEADERS = [
+    'UF', 'Agência', 'Município', 'ID Zona', 'Nome Zona', '#!Controle',
+    '!N.º Domicílio', 'Tipo Entrevista', 'Nome Equipe', 'Status',
+    'Siape Agendamento', 'Data Resposta 25A.01', 'Data Agendada',
+    'Data Visita Biomarcadores', 'Siape Coleta Biomarcadores',
+    'Data Final para Coleta', 'Dias Prazo Final', 'Data/hora coleta sangue',
+    'Status sangue', 'Motivo sangue', 'Data/hora coleta urina',
+    'Status urina', 'Motivo urina', 'Dias entre 1° agendamento e coleta',
+  ];
+  const BIO_ROW = [
+    '29', '292740800', '2927408', '29XJYY', '29.3.01.02 Pituba',
+    '292740805220571', '1', 'Realizada', 'EQ1', 'A agendar',
+    '', '20/07/2026', '', '', '', '14/08/2026', '0', '', '', '', '', '', '', '',
+  ];
+
+  test('biomarcadores rows carry status and become map rows', () => {
+    // The biomarcadores report is the household source on its own page,
+    // so its rows must reach the same {controle, domicilio, idZona} shape
+    // the coordinate join and the zona aggregation expect.
+    const map = UM.biomarcadoresParaLinhas(BIO_HEADERS, [BIO_ROW]);
+    expect(map).not.toBeNull();
+    const row = map.get('292740805220571|1');
+    expect(row.status).toBe('A agendar');
+    expect(row.idZona).toBe('29XJYY');
+    // Data Agendada is empty here, so nothing is booked.
+    expect(row.agendado).toBe('');
+    // And the household owes a collection.
+    expect(UM.coletaEmAberto(row)).toBe(true);
+  });
+
+  test('Data Agendada becomes agendado without any agenda request', () => {
+    const cells = [...BIO_ROW];
+    cells[9] = 'Agendado';
+    cells[12] = '20/08/2026';
+    const row = UM.biomarcadoresParaLinhas(BIO_HEADERS, [cells]).get('292740805220571|1');
+    expect(row.agendado).toBe('20/08/2026');
+    expect(row.agendadoOrdenavel).toBe('2026-08-20');
+  });
+});
+
+describe('demand comes from status on the biomarcadores page', () => {
+  const linha = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', zona: 'Zona 1',
+    temZona: true, temCoordenadas: true, tipoEntrevista: 'Realizada',
+    ultimaPosicao: '', status: 'A agendar', agendado: '', dataAgendada: '',
+    ...over,
+  });
+
+  test('an owed collection counts, whatever its ultimaPosicao', () => {
+    // ultimaPosicao is empty on this report, so the proxy rule would
+    // count zero here — the whole point of reading status instead.
+    const zonas = UM.aggregateZonas([linha()], new Map(), UM.MODO_BIOMARCADORES);
+    expect(zonas[0].realizadasSemAgendamento).toBe(1);
+  });
+
+  test('a collected household owes nothing', () => {
+    const zonas = UM.aggregateZonas(
+      [linha({ status: 'Coletado Sangue e Urina' })], new Map(), UM.MODO_BIOMARCADORES);
+    expect(zonas[0].realizadasSemAgendamento).toBe(0);
+  });
+
+  test('a refused collection owes nothing, even though the interview succeeded', () => {
+    // The BA case: ~50 households refused the collection and almost all
+    // appear as a successful interview. The proxy counted them as owed.
+    const zonas = UM.aggregateZonas(
+      [linha({ status: 'Recusa' })], new Map(), UM.MODO_BIOMARCADORES);
+    expect(zonas[0].realizadasSemAgendamento).toBe(0);
+  });
+
+  test('a booked household is not owed until the date lapses', () => {
+    const futuro = UM.aggregateZonas(
+      [linha({ status: 'Agendado', dataAgendada: '31/12/2099', agendado: '31/12/2099' })],
+      new Map(), UM.MODO_BIOMARCADORES);
+    expect(futuro[0].realizadasSemAgendamento).toBe(0);
+    const vencido = UM.aggregateZonas(
+      [linha({ status: 'Agendado', dataAgendada: '01/01/2020', agendado: '01/01/2020' })],
+      new Map(), UM.MODO_BIOMARCADORES);
+    expect(vencido[0].realizadasSemAgendamento).toBe(1);
+  });
+
+  test('Último Movimento keeps the ultimaPosicao rule', () => {
+    const zonas = UM.aggregateZonas(
+      [linha({ status: '', ultimaPosicao: 'Descarregado Parcialmente' })],
+      new Map(), UM.MODO_MOVIMENTO);
+    expect(zonas[0].realizadasSemAgendamento).toBe(1);
+  });
+});
+
+describe('the two demand columns stay nested', () => {
+  // The header tooltip tells the reader the columns cannot be added up
+  // because one contains the other. That has to be true of the data, not
+  // just of the prose.
+  test('every owed household is also pendente', () => {
+    const statuses = ['A agendar', 'Não iniciado', 'Indefinido', 'Agendado',
+      'Coletado Sangue e Urina', 'Recusa', 'Outro Motivo', 'Não elegível',
+      'Status Novo'];
+    const tipos = ['Realizada', 'Não Iniciada', 'Recusa', ''];
+    const datas = ['', '01/01/2020', '31/12/2099'];
+    const hoje = '2026-08-14';
+    statuses.forEach((status) => tipos.forEach((tipoEntrevista) => datas.forEach((dataAgendada) => {
+      const r = { status, tipoEntrevista, dataAgendada };
+      if (UM.deveColeta(r, hoje)) {
+        expect(UM.coletaEmAberto(r, hoje)).toBe(true);
+      }
+    })));
   });
 });
