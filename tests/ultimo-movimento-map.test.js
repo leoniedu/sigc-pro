@@ -3503,3 +3503,27 @@ describe('A agendar means schedulable, not merely open', () => {
     expect(z.aAgendar + z.jaAgendados).toBe(2);
   });
 });
+
+describe('every household lands in a column that is actually rendered', () => {
+  test('a Não Iniciada tipo does not vanish on the biomarcadores page', () => {
+    // The Não Iniciada column is not rendered here (the report never emits
+    // that tipo), so anything filed under it disappears from the status
+    // columns while still counting toward Total. Measured live: the
+    // posição join was filling blank tipo with movimento's "Não Iniciada",
+    // which is exactly this case for 224 BA households.
+    const linha = (over) => ({
+      controle: 'C1', domicilio: '1', idZona: 'Z1', temZona: true,
+      temCoordenadas: true, status: 'Não iniciado', agendado: '',
+      dataAgendada: '', tipoEntrevista: 'Não Iniciada',
+      ultimaPosicao: 'Descarregado Parcialmente', ...over,
+    });
+    const z = UM.aggregateZonas([
+      linha({ domicilio: '1' }),
+      linha({ domicilio: '2', ultimaPosicao: 'Distribuido' }),
+    ], new Map(), UM.MODO_BIOMARCADORES, '2026-08-15');
+    const soma = z[0].naoDistribuida + z[0].semDesfecho + z[0].realizada +
+      z[0].domicilioFechado + z[0].recusa + z[0].outros;
+    expect(soma).toBe(z[0].totalDomicilios);
+    expect(z[0].naoIniciada).toBe(0);
+  });
+});

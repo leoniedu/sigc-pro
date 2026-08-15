@@ -297,7 +297,13 @@
       // is actually made of.
       let coluna;
       if (POSICAO_NAO_EM_CAMPO.has(r.ultimaPosicao)) coluna = 'naoDistribuida';
-      else if (!r.tipoEntrevista) coluna = 'semDesfecho';
+      else if (m.comDemanda && (!r.tipoEntrevista || r.tipoEntrevista === 'Não Iniciada')) {
+        // 'Não Iniciada' means the same thing as a blank tipo here — the
+        // interview has not concluded — and this page renders no Não
+        // Iniciada column, so folding them keeps every household in a
+        // column the reader can actually see.
+        coluna = 'semDesfecho';
+      } else if (!r.tipoEntrevista) coluna = 'semDesfecho';
       else coluna = TIPO_COLUNA[r.tipoEntrevista] || 'outros';
       bucket[coluna] += 1;
       bucket.totalDomicilios += 1;
@@ -2341,10 +2347,14 @@
               const p = posicoes.get(key);
               if (!p) return;
               r.ultimaPosicao = p.ultimaPosicao;
-              // tipoEntrevista too: the biomarcadores report leaves it
-              // blank until the interview concludes, while Último
-              // Movimento already carries the outcome.
-              if (!r.tipoEntrevista) r.tipoEntrevista = p.tipoEntrevista;
+              // Only the posição. tipoEntrevista is deliberately NOT
+              // copied: where the biomarcadores report leaves it blank,
+              // Último Movimento says "Não Iniciada" for every one of
+              // them (verified, BA: 1.416/1.416), so the fallback can
+              // never promote a household into a real outcome — it only
+              // moves it out of "Sem desfecho" into a column this page
+              // does not render, where it would vanish from the status
+              // counts while still counting toward Total.
             });
           }
         } catch (err) {
