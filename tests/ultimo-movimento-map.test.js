@@ -531,7 +531,9 @@ describe('buildDomiciliosTabHtml', () => {
       controle: 'C1', domicilio: '1', agendado: '01/09/2026 09:00',
       ultimaPosicao: 'TRANSMITIDO', tipoEntrevista: 'PRESENCIAL',
       entrevistador: 'MARIA', data: '28/07/2026',
-    }]);
+      // Entrevistador/Data are Último Movimento columns; the
+      // biomarcadores variant shows the collection's people instead.
+    }], I.MODO_MOVIMENTO);
     expect(html).toContain('Entrevistador');
     expect(html).toContain('MARIA');
     expect(html).toContain('C1');
@@ -3648,5 +3650,84 @@ describe('the Zonas table renders the nine columns', () => {
     // 2 pending against 1 free slot.
     expect(html).toContain('sigc-pro-zona-sem-capacidade');
     expect(html).toContain('Deve 2 biomarcador(es)');
+  });
+});
+
+describe('Domicílios tab on the biomarcadores page', () => {
+  const hoje = '2026-08-15';
+  const d = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', tipoEntrevista: 'Realizada',
+    ultimaPosicao: 'Descarregado', status: 'Não iniciado', agendado: '',
+    dataAgendada: '', dataFinalColeta: '', dataVisita: '', nomeEquipe: '',
+    siapeAgendamento: '', siapeColeta: '', statusSangue: '', statusUrina: '',
+    entrevistador: '', data: '', ...over,
+  });
+  const html = (rows) => UM.buildDomiciliosTabHtml(rows, UM.MODO_BIOMARCADORES, hoje);
+
+  test('Situação uses the same nine-way vocabulary as the Zonas tab', () => {
+    // Four households that all read "Não iniciado" before: drilling from
+    // a zona into its households used to lose the distinction the Zonas
+    // row had just made.
+    const h = html([
+      d({ domicilio: '1', tipoEntrevista: '', ultimaPosicao: 'Distribuido' }),
+      d({ domicilio: '2', tipoEntrevista: '', ultimaPosicao: 'Descarregado Parcialmente' }),
+      d({ domicilio: '3' }),
+      d({ domicilio: '4', ultimaPosicao: 'Descarregado Parcialmente' }),
+    ]);
+    expect(h).toContain('A entrevistar');
+    expect(h).toContain('Em campo (indefinida)');
+    expect(h).toContain('Inelegível');
+    expect(h).toContain('Sem agendamento iniciado');
+  });
+
+  test('Ação is filled for every actionable household, not only urgent ones', () => {
+    // It used to fill only inside the 10-day deadline window, so it was
+    // blank for most rows — including work that genuinely needed doing.
+    expect(html([d({ status: 'A agendar', dataFinalColeta: '20/08/2026' })]))
+      .toContain('agendar');
+    expect(html([d({ tipoEntrevista: '', ultimaPosicao: 'Distribuido' })]))
+      .toContain('entrevistar');
+    expect(html([d({ status: 'Recusa' })])).toContain('reverter recusa');
+    // And empty where there is genuinely nothing to do. Checked against
+    // the BODY: the Ação tooltip legitimately contains the word.
+    const feito = html([d({ status: 'Coletado Sangue e Urina' })]);
+    expect(feito.split('<tbody>')[1]).not.toContain('agendar');
+  });
+
+  test('shows the collection people and dates, not the interviewer', () => {
+    const h = html([d({
+      status: 'Coletado Sangue e Urina', dataVisita: '12/08/2026',
+      siapeColeta: '222', nomeEquipe: 'EQ1', entrevistador: '999',
+    })]);
+    expect(h).toContain('12/08/2026');
+    expect(h).toContain('222');
+    expect(h).toContain('EQ1');
+    // Último Movimento's interviewer is not this page's subject.
+    expect(h).not.toContain('999');
+  });
+
+  test('sample outcomes are shown when they exist', () => {
+    const h = html([d({
+      status: 'Coletado apenas Sangue', statusSangue: 'Coletado',
+      statusUrina: 'Não coletado',
+    })]);
+    expect(h).toContain('Coletado');
+    expect(h).toContain('Não coletado');
+  });
+
+  test('Último Movimento keeps its own columns', () => {
+    const h = UM.buildDomiciliosTabHtml([d()], UM.MODO_MOVIMENTO, hoje);
+    expect(h).toContain('>Entrevistador</th>');
+    expect(h).toContain('>Situação</th>');
+    expect(h).not.toContain('Equipe');
+  });
+
+  test('header and body agree in both variants', () => {
+    [UM.MODO_MOVIMENTO, UM.MODO_BIOMARCADORES].forEach((modo) => {
+      const h = UM.buildDomiciliosTabHtml([d()], modo, hoje);
+      const ths = (h.match(/<th[ >]/g) || []).length;
+      const tds = (h.match(/<td[ >]/g) || []).length;
+      expect(tds).toBe(ths);
+    });
   });
 });

@@ -438,3 +438,37 @@ describe('Último Movimento by filter scope', () => {
     )).toBeNull();
   });
 });
+
+describe('biomarcadores: the collection-side columns', () => {
+  const H = [
+    'UF', 'Agência', 'Município', 'ID Zona', 'Nome Zona', '#!Controle',
+    '!N.º Domicílio', 'Tipo Entrevista', 'Nome Equipe', 'Status',
+    'Siape Agendamento', 'Data Resposta 25A.01', 'Data Agendada',
+    'Data Visita Biomarcadores', 'Siape Coleta Biomarcadores',
+    'Data Final para Coleta', 'Dias Prazo Final', 'Data/hora coleta sangue',
+    'Status sangue', 'Motivo sangue', 'Data/hora coleta urina',
+    'Status urina', 'Motivo urina', 'Dias entre 1° agendamento e coleta',
+  ];
+  const R = [
+    '29', '0570', '2927408', 'Z1', 'Pituba', 'C1', '1', 'Realizada', 'EQ1',
+    'Coletado Sangue e Urina', '111', '01/08/2026', '10/08/2026',
+    '12/08/2026', '222', '26/08/2026', '3', '12/08/2026 09:00',
+    'Coletado', '', '12/08/2026 09:10', 'Coletado', '', '2',
+  ];
+
+  test('parses who scheduled, who collected, and each sample outcome', () => {
+    // The Domicílios tab is on the biomarcadores page, so the people and
+    // dates that matter are the collection's — not Último Movimento's
+    // interviewer.
+    const row = AM.parseBiomarcadoresHtml(
+      `<table id="tableRelatorio"><thead><tr>${H.map((h) => `<th>${h}</th>`).join('')}` +
+      `</tr></thead><tbody><tr>${R.map((c) => `<td>${c}</td>`).join('')}</tr></tbody></table>`
+    ).get('C1|1');
+    expect(row.siapeAgendamento).toBe('111');
+    expect(row.siapeColeta).toBe('222');
+    expect(row.statusSangue).toBe('Coletado');
+    expect(row.statusUrina).toBe('Coletado');
+    expect(row.dataVisita).toBe('12/08/2026');
+    expect(row.nomeEquipe).toBe('EQ1');
+  });
+});

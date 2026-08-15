@@ -461,6 +461,52 @@
     return 'emAndamento';                                                  // 219
   }
 
+  // The label for each class, shared by both tabs so a Zonas column and
+  // a Domicílios row never call the same state by different names.
+  const CLASSE_LABEL = {
+    aEntrevistar: 'A entrevistar',
+    emAndamento: 'Em campo (indefinida)',
+    semAgendamento: 'Sem agendamento iniciado',
+    agendamentoPendente: 'Agendamento pendente',
+    agendado: 'Agendado',
+    coletado: 'Coletado',
+    recusa: 'Recusa',
+    inelegivel: 'Inelegível',
+    semEntrevista: 'Encerrado sem entrevista',
+  };
+
+  // What to DO about a household, for every class — not only the ones
+  // inside the deadline window. The old Ação column filled only when the
+  // prazo alert fired, so it was blank for most rows, including work that
+  // genuinely needed doing but had no deadline yet.
+  //
+  // Empty string where nothing is owed: a finished or terminal household
+  // should show a dash, not an instruction.
+  const CLASSE_ACAO = {
+    aEntrevistar: 'entrevistar',
+    emAndamento: 'concluir entrevista',
+    semAgendamento: 'concluir 25A.01',
+    agendamentoPendente: 'agendar',
+    agendado: '',
+    coletado: '',
+    recusa: 'reverter recusa',
+    inelegivel: '',
+    semEntrevista: '',
+  };
+
+  // 'Agendado' whose date has passed is back in the queue — reagendar,
+  // not agendar, because there is a booking on file to move.
+  function acaoDoDomicilio(r, hojeIso) {
+    const classe = classificaDomicilio(r, hojeIso);
+    if (classe === 'agendamentoPendente' && (r && r.status) === STATUS_AGENDADO) {
+      return 'reagendar';
+    }
+    if (classe === 'agendamentoPendente' && (r && r.status) === 'Indefinido') {
+      return 'definir situação';
+    }
+    return CLASSE_ACAO[classe] || '';
+  }
+
   // --- Agência layers ----------------------------------------------------
   //
   // One toggleable marker layer per agência, so a supervisor covering
@@ -1117,8 +1163,12 @@
       'vencido. O campo do SIGC trunca em zero e não distingue "vence hoje" ' +
       'de "venceu há três semanas".';
     const TIP_ACAO =
-      'Agendar e reagendar são trabalho de agenda; reverter recusa é ' +
-      'convencimento, e nenhum slot resolve.';
+      'O próximo passo deste domicílio. Agendar e reagendar são trabalho ' +
+      'de agenda; reverter recusa é convencimento, e nenhum slot resolve.';
+    const TIP_SITUACAO =
+      'Mesma classificação das colunas da aba Zonas — cada domicílio está ' +
+      'em exatamente uma situação.';
+    const TIP_AMOSTRAS = 'Situação de cada amostra: sangue / urina.';
     // Same header/body gating contract as buildZonasTableHtml: an
     // "Agendado" column of em-dashes would read as "nothing scheduled"
     // when no agenda was ever requested.
@@ -1126,15 +1176,22 @@
     // "Situação" carries ultimaPosicao on Último Movimento and the
     // biomarcador status on the other page — the same question ("where
     // does this household stand?") answered from each report's own field.
-    const head =
-      '<tr><th>Controle</th><th>Domicílio</th><th>Zona</th>' +
-      (m.comAgenda ? '<th>Agendado</th>' : '') +
-      '<th>Situação</th><th>Tipo</th>' +
-      (m.comDemanda
-        ? `<th title="${esc(TIP_PRAZO)}">Prazo</th>` +
-          `<th title="${esc(TIP_ACAO)}">Ação</th>`
-        : '') +
-      '<th>Entrevistador</th><th>Data</th></tr>';
+    // On the biomarcadores page the row answers "what is this household's
+    // collection state and what do I do about it" — so Situação carries
+    // the same nine-way vocabulary the Zonas columns use, and the people
+    // and dates are the collection's, not Último Movimento's.
+    const head = m.comDemanda
+      ? '<tr><th>Controle</th><th>Domicílio</th><th>Zona</th>' +
+        `<th title="${esc(TIP_SITUACAO)}">Situação</th>` +
+        `<th title="${esc(TIP_ACAO)}">Ação</th>` +
+        `<th title="${esc(TIP_PRAZO)}">Prazo</th>` +
+        '<th>Agendado</th><th>Coleta</th>' +
+        `<th title="${esc(TIP_AMOSTRAS)}">Amostras</th>` +
+        '<th>Equipe</th><th>SIAPE</th></tr>'
+      : '<tr><th>Controle</th><th>Domicílio</th><th>Zona</th>' +
+        (m.comAgenda ? '<th>Agendado</th>' : '') +
+        '<th>Situação</th><th>Tipo</th>' +
+        '<th>Entrevistador</th><th>Data</th></tr>';
     const body = (rows || []).map((r) => {
       // data-order: the raw ISO timestamp, so DataTables sorts this column
       // chronologically instead of lexicographically on "dd/mm/yyyy HH:MM"
@@ -1181,14 +1238,22 @@
         // carries the names, and this column exists to tell rows apart and
         // to sort/filter by zona, which the short ID does in far less width.
         `<td>${dash(r.idZona)}</td>` +
-        (m.comAgenda ? `<td data-order="${agendadoSort}">${agendadoCell}</td>` : '') +
-        `<td>${dash(m.comDemanda ? r.status : r.ultimaPosicao)}</td>` +
-        `<td>${dash(r.tipoEntrevista)}</td>` +
         (m.comDemanda
-          ? prazoCell + `<td>${alerta ? esc(acaoDePrazo(r, hoje)) : '—'}</td>`
-          : '') +
-        `<td>${dash(r.entrevistador)}</td>` +
-        `<td>${dash(r.data)}</td>` +
+          ? `<td>${dash(CLASSE_LABEL[classificaDomicilio(r, hoje)])}</td>` +
+            `<td>${dash(acaoDoDomicilio(r, hoje))}</td>` +
+            prazoCell +
+            `<td data-order="${agendadoSort}">${agendadoCell}</td>` +
+            `<td>${dash(r.dataVisita)}</td>` +
+            // Sangue / urina side by side: "Coletado apenas Sangue" says
+            // one was missed, but not which follow-up the other needs.
+            `<td>${dash([r.statusSangue, r.statusUrina].filter(Boolean).join(' / '))}</td>` +
+            `<td>${dash(r.nomeEquipe)}</td>` +
+            `<td>${dash(r.siapeColeta || r.siapeAgendamento)}</td>`
+          : (m.comAgenda ? `<td data-order="${agendadoSort}">${agendadoCell}</td>` : '') +
+            `<td>${dash(r.ultimaPosicao)}</td>` +
+            `<td>${dash(r.tipoEntrevista)}</td>` +
+            `<td>${dash(r.entrevistador)}</td>` +
+            `<td>${dash(r.data)}</td>`) +
         '</tr>'
       );
     }).join('');

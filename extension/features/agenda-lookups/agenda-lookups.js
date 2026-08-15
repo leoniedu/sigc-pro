@@ -688,6 +688,14 @@
     dataVisita: 'Data Visita Biomarcadores',
     dataFinalColeta: 'Data Final para Coleta',
     diasPrazoFinal: 'Dias Prazo Final',
+    // The collection side: who booked it, who drew the samples, and how
+    // each sample ended. The Domicílios tab shows these instead of Último
+    // Movimento's interviewer, which is a different person doing a
+    // different job.
+    siapeAgendamento: 'Siape Agendamento',
+    siapeColeta: 'Siape Coleta Biomarcadores',
+    statusSangue: 'Status sangue',
+    statusUrina: 'Status urina',
   };
 
   // SIGC mixes DEGREE SIGN (U+00B0) and MASCULINE ORDINAL (U+00BA) in the
@@ -727,6 +735,10 @@
         dataVisita: cell(cells, idx.dataVisita),
         dataFinalColeta: cell(cells, idx.dataFinalColeta),
         diasPrazoFinal: cell(cells, idx.diasPrazoFinal),
+        siapeAgendamento: cell(cells, idx.siapeAgendamento),
+        siapeColeta: cell(cells, idx.siapeColeta),
+        statusSangue: cell(cells, idx.statusSangue),
+        statusUrina: cell(cells, idx.statusUrina),
       });
     });
     return map;
