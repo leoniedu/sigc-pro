@@ -3731,3 +3731,108 @@ describe('Domicílios tab on the biomarcadores page', () => {
     });
   });
 });
+
+describe('turno tooltips describe their own turno', () => {
+  test('the afternoon column does not explain the morning cut-off', () => {
+    // Both columns shared one string ending "Manhã antes das 13h", so
+    // hovering "Slots tarde" defined the morning and said nothing about
+    // the afternoon.
+    const zona = {
+      idZona: 'Z1', nomeZona: 'Z1', aEntrevistar: 0, emAndamento: 0,
+      semAgendamento: 0, agendamentoPendente: 0, agendadoBio: 0, coletado: 0,
+      recusaBio: 0, inelegivel: 0, semEntrevista: 0, totalDomicilios: 0,
+      semCoordenadas: 0,
+    };
+    document.body.innerHTML = '<div>' +
+      UM.buildZonasTableHtml([zona], new Map(), new Map(), UM.MODO_BIOMARCADORES) + '</div>';
+    try {
+      const th = [...document.querySelectorAll('th[title]')];
+      const manha = th.find((e) => e.textContent.includes('Slots manhã'));
+      const tarde = th.find((e) => e.textContent.includes('Slots tarde'));
+      expect(manha.title).toContain('antes das 13h');
+      expect(tarde.title).toContain('a partir das 13h');
+      expect(tarde.title).not.toContain('Manhã:');
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+});
+
+describe('Zonas answers "which zone is in trouble" without hovering', () => {
+  const hoje = '2026-08-15';
+  const d = (over) => ({
+    controle: 'C1', idZona: 'Z1', zona: 'Z1', temZona: true, temCoordenadas: true,
+    tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado',
+    status: 'A agendar', dataAgendada: '', dataFinalColeta: '20/08/2026',
+    agendado: '', ...over,
+  });
+
+  test('deficit is a column, not only a hover title', () => {
+    // The manager's one question — pendente minus free slots — used to
+    // exist only in the row's title attribute, so answering it across 60
+    // rows meant hovering each one or exporting to a spreadsheet.
+    const z = UM.aggregateZonas([d({ domicilio: '1' }), d({ domicilio: '2' })],
+      new Map(), UM.MODO_BIOMARCADORES, hoje)[0];
+    const html = UM.buildZonasTableHtml([z], new Map(),
+      new Map([['Z1', { manha: 1, tarde: 0 }]]), UM.MODO_BIOMARCADORES);
+    expect(html).toContain('>Déficit</th>');
+    // 2 pending against 1 slot.
+    expect(html).toMatch(/data-order="1"/);
+  });
+
+  test('a zone with spare capacity shows a non-positive deficit', () => {
+    const z = UM.aggregateZonas([d({ domicilio: '1' })],
+      new Map(), UM.MODO_BIOMARCADORES, hoje)[0];
+    const html = UM.buildZonasTableHtml([z], new Map(),
+      new Map([['Z1', { manha: 5, tarde: 5 }]]), UM.MODO_BIOMARCADORES);
+    expect(html).not.toContain('sigc-pro-zona-sem-capacidade');
+  });
+
+  test('overdue households are visible inside the pending count', () => {
+    // "Agendamento pendente" silently includes expired deadlines, so a
+    // queue of 29 fresh and a queue of 29 already blown looked identical
+    // — different staffing decisions entirely.
+    const z = UM.aggregateZonas([
+      d({ domicilio: '1', dataFinalColeta: '20/08/2026' }),
+      d({ domicilio: '2', dataFinalColeta: '01/08/2026' }),
+    ], new Map(), UM.MODO_BIOMARCADORES, hoje)[0];
+    expect(z.agendamentoPendente).toBe(2);
+    expect(z.vencidos).toBe(1);
+    const html = UM.buildZonasTableHtml([z], new Map(), new Map(), UM.MODO_BIOMARCADORES);
+    expect(html).toContain('>Vencidos</th>');
+  });
+
+  test('header and body still agree with the new columns', () => {
+    const z = UM.aggregateZonas([d({ domicilio: '1' })],
+      new Map(), UM.MODO_BIOMARCADORES, hoje)[0];
+    [UM.MODO_MOVIMENTO, UM.MODO_BIOMARCADORES].forEach((modo) => {
+      const html = UM.buildZonasTableHtml([z], new Map(), new Map(), modo);
+      const ths = (html.match(/<th[ >]/g) || []).length;
+      const tds = (html.match(/<td[ >]/g) || []).length;
+      expect(tds).toBe(ths);
+    });
+  });
+});
+
+describe('the Zonas table opens on the zones that need attention', () => {
+  test('rows are ordered by deficit, worst first', () => {
+    // Default was the report's own order, so a zone in trouble sat
+    // wherever SIGC put it and the amber highlight was invisible below
+    // the fold. The tab is now sorted before DataTables ever sees it,
+    // which also survives the CSV export.
+    const z = (idZona, agendamentoPendente) => ({
+      idZona, nomeZona: idZona, aEntrevistar: 0, emAndamento: 0,
+      semAgendamento: 0, agendamentoPendente, agendadoBio: 0, coletado: 0,
+      recusaBio: 0, inelegivel: 0, semEntrevista: 0, vencidos: 0,
+      totalDomicilios: agendamentoPendente, semCoordenadas: 0,
+    });
+    const turnos = new Map([['A', { manha: 0, tarde: 0 }], ['B', { manha: 0, tarde: 0 }],
+      ['C', { manha: 0, tarde: 0 }]]);
+    const html = UM.buildZonasTableHtml(
+      [z('A', 1), z('B', 9), z('C', 4)], new Map(), turnos, UM.MODO_BIOMARCADORES);
+    // Read the pin's data-id-zona: the Zona and Nome cells both hold the
+    // id in this fixture, so matching cell text would double-count.
+    const ordem = [...html.matchAll(/data-id-zona="([ABC])"/g)].map((mm) => mm[1]);
+    expect(ordem).toEqual(['B', 'C', 'A']);
+  });
+});

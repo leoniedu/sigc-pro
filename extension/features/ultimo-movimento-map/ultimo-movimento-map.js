@@ -268,6 +268,10 @@
       aEntrevistar: 0, emAndamento: 0, inelegivel: 0, semAgendamento: 0,
       agendamentoPendente: 0, agendadoBio: 0, coletado: 0, recusaBio: 0,
       semEntrevista: 0,
+      // A subset of agendamentoPendente, not a tenth column: a queue of
+      // 29 fresh and one of 29 already blown demand different staffing,
+      // and merged they looked identical.
+      vencidos: 0,
       totalDomicilios: 0, semCoordenadas: 0, agendados: 0,
       realizadasSemAgendamento: 0, pendentes: 0,
       aAgendar: 0, jaAgendados: 0,
@@ -311,7 +315,12 @@
           semAgendamento: 'semAgendamento', aEntrevistar: 'aEntrevistar',
           emAndamento: 'emAndamento',
         };
-        bucket[CHAVE[classificaDomicilio(r, hojeIso)]] += 1;
+        const classe = classificaDomicilio(r, hojeIso);
+        bucket[CHAVE[classe]] += 1;
+        if (classe === 'agendamentoPendente') {
+          const dias = diasParaPrazo(r, hojeIso);
+          if (dias !== null && dias < 0) bucket.vencidos += 1;
+        }
       } else {
         const coluna = POSICAO_NAO_EM_CAMPO.has(r.ultimaPosicao)
           ? 'naoDistribuida'
@@ -977,9 +986,15 @@
     const TIP_RECUSA =
       'Recusa da ENTREVISTA, não do biomarcador — quem recusa o ' +
       'biomarcador costuma constar aqui como entrevista realizada.';
-    const TIP_TURNO =
+    // One per turno: the shared text ended with "Manhã antes das 13h",
+    // which read as a definition of the column it was hovering over — so
+    // "Slots tarde" explained the morning cut-off and said nothing about
+    // the afternoon.
+    const TIP_JANELA =
       'Slots livres do primeiro dia ainda agendável (hoje+3, ou hoje+4 na ' +
-      'sexta) até +17 dias. Manhã antes das 13h.';
+      'sexta) até +17 dias.';
+    const TIP_TURNO_MANHA = `${TIP_JANELA} Manhã: antes das 13h.`;
+    const TIP_TURNO_TARDE = `${TIP_JANELA} Tarde: a partir das 13h.`;
     // Pin column, deliberately first and narrow. The click used to live on
     // the whole <tr>, which made the table hostile to ordinary use:
     // selecting a Controle to copy it fired the handler, switched tabs and
@@ -1032,6 +1047,12 @@
       'Entrevista concluída e descarregada sem abrir o biomarcador. Em ' +
       'geral o morador sorteado tem menos de 35 anos, abaixo da idade de ' +
       'coleta — não haverá coleta.';
+    const TIP_VENCIDOS =
+      'Quantos dos "Agendamento pendente" já passaram do prazo. Contidos ' +
+      'naquela coluna — não somar as duas.';
+    const TIP_DEFICIT =
+      'Agendamento pendente menos os slots livres da janela. Positivo: a ' +
+      'zona deve mais coletas do que consegue marcar.';
     const TIP_SEM_ENTREVISTA =
       'Sem entrevista aproveitável: domicílio vago, uso ocasional, ' +
       'demolido, fora de âmbito ou encerrado por outro motivo.';
@@ -1057,23 +1078,39 @@
           `<th title="${esc(TIP_EM_ANDAMENTO)}">Em campo (indefinida)</th>` +
           `<th title="${esc(TIP_SEM_AGENDAMENTO)}">Sem agendamento iniciado</th>` +
           `<th title="${esc(TIP_AGEND_PENDENTE)}">Agendamento pendente</th>` +
+          `<th title="${esc(TIP_VENCIDOS)}">Vencidos</th>` +
           `<th title="${esc(TIP_AGENDADO)}">Agendado</th>` +
           `<th title="${esc(TIP_COLETADO)}">Coletado</th>` +
           `<th title="${esc(TIP_RECUSA_BIO)}">Recusa</th>` +
           `<th title="${esc(TIP_INELEGIVEL)}">Inelegível</th>` +
           `<th title="${esc(TIP_SEM_ENTREVISTA)}">Encerrado sem entrevista</th>` +
+          `<th title="${esc(TIP_DEFICIT)}">Déficit</th>` +
           '<th>Total</th><th>Sem coordenadas</th>'
         : `<th title="${esc(TIP_NAO_DISTRIBUIDA)}">Não distribuída</th>` +
           '<th>Realizada</th><th>Não Iniciada</th><th>Dom. Fechado</th>' +
           `<th title="${esc(TIP_RECUSA)}">Recusa entrev.</th>` +
           '<th>Outros</th><th>Total</th><th>Sem coordenadas</th>') +
       (m.comSlots
-        ? `<th title="${esc(TIP_TURNO)}">Slots manhã</th>` +
-          `<th title="${esc(TIP_TURNO)}">Slots tarde</th>` +
+        ? `<th title="${esc(TIP_TURNO_MANHA)}">Slots manhã</th>` +
+          `<th title="${esc(TIP_TURNO_TARDE)}">Slots tarde</th>` +
           '<th>Slots livres</th>'
         : '') +
       '</tr>';
-    const body = zonaRows.map((r) => {
+    // Worst deficit first. Sorted HERE rather than through DataTables'
+    // `order` so the CSV export carries the same order the reader saw —
+    // and so the amber rows are at the top instead of scattered below
+    // the fold, which made the tab's own alert fight its layout.
+    const ordenadas = m.comDemanda
+      ? [...zonaRows].sort((a, b) => {
+        const falta = (z) => (z.agendamentoPendente || 0) -
+          ((turnosMap.get(z.idZona || '') || {}).manha || 0) -
+          ((turnosMap.get(z.idZona || '') || {}).tarde || 0);
+        return falta(b) - falta(a) ||
+          (b.agendamentoPendente || 0) - (a.agendamentoPendente || 0) ||
+          String(a.idZona || '').localeCompare(String(b.idZona || ''));
+      })
+      : zonaRows;
+    const body = ordenadas.map((r) => {
       const clickable = zonaRowIsClickable(r);
       const zonaKey = r.idZona || '';
       const turnos = turnosMap.get(zonaKey) || { manha: 0, tarde: 0 };
@@ -1081,6 +1118,10 @@
       // there is neither, so it must not fire — a shortfall painted from
       // absent data reads as "0 slots free" when the truth is "not asked".
       const semCapacidade = m.comSlots && zonaSemCapacidade(r, turnos);
+      // Same subtraction the amber row title spells out, promoted to a
+      // column so it can be sorted and compared across zonas.
+      const deficit = (r.agendamentoPendente != null ? r.agendamentoPendente : 0) -
+        ((turnos.manha || 0) + (turnos.tarde || 0));
       const classes = [
         clickable ? 'sigc-pro-zona-row-clickable' : '',
         semCapacidade ? 'sigc-pro-zona-sem-capacidade' : '',
@@ -1127,11 +1168,17 @@
             // The actionable queue, bolded: it is the one number in the
             // row that says "book something this week".
             `<td class="sigc-pro-devidas">${r.agendamentoPendente || 0}</td>` +
+            `<td>${r.vencidos || 0}</td>` +
             `<td>${r.agendadoBio || 0}</td>` +
             `<td>${r.coletado || 0}</td>` +
             `<td>${r.recusaBio || 0}</td>` +
             `<td>${r.inelegivel || 0}</td>` +
             `<td>${r.semEntrevista || 0}</td>` +
+            // The manager's actual question, as a sortable number rather
+            // than a hover title: how many bookings does this zona owe
+            // beyond what its free slots can absorb.
+            `<td class="${deficit > 0 ? 'sigc-pro-devidas' : ''}" data-order="${deficit}">` +
+            `${deficit > 0 ? deficit : '—'}</td>` +
             `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>`
           : `<td>${r.naoDistribuida || 0}</td>` +
             `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
