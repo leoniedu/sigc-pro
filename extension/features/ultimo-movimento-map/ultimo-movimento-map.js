@@ -908,7 +908,15 @@
       const prazoCell = dias === null
         ? '<td>—</td>'
         : `<td class="sigc-pro-prazo-cell${alerta ? ' sigc-pro-prazo-alerta' : ''}"` +
-          ` data-order="${dias}">${dias < 0 ? 'Vencido' : dias}</td>`;
+          ` data-order="${dias}">` +
+          // The number rides INSIDE the cell, hidden. DataTables hands
+          // the exporter a cell's inner HTML without its attributes, so
+          // data-order is unreachable for any row not currently rendered
+          // — an off-page overdue row would export the word "Vencido"
+          // into a column of day counts. Carried this way, every row
+          // exports numerically whether it was on screen or not.
+          `<span class="sigc-pro-prazo-num${dias < 0 ? ' sigc-pro-prazo-num-oculto' : ''}">` +
+          `${dias}</span>${dias < 0 ? 'Vencido' : ''}</td>`;
       return (
         `<tr${alerta ? ' class="sigc-pro-prazo-alerta-row"' : ''}>` +
         `<td>${dash(r.controle)}</td>` +
@@ -1030,6 +1038,14 @@
        urgency — so this survives being printed or read colourblind. */
     .sigc-pro-prazo-alerta-row { background: #fff4e0; }
     .sigc-pro-prazo-alerta { font-weight: 700; color: #A63603; }
+    /* The day count is carried in the cell so the CSV exporter can read
+       it on every row, rendered or not (see celulaParaTexto). While the
+       deadline runs it IS the reading; once it has passed it is hidden
+       and "Vencido" stands alone — off-screen rather than display:none,
+       so a screen reader still reaches it. */
+    .sigc-pro-prazo-cell { position: relative; }
+    .sigc-pro-prazo-num-oculto { position: absolute; left: -9999px; top: 0;
+      white-space: nowrap; }
     /* Slots livres cell: inline, left-aligned against the numeric columns
        around it, and compact enough that a fortnight of open times still
        fits one table cell — one line per day, "dd/mm HH:MM HH:MM". */
@@ -1237,32 +1253,66 @@
     // cannot sort on a word mixed into a column of day counts. The
     // export carries the number, so sorting survives the round trip.
     //
-    // Opt-in by class, NOT "any numeric data-order": the Slots livres
-    // cell also carries a numeric key (its slot COUNT), and substituting
-    // it would replace a day-by-day list with a bare "2" — losing the
-    // column's whole content.
-    if (td.classList && td.classList.contains('sigc-pro-prazo-cell')) {
-      const ordem = td.getAttribute('data-order');
-      if (ordem) return ordem;
-    }
+    // Read from the cell's own content, not from data-order: DataTables
+    // strips attributes off the rows it hands back, so the attribute is
+    // there only for rows that happen to be rendered. The span is part
+    // of the cell and survives either path.
+    const num = td.querySelector && td.querySelector('.sigc-pro-prazo-num');
+    if (num) return String(num.textContent || '').trim();
     // Whitespace-collapsed: the Slots livres cell is a block of per-day
     // markup whose newlines would otherwise break the CSV row.
     return String(td.textContent || '').replace(/\s+/g, ' ').trim();
   }
 
+  // A cell as DataTables hands it back: the INNER html of the <td>, with
+  // the attributes gone — so `data-order` is unreachable and the Prazo
+  // column would export "Vencido" as text. The wrapper restores a real
+  // <td> the same reader can handle, taking the attributes from the
+  // corresponding header cell's own <td> when one is rendered.
+  //
+  // DOMParser is inert: it never fetches or runs anything, so parsing
+  // live table content keeps the zero-network guarantee.
+  function celulaHtmlParaTexto(html, atributos) {
+    const attrs = atributos || '';
+    const doc = new DOMParser().parseFromString(
+      `<table><tbody><tr><td ${attrs}>${String(html == null ? '' : html)}` +
+      '</td></tr></tbody></table>', 'text/html');
+    const td = doc.querySelector('td');
+    return td ? celulaParaTexto(td) : '';
+  }
+
+  // Every row, not just the rendered page. DataTables keeps the full
+  // dataset in rows().data() while the DOM holds only the current page —
+  // reading tbody (or rows().nodes(), which yields only RENDERED nodes)
+  // exported 50 rows out of hundreds. Same API readDataTable() uses, for
+  // exactly this reason.
+  //
+  // Returns rows of live <td> nodes. The DataTables path rebuilds them
+  // from the dataset, borrowing each column's attributes from the first
+  // rendered row so class/data-order survive for the off-page rows too.
   function linhasDaTabela(tabela) {
     const jq = window.jQuery || window.$;
     if (jq && jq.fn && jq.fn.dataTable && jq.fn.dataTable.isDataTable &&
         jq.fn.dataTable.isDataTable(tabela)) {
       try {
-        return [...jq(tabela).DataTable().rows().nodes()];
+        const dados = jq(tabela).DataTable().rows().data().toArray();
+        const modelo = [...tabela.querySelectorAll('tbody tr')][0];
+        const attrsPorColuna = modelo
+          ? [...modelo.querySelectorAll('td')].map((td) =>
+            [...td.attributes].filter((a) => a.name !== 'data-order')
+              .map((a) => `${a.name}="${a.value.replace(/"/g, '&quot;')}"`).join(' '))
+          : [];
+        return dados.map((linha) => Array.from(linha).map((celula, i) => ({
+          html: celula, attrs: attrsPorColuna[i] || '',
+        })));
       } catch (err) {
         // Fall through to the DOM: a partial export beats none, and the
         // caller has no way to act on this failure.
         console.warn(`${TAG} DataTables rows() falhou, lendo o DOM:`, err);
       }
     }
-    return [...tabela.querySelectorAll('tbody tr')];
+    return [...tabela.querySelectorAll('tbody tr')].map(
+      (tr) => [...tr.querySelectorAll('td')]);
   }
 
   function tabelaParaCsv(tabela) {
@@ -1272,10 +1322,11 @@
     // field would be noise in every row.
     const manter = ths.map((th) => !th.classList.contains(CSV_COL_IGNORADA));
     const header = ths.filter((_, i) => manter[i]).map(celulaParaTexto);
-    const rows = linhasDaTabela(tabela).map((tr) =>
-      [...tr.querySelectorAll('td')]
-        .filter((_, i) => manter[i] !== false)
-        .map(celulaParaTexto));
+    const rows = linhasDaTabela(tabela).map((celulas) =>
+      celulas.filter((_, i) => manter[i] !== false).map((c) =>
+        (c && c.html !== undefined
+          ? celulaHtmlParaTexto(c.html, c.attrs)
+          : celulaParaTexto(c))));
     return { header, rows };
   }
 

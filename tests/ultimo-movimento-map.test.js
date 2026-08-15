@@ -2597,12 +2597,21 @@ describe('CSV export per tab', () => {
       '<table id="t"><thead><tr><th>A</th></tr></thead>' +
       '<tbody><tr><td>visivel</td></tr></tbody></table>';
     const tbl = document.getElementById('t');
+    // Models real DataTables: rows().nodes() yields only the nodes it has
+    // RENDERED — off-page rows have no DOM node at all — while
+    // rows().data() carries the full dataset. An earlier version of this
+    // fake returned every row from nodes(), which made the test pass
+    // against code that still truncated at the page boundary.
     const jq = () => ({
       DataTable: () => ({
-        rows: () => ({ nodes: () => [
-          Object.assign(document.createElement('tr'), { innerHTML: '<td>pagina1</td>' }),
-          Object.assign(document.createElement('tr'), { innerHTML: '<td>pagina2</td>' }),
-        ] }),
+        rows: () => ({
+          nodes: () => [
+            Object.assign(document.createElement('tr'), { innerHTML: '<td>pagina1</td>' }),
+          ],
+          data: () => ({
+            toArray: () => [['pagina1'], ['pagina2'], ['pagina3']],
+          }),
+        }),
       }),
     });
     jq.fn = { dataTable: { isDataTable: () => true } };
@@ -2610,7 +2619,7 @@ describe('CSV export per tab', () => {
     window.jQuery = window.$ = jq;
     try {
       const { rows } = UM.tabelaParaCsv(tbl);
-      expect(rows).toEqual([['pagina1'], ['pagina2']]);
+      expect(rows).toEqual([['pagina1'], ['pagina2'], ['pagina3']]);
     } finally {
       window.jQuery = window.$ = original;
       document.body.innerHTML = '';
@@ -2703,7 +2712,8 @@ describe('CSV keeps the prazo numeric', () => {
     // sort survives.
     document.body.innerHTML =
       '<table id="t"><thead><tr><th>Prazo</th></tr></thead><tbody><tr>' +
-      '<td data-order="-22" class="sigc-pro-prazo-cell sigc-pro-prazo-alerta">-22 (vencido)</td>' +
+      '<td data-order="-22" class="sigc-pro-prazo-cell sigc-pro-prazo-alerta">' +
+      '<span class="sigc-pro-prazo-num sigc-pro-prazo-num-oculto">-22</span>Vencido</td>' +
       '</tr></tbody></table>';
     try {
       const { rows } = UM.tabelaParaCsv(document.getElementById('t'));
@@ -2888,5 +2898,106 @@ describe('a finished household has no deadline to miss', () => {
       .split('<tbody>')[1];
     expect(corpo).toContain('>6<');
     expect(corpo).not.toContain('Vencido');
+  });
+});
+
+describe('off-page rows keep their column semantics', () => {
+  // DataTables hands back the cell's INNER html, without attributes, so
+  // an off-page Prazo cell has no data-order of its own. Its per-row
+  // value cannot be recovered — and inheriting the visible row's key
+  // would stamp every exported row with the same number, which is worse
+  // than a text value.
+  function fakeDt(tabela, dados) {
+    const jq = () => ({
+      DataTable: () => ({ rows: () => ({ data: () => ({ toArray: () => dados }) }) }),
+    });
+    jq.fn = { dataTable: { isDataTable: () => true } };
+    return jq;
+  }
+
+  test('an off-page Prazo cell never inherits the visible row\'s sort key', () => {
+    document.body.innerHTML =
+      '<table id="t"><thead><tr><th>Prazo</th></tr></thead><tbody>' +
+      '<tr><td class="sigc-pro-prazo-cell" data-order="6">6</td></tr></tbody></table>';
+    const tbl = document.getElementById('t');
+    const original = window.jQuery;
+    window.jQuery = window.$ = fakeDt(tbl, [['6'], ['Vencido'], ['3']]);
+    try {
+      const { rows } = UM.tabelaParaCsv(tbl);
+      // Three rows exported, and the overdue one is NOT stamped with 6.
+      expect(rows).toHaveLength(3);
+      expect(rows[1][0]).not.toBe('6');
+      expect(rows[2][0]).toBe('3');
+    } finally {
+      window.jQuery = window.$ = original;
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('classes still come across, so column behaviour is preserved', () => {
+    document.body.innerHTML =
+      '<table id="t"><thead><tr><th>Slots</th></tr></thead><tbody>' +
+      '<tr><td class="sigc-pro-slots-cell" data-order="2">01/09 09:00</td></tr>' +
+      '</tbody></table>';
+    const tbl = document.getElementById('t');
+    const original = window.jQuery;
+    window.jQuery = window.$ = fakeDt(tbl, [['01/09 09:00'], ['<div>02/09\n14:00</div>']]);
+    try {
+      const { rows } = UM.tabelaParaCsv(tbl);
+      // Markup flattened, newline gone — the same treatment the rendered
+      // row gets.
+      expect(rows[1][0]).toBe('02/09 14:00');
+    } finally {
+      window.jQuery = window.$ = original;
+      document.body.innerHTML = '';
+    }
+  });
+});
+
+describe('the prazo travels with the cell, not just its attribute', () => {
+  test('an off-page overdue row still exports a number', () => {
+    // DataTables gives back inner HTML without attributes, so data-order
+    // is unreachable for off-page rows. Carrying the number INSIDE the
+    // cell (hidden) means every row exports numerically, whether it was
+    // rendered or not.
+    document.body.innerHTML =
+      '<table id="t"><thead><tr><th>Prazo</th></tr></thead><tbody>' +
+      '<tr><td class="sigc-pro-prazo-cell" data-order="6">' +
+      '<span class="sigc-pro-prazo-num">6</span></td></tr></tbody></table>';
+    const tbl = document.getElementById('t');
+    const jq = () => ({
+      DataTable: () => ({ rows: () => ({ data: () => ({ toArray: () => [
+        ['<span class="sigc-pro-prazo-num">6</span>'],
+        ['<span class="sigc-pro-prazo-num">-21</span>Vencido'],
+      ] }) }) }),
+    });
+    jq.fn = { dataTable: { isDataTable: () => true } };
+    const original = window.jQuery;
+    window.jQuery = window.$ = jq;
+    try {
+      const { rows } = UM.tabelaParaCsv(tbl);
+      expect(rows).toEqual([['6'], ['-21']]);
+    } finally {
+      window.jQuery = window.$ = original;
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('the visible cell still reads Vencido', () => {
+    const linha = {
+      controle: 'C1', domicilio: '1', idZona: 'Z1', entrevistador: 'F',
+      tipoEntrevista: 'Realizada', status: 'A agendar', agendado: '',
+      dataAgendada: '', dataFinalColeta: '24/07/2026', data: '',
+    };
+    document.body.innerHTML = '<div>' +
+      UM.buildDomiciliosTabHtml([linha], UM.MODO_BIOMARCADORES, '2026-08-14') + '</div>';
+    try {
+      const celula = document.querySelector('.sigc-pro-prazo-cell');
+      // The number is present for the exporter but hidden from the eye.
+      expect(celula.textContent).toContain('Vencido');
+      expect(celula.querySelector('.sigc-pro-prazo-num').textContent).toBe('-21');
+    } finally {
+      document.body.innerHTML = '';
+    }
   });
 });
