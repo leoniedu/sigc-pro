@@ -639,7 +639,7 @@ describe('Zonas tab — turno columns and the capacity flag', () => {
       [zonaRow({ realizadasSemAgendamento: 3 })], new Map(), turnos);
     expect(html).toContain('sigc-pro-zona-sem-capacidade');
     // Colour is not the only signal: the row states the shortfall.
-    expect(html).toContain('3 realizada(s) sem agendamento');
+    expect(html).toContain('Deve 3 biomarcador(es)');
   });
 
   test('does not flag a zona whose capacity covers what it owes', () => {
@@ -652,7 +652,7 @@ describe('Zonas tab — turno columns and the capacity flag', () => {
   test('renders both demand columns', () => {
     const html = I().buildZonasTableHtml(
       [zonaRow({ realizadasSemAgendamento: 2, pendentes: 5 })], new Map(), new Map());
-    expect(html).toContain('>Realizadas sem agend.</th>');
+    expect(html).toContain('>Biomarc. devidos</th>');
     expect(html).toContain('>Pendentes</th>');
     expect(html).toContain('sigc-pro-devidas">2</td>');
     expect(html).toContain('<td>5</td>');

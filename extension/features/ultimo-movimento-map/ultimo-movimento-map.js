@@ -583,15 +583,19 @@
     const AM = window.__sigcProAgendaLookups;
     const slotsMap = slotsPorZona || new Map();
     const turnosMap = turnosPorZona || new Map();
-    const TIP_REALIZADAS =
-      'Entrevistas realizadas ainda não descarregadas e sem agendamento — ' +
-      'a coleta de biomarcadores está devida e não tem horário marcado. ' +
-      'Transmitido ainda conta; só Descarregado encerra.';
-    const TIP_PENDENTES =
-      'Domicílios já em campo e sem agendamento (Fechado, Recusa de ' +
-      'entrevista, Realizada ' +
-      'ou Não Iniciada), exceto os já descarregados. Não inclui Distribuído. ' +
-      'Contém as Realizadas sem agend. — as duas colunas não se somam.';
+    // The two demand columns are computed from different sources per
+    // variant (status vs. the ultimaPosicao proxy), so the tooltips have
+    // to say which — a tooltip describing the other variant's rule is
+    // worse than none.
+    const TIP_REALIZADAS = m.comDemanda
+      ? 'Entrevista feita e biomarcador ainda em aberto, sem agendamento. ' +
+        'Contida em Pendentes — as duas não se somam.'
+      : 'Realizadas sem descarregar e sem agendamento — o biomarcador está ' +
+        'devido. Contida em Pendentes — as duas não se somam.';
+    const TIP_PENDENTES = m.comDemanda
+      ? 'Biomarcador em aberto, sem agendamento, com ou sem entrevista feita.'
+      : 'Domicílios já em campo e sem agendamento, exceto os descarregados. ' +
+        'Não inclui Distribuído.';
     // "Recusa" is two different outcomes in SIGC, in nearly disjoint
     // populations: refusing the INTERVIEW (tipoEntrevista, what this
     // report shows) and refusing the biomarcador COLLECTION (the
@@ -601,14 +605,11 @@
     // it was one. Naming the column plain "Recusa" invites a reader to
     // take it for the collection refusal it structurally cannot show.
     const TIP_RECUSA =
-      'Recusa da ENTREVISTA (Tipo Entrevista). Não é a recusa da coleta de ' +
-      'biomarcador, que só aparece no Relatório de Acompanhamento de ' +
-      'Biomarcadores — um domicílio que recusou a coleta costuma constar ' +
-      'aqui como entrevista realizada. As duas nunca se somam.';
+      'Recusa da ENTREVISTA, não do biomarcador — quem recusa o ' +
+      'biomarcador costuma constar aqui como entrevista realizada.';
     const TIP_TURNO =
-      'Slots livres na janela: do primeiro dia ainda agendável (hoje, amanhã ' +
-      'e depois de amanhã não dá mais tempo; na sexta, nem a segunda) até ' +
-      '+17 dias. Manhã antes das 13h.';
+      'Slots livres do primeiro dia ainda agendável (hoje+3, ou hoje+4 na ' +
+      'sexta) até +17 dias. Manhã antes das 13h.';
     // Pin column, deliberately first and narrow. The click used to live on
     // the whole <tr>, which made the table hostile to ordinary use:
     // selecting a Controle to copy it fired the handler, switched tabs and
@@ -635,8 +636,13 @@
       '<th>Outros</th><th>Total</th>' +
       '<th>Sem coordenadas</th>' +
       (m.comAgenda ? '<th>Agendados</th>' : '') +
+      // Named per variant: in MODO_BIOMARCADORES the count is of
+      // biomarcadores owed, so naming it after the interview state would
+      // read as an interview column. In MODO_MOVIMENTO the proxy rule
+      // literally IS "Realizada sem agendamento", so that name is the
+      // honest one — it says what was measured, proxy and all.
       (m.comDemanda
-        ? `<th title="${esc(TIP_REALIZADAS)}">Realizadas sem agend.</th>` +
+        ? `<th title="${esc(TIP_REALIZADAS)}">Biomarc. devidos</th>` +
           `<th title="${esc(TIP_PENDENTES)}">Pendentes</th>`
         : '') +
       (m.comSlots
@@ -657,11 +663,13 @@
         clickable ? 'sigc-pro-zona-row-clickable' : '',
         semCapacidade ? 'sigc-pro-zona-sem-capacidade' : '',
       ].filter(Boolean).join(' ');
+      // Only the shortfall explanation: the row is no longer a click
+      // target, so telling the user to click it pointed at a gesture that
+      // does nothing. The pin carries its own tooltip.
       const titulo = semCapacidade
-        ? `${r.realizadasSemAgendamento} realizada(s) sem agendamento e apenas ` +
-          `${turnos.manha + turnos.tarde} slot(s) livre(s) na janela` +
-          (clickable ? ' — clique para ver no mapa' : '')
-        : (clickable ? 'Ver esta zona no mapa' : '');
+        ? `Deve ${r.realizadasSemAgendamento} biomarcador(es) e tem ` +
+          `${turnos.manha + turnos.tarde} slot(s) livre(s) na janela`
+        : '';
       // No data-id-zona on the <tr> any more — the pin owns the gesture.
       const rowAttrs =
         (classes ? ` class="${classes}"` : '') +
@@ -925,12 +933,8 @@
     const zonasHint = zonaRows.some(zonaRowIsClickable)
       ? '<p class="sigc-pro-zonas-hint">Clique no 📍 de uma zona para vê-la no mapa.' +
         (m.comSlots
-          ? ' Linhas destacadas têm mais realizadas sem agendamento do que slots livres na janela.'
-          : '') +
-        (m.comDemanda
-          ? ' As contagens de demanda excluem Distribuído (ainda não é demanda de campo) e ' +
-            'Realizada já descarregada (encerrada).'
-          : ' Sem consulta à agenda: este recorte não traz agendamentos nem slots livres.') +
+          ? ' Linhas destacadas devem mais biomarcadores do que têm slots livres na janela.'
+          : ' Sem consulta à agenda: sem agendamentos nem slots livres.') +
         '</p>'
       : '';
     return [
