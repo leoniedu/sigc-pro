@@ -90,8 +90,13 @@
       const info = enderecosMap.get(key) || null;
       const lat = info?.lat ?? null;
       const lon = info?.lon ?? null;
-      const zona = info?.zona || '';
-      const idZona = info?.idZona || '';
+      // Falls back to the row's OWN zona when endereços has no entry for
+      // it. The biomarcadores report carries Nome Zona per household, and
+      // overwriting it unconditionally discarded the name wherever the
+      // coordinate lookup missed. Endereços still wins where both exist:
+      // it is the zona the map groups by.
+      const zona = info?.zona || row.nomeZona || '';
+      const idZona = info?.idZona || row.idZona || '';
       out.push({
         ...row,
         lat,
@@ -1369,10 +1374,14 @@
         `<td class="sigc-pro-zona-pin-col">${pinDom}</td>` +
         `<td>${dash(r.controle)}</td>` +
         `<td>${dash(r.domicilio)}</td>` +
-        // The zona ID alone, not the full "ID - nome" label: the Zonas tab
-        // carries the names, and this column exists to tell rows apart and
-        // to sort/filter by zona, which the short ID does in far less width.
-        `<td>${dash(r.idZona)}</td>` +
+        // Id plus name on the biomarcadores page: the row is read one at
+        // a time there, and "29XJYY" alone does not say where that is.
+        // Último Movimento keeps the bare id — its column exists to tell
+        // rows apart and to sort/filter, which the short id does in far
+        // less width.
+        `<td>${m.comDemanda && r.zona
+          ? `${esc(r.idZona)} <span class="sigc-pro-zona-nome">${esc(r.zona)}</span>`
+          : dash(r.idZona)}</td>` +
         (m.comDemanda
           ? `<td>${dash(CLASSE_LABEL[classificaDomicilio(r, hoje)])}</td>` +
             `<td>${dash(acaoDoDomicilio(r, hoje))}</td>` +
@@ -1481,6 +1490,9 @@
       box-shadow: inset 3px 0 0 #D55E00; }
     .sigc-pro-zonas-table td.sigc-pro-devidas { font-weight: 700; }
     .sigc-pro-zonas-hint { margin: 0 0 8px; font-size: 12px; color: #555; }
+    /* Secondary to the id it follows: the id is what you sort and filter
+       by, the name is what tells you where that is. */
+    .sigc-pro-zona-nome { color: #666; font-size: 11px; }
     .sigc-pro-controle-label span { font-size: 10px; font-weight: 600; color: #fff;
       padding: 1px 4px; border-radius: 3px; white-space: nowrap;
       box-shadow: 0 0 2px rgba(0,0,0,.6); }

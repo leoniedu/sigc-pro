@@ -678,10 +678,13 @@ describe('Domicílios tab — Zona column', () => {
       controle: 'C1', domicilio: '1', idZona: '29JDM8', zona: '29JDM8 - Lauro',
       agendado: '', futura: false, ultimaPosicao: 'TRANSMITIDO',
       tipoEntrevista: 'Realizada', entrevistador: 'MARIA', data: '28/07/2026',
-    }]);
+    }], I.MODO_MOVIMENTO);
     expect(html).toContain('<th>Zona</th>');
     expect(html).toContain('29JDM8');
-    // The short ID, not the full "ID - nome" label the Zonas tab carries.
+    // Último Movimento keeps the short ID: that column exists to tell
+    // rows apart and to sort by, and the id does it in far less width.
+    // The biomarcadores variant DOES show the name — see "the zona name
+    // survives to the Domicílios tab".
     expect(html).not.toContain('29JDM8 - Lauro');
   });
 
@@ -4513,5 +4516,63 @@ describe('the zona popup speaks each variant\'s own language', () => {
     expect(html).toContain('3 vencido');
     expect(html).toContain('Slots livres');
     expect(html).toContain('08:30');
+  });
+});
+
+describe('the zona name survives to the Domicílios tab', () => {
+  const hoje = '2026-08-15';
+
+  test('joinEnderecos keeps the report\'s own zona name when endereços has none', () => {
+    // The biomarcadores report carries Nome Zona per household and the
+    // parser reads it — but joinEnderecos overwrote `zona` from the
+    // endereços response, discarding it whenever that lookup had no
+    // entry for the household.
+    const movimento = new Map([['C1|1', {
+      controle: 'C1', domicilio: '1', idZona: '29XJYY',
+      nomeZona: '29.2.01.02 Pituba', status: 'A agendar',
+    }]]);
+    const [row] = UM.joinEnderecos(movimento, new Map());
+    expect(row.zona).toBe('29.2.01.02 Pituba');
+    expect(row.idZona).toBe('29XJYY');
+  });
+
+  test('endereços still wins when it has the household', () => {
+    // Lista de Endereços is the coordinate authority and its zona is the
+    // one the map groups by, so where both exist it stays in charge.
+    const movimento = new Map([['C1|1', {
+      controle: 'C1', domicilio: '1', idZona: 'ANTIGA', nomeZona: 'Nome Antigo',
+    }]]);
+    const enderecos = new Map([['C1|1', {
+      lat: -12, lon: -38, zona: 'Nome Novo', idZona: 'NOVA',
+    }]]);
+    const [row] = UM.joinEnderecos(movimento, enderecos);
+    expect(row.zona).toBe('Nome Novo');
+    expect(row.idZona).toBe('NOVA');
+  });
+
+  test('the Domicílios tab shows the name beside the id', () => {
+    const html = UM.buildDomiciliosTabHtml([{
+      controle: 'C1', domicilio: '1', idZona: '29XJYY', zona: '29.2.01.02 Pituba',
+      tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado',
+      status: 'A agendar', agendado: '', dataAgendada: '', dataFinalColeta: '',
+      dataVisita: '', nomeEquipe: '', siapeAgendamento: '', siapeColeta: '',
+      statusSangue: '', statusUrina: '', entrevistador: '', data: '',
+      temCoordenadas: true, lat: -12, lon: -38,
+    }], UM.MODO_BIOMARCADORES, hoje);
+    expect(html).toContain('29XJYY');
+    expect(html).toContain('Pituba');
+  });
+
+  test('a household with no zona name shows just the id', () => {
+    const html = UM.buildDomiciliosTabHtml([{
+      controle: 'C1', domicilio: '1', idZona: '29XJYY', zona: '',
+      tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado',
+      status: 'A agendar', agendado: '', dataAgendada: '', dataFinalColeta: '',
+      dataVisita: '', nomeEquipe: '', siapeAgendamento: '', siapeColeta: '',
+      statusSangue: '', statusUrina: '', entrevistador: '', data: '',
+      temCoordenadas: true, lat: -12, lon: -38,
+    }], UM.MODO_BIOMARCADORES, hoje);
+    expect(html).toContain('29XJYY');
+    expect(html).not.toContain('undefined');
   });
 });
