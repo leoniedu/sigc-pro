@@ -560,3 +560,42 @@ describe('the Lista de Endereços filtro keeps to the fields that report knows',
       .not.toBe(AM.chaveEnderecos({ IdUf: '29', IdMunicipio: '2927408', IdZona: 'Z2' }));
   });
 });
+
+describe('report POSTs carry a Referer, as the R reference does', () => {
+  test('the Referer names the report being asked for', async () => {
+    // pns.zonas sends Referer: <base>/relatorio/<slug> on every one of
+    // these calls (R/sigc_enderecos.R:69, R/sigc_biomarcadores.R:162) and
+    // gets a whole UF back — 7.140 endereços in one request. Without it
+    // the same request answered with 180 rows for a 1.185-row report.
+    const vistos = [];
+    const originalFetch = window.fetch;
+    window.fetch = async (url, opts) => {
+      vistos.push(opts || {});
+      return {
+        ok: true,
+        text: async () => '<table id="tableRelatorio"><thead><tr>' +
+          '<th>Controle</th><th>N.º Domicilio</th><th>Latitude</th>' +
+          '<th>Longitude</th><th>ID Zona</th><th>Nome ZONA</th></tr></thead>' +
+          '<tbody><tr><td>C1</td><td>1</td><td>-12,0</td><td>-38,0</td>' +
+          '<td>Z1</td><td>Zona 1</td></tr></tbody></table>',
+      };
+    };
+    try {
+      AM.resetEnderecosAgenciaCache();
+      await AM.fetchEnderecosPorFiltro({ IdUf: '29', IdMunicipio: '2927408' });
+      expect(vistos).toHaveLength(1);
+      // Set via `referrer`: Referer is a forbidden header name, so
+      // putting it in `headers` would be dropped by the browser.
+      expect(vistos[0].referrer).toContain('/relatorio/ListaEnderecos');
+    } finally {
+      window.fetch = originalFetch;
+      AM.resetEnderecosAgenciaCache();
+    }
+  });
+
+  test('each slug gets its own Referer', () => {
+    expect(AM.refererDoSlug('ListaEnderecos')).toContain('/relatorio/ListaEnderecos');
+    expect(AM.refererDoSlug('relatorio-acomp-biomarc'))
+      .toContain('/relatorio/relatorio-acomp-biomarc');
+  });
+});

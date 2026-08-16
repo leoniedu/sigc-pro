@@ -469,6 +469,20 @@
     'X-Requested-With': 'XMLHttpRequest',
   };
 
+  // SIGC serves a SHORT response when the POST does not look like it came
+  // from the report's own page: 180 rows for a 1.185-row scope, or a page
+  // with no #tableRelatorio at all. pns.zonas sends this header on every
+  // one of these calls (R/sigc_enderecos.R:69, R/sigc_biomarcadores.R:162)
+  // and pulls a whole UF in one request — 7.140 endereços, no truncation.
+  //
+  // Same-origin, and it names a page the user is already authenticated
+  // for; nothing about the request leaves the IBGE.
+  function refererDoSlug(slug) {
+    const f5 = f5Prefix(location.pathname);
+    const prefixo = f5 ? f5.prefix : '';
+    return `${location.origin}${prefixo}/relatorio/${slug}`;
+  }
+
   // POSTs one /relatorio/filtrar report and parses its response.
   //
   // Tries the simple prefixed URL first, then the full captured F5 form
@@ -493,6 +507,10 @@
           method: 'POST',
           credentials: 'same-origin',
           headers: FORM_POST_HEADERS,
+          // `referrer`, not a Referer header: Referer is a forbidden
+          // header name and the browser drops it silently, so setting it
+          // in `headers` would look right and do nothing.
+          referrer: refererDoSlug(slug),
           body,
         });
         if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
@@ -1093,7 +1111,7 @@
     parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl,
     fetchEnderecos, fetchEnderecosByAgencia, fetchEnderecosPorFiltro,
     resetEnderecosAgenciaCache, stripAccents, stripHeaderMarker,
-    filtroBody, chaveEnderecos,
+    filtroBody, chaveEnderecos, refererDoSlug,
     filtroBodyUltimoMovimentoPorFiltro, parsePosicoesHtml, tableToPosicoesMap,
     fetchPosicoesPorFiltro, resetPosicoesCache,
     filtroBodyBiomarcadores, parseBiomarcadoresHtml, tableToBiomarcadoresMap,
