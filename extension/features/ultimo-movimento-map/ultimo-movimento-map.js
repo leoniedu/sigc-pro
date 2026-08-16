@@ -1627,6 +1627,34 @@
     ].join('\n');
   }
 
+  // Swaps a panel's table for freshly built markup, taking DataTables
+  // down first. DataTables wraps the table in a container holding the
+  // length selector, filter box, info line and pagination; replacing only
+  // the <table> leaves that container behind, and since the new table is
+  // no longer a DataTable, initPanelTables initialises it and nests a
+  // SECOND container inside the first. Every reload then stacked one more
+  // "50 linhas por página" and one more pagination block.
+  function substituirTabela(painel, html) {
+    const tabela = painel && painel.querySelector('table');
+    if (!tabela) return;
+    const jq = window.jQuery || window.$;
+    if (jq && jq.fn && jq.fn.dataTable && jq.fn.dataTable.isDataTable &&
+        jq.fn.dataTable.isDataTable(tabela)) {
+      try {
+        jq(tabela).DataTable().destroy();
+      } catch (err) {
+        // A failed destroy is not fatal — the replacement below still
+        // happens; at worst the chrome is rebuilt rather than reused.
+        console.warn(`${TAG} não foi possível destruir a DataTable:`, err);
+      }
+    }
+    // Replace the WRAPPER when one survived destroy(): a wrapper left in
+    // the DOM keeps its own length selector, filter box and pagination,
+    // and the freshly built table would sit inside it with a second set.
+    const alvo = tabela.closest('.dataTables_wrapper, .dt-container, .dt-wrapper') || tabela;
+    alvo.outerHTML = html;
+  }
+
   // Re-asks the agenda alone and repaints the columns that depend on it.
   // The households have not changed — only who booked what — so refetching
   // the report, the coordinates and the posições would be three wasted
@@ -1657,15 +1685,10 @@
       const turnosPorZona = AM.indexZonaLivres(slots, minDateIso, fimIso);
       const zonasPanel = panelEl.querySelector('#sigc-pro-zonas-panel');
       const domPanel = panelEl.querySelector('#sigc-pro-domicilios-panel');
-      const tabelaZonas = zonasPanel && zonasPanel.querySelector('table');
-      if (tabelaZonas) {
-        tabelaZonas.outerHTML = buildZonasTableHtml(
-          zonaRows, slotsPorZona, turnosPorZona, modo);
-      }
-      const tabelaDom = domPanel && domPanel.querySelector('table');
-      if (tabelaDom) {
-        tabelaDom.outerHTML = buildDomiciliosTabHtml(joined, modo, hoje, slotsPorZona);
-      }
+      substituirTabela(zonasPanel, buildZonasTableHtml(
+        zonaRows, slotsPorZona, turnosPorZona, modo));
+      substituirTabela(domPanel,
+        buildDomiciliosTabHtml(joined, modo, hoje, slotsPorZona));
       initPanelTables(panelEl);
       wireZonaRowClicks(panelEl, joined);
       if (stamp) {

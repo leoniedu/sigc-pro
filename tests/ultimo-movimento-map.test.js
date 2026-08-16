@@ -4058,3 +4058,75 @@ describe('the slots reload re-asks only the agenda', () => {
     }
   });
 });
+
+describe('reloading slots does not duplicate the table chrome', () => {
+  const zonaRows = [{
+    idZona: 'Z1', nomeZona: 'Z1', aEntrevistar: 0, emAndamento: 0,
+    semAgendamento: 0, agendamentoPendente: 1, agendadoBio: 0, coletado: 0,
+    recusaBio: 0, inelegivel: 0, semEntrevista: 0, vencidos: 0,
+    totalDomicilios: 1, semCoordenadas: 0,
+  }];
+  const joined = [{
+    controle: 'C1', domicilio: '1', idZona: 'Z1', temZona: true,
+    temCoordenadas: true, tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado',
+    status: 'A agendar', agendado: '', dataAgendada: '', dataFinalColeta: '20/08/2026',
+  }];
+
+  test('repeated reloads leave exactly one table per tab', async () => {
+    // DataTables wraps the table in a _wrapper holding the length
+    // selector, filter box, info line and pagination. Replacing only the
+    // <table> leaves that wrapper in place; the fresh table is then no
+    // longer a DataTable, so initPanelTables initialises it and nests a
+    // SECOND wrapper inside the first — one more "50 linhas por página"
+    // and one more pagination block per reload.
+    document.body.innerHTML = UM.buildPanelHtml(
+      joined, zonaRows, new Map(), new Map(), UM.MODO_BIOMARCADORES, '2026-08-15');
+    const panelEl = document.getElementById('sigc-pro-ultimo-movimento-map-panel');
+    const originalAM = window.__sigcProAgendaLookups;
+    const originalJq = window.jQuery;
+    // Models real DataTables: init WRAPS the table and destroy() unwraps.
+    const jq = (el) => ({
+      DataTable: () => {
+        if (el && el.tagName === 'TABLE') {
+          const wrap = document.createElement('div');
+          wrap.className = 'dt-wrapper';
+          wrap.innerHTML = '<div class="dt-length">50 linhas por página</div>';
+          el.parentElement.insertBefore(wrap, el);
+          wrap.appendChild(el);
+        }
+        return {
+          page: { len: () => ({ draw: () => {} }) },
+          destroy: () => {
+            const wrap = el.closest('.dt-wrapper');
+            if (wrap) { wrap.parentElement.insertBefore(el, wrap); wrap.remove(); }
+          },
+        };
+      },
+    });
+    jq.fn = { dataTable: { isDataTable: (t) => !!(t.parentElement
+      && t.parentElement.classList.contains('dt-wrapper')) } };
+    window.jQuery = window.$ = jq;
+    window.__sigcProAgendaLookups = {
+      ...originalAM,
+      resetAgendaCache: () => {},
+      fetchAgendaSlots: async () => ({ dados: [], em: Date.now(), cache: false }),
+    };
+    try {
+      UM.initPanelTables(panelEl);
+      for (let i = 0; i < 3; i += 1) {
+        await UM.recarregarSlots(panelEl, zonaRows, joined, UM.MODO_BIOMARCADORES,
+          { IdUf: '29' }, '2026-08-15');
+      }
+      const zonasPanel = panelEl.querySelector('#sigc-pro-zonas-panel');
+      expect(zonasPanel.querySelectorAll('table')).toHaveLength(1);
+      expect(zonasPanel.querySelectorAll('.dt-wrapper')).toHaveLength(1);
+      expect(zonasPanel.querySelectorAll('.dt-length')).toHaveLength(1);
+    } finally {
+      window.__sigcProAgendaLookups = originalAM;
+      if (originalJq === undefined) { delete window.jQuery; delete window.$; } else {
+        window.jQuery = window.$ = originalJq;
+      }
+      document.body.innerHTML = '';
+    }
+  });
+});
