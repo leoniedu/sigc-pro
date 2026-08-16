@@ -125,36 +125,56 @@ describe('joinAgenda', () => {
 });
 
 describe('aggregateZonas', () => {
+  // Two units, one aggregation. Biomarcadores groups by zona because the
+  // AGENDA is built per zona — slots, capacity and déficit only mean
+  // anything there. Último Movimento asks no agenda question, so it
+  // groups by the survey's own sampling unit, the Controle.
   const joined = [
-    { idZona: '11.1.01.08', zona: 'ESCOLA POLICIA', tipoEntrevista: 'Realizada', temCoordenadas: true, temZona: true },
-    { idZona: '11.1.01.08', zona: 'ESCOLA POLICIA', tipoEntrevista: 'Não Iniciada', temCoordenadas: false, temZona: true },
-    { idZona: '', zona: '', tipoEntrevista: 'Recusa', temCoordenadas: true, temZona: false },
-    { idZona: '', zona: '', tipoEntrevista: 'Realizada', temCoordenadas: true, temZona: false },
+    { controle: 'C1', idZona: '11.1.01.08', zona: 'ESCOLA POLICIA', tipoEntrevista: 'Realizada', temCoordenadas: true, temZona: true },
+    { controle: 'C1', idZona: '11.1.01.08', zona: 'ESCOLA POLICIA', tipoEntrevista: 'Não Iniciada', temCoordenadas: false, temZona: true },
+    { controle: 'C2', idZona: '', zona: '', tipoEntrevista: 'Recusa', temCoordenadas: true, temZona: false },
+    { controle: 'C2', idZona: '', zona: '', tipoEntrevista: 'Realizada', temCoordenadas: true, temZona: false },
   ];
 
-  test('groups by idZona, one row per distinct zona', () => {
-    const rows = UM.aggregateZonas(joined, new Map());
+  test('biomarcadores groups by idZona, one row per distinct zona', () => {
+    const rows = UM.aggregateZonas(joined, new Map(), UM.MODO_BIOMARCADORES);
     const zonaRow = rows.find((r) => r.idZona === '11.1.01.08');
     expect(zonaRow).toMatchObject({
       idZona: '11.1.01.08', nomeZona: 'ESCOLA POLICIA',
-      realizada: 1, naoIniciada: 1, domicilioFechado: 0, recusa: 0, outros: 0,
       totalDomicilios: 2, semCoordenadas: 1,
     });
   });
 
-  test('households with temZona false land in a single "Sem zona" row (idZona null)', () => {
-    const rows = UM.aggregateZonas(joined, new Map());
+  test('biomarcadores keeps a single "Sem zona" row (idZona null)', () => {
+    const rows = UM.aggregateZonas(joined, new Map(), UM.MODO_BIOMARCADORES);
     const semZona = rows.find((r) => r.idZona === null);
     expect(semZona).toBeDefined();
     expect(semZona.totalDomicilios).toBe(2);
-    expect(semZona.recusa).toBe(1);
-    expect(semZona.realizada).toBe(1);
     expect(semZona.semCoordenadas).toBe(0);
+  });
+
+  test('movimento groups by controle, ignoring zona entirely', () => {
+    const rows = UM.aggregateZonas(joined, new Map(), UM.MODO_MOVIMENTO);
+    expect(rows.map((r) => r.idZona).sort()).toEqual(['C1', 'C2']);
+    const c1 = rows.find((r) => r.idZona === 'C1');
+    expect(c1).toMatchObject({
+      idZona: 'C1', nomeZona: 'C1',
+      realizada: 1, naoIniciada: 1, domicilioFechado: 0, recusa: 0, outros: 0,
+      totalDomicilios: 2, semCoordenadas: 1,
+    });
+    // The two zona-less households are a Controle of their own, NOT a
+    // "Sem zona" bucket: every row of the report carries a controle, so
+    // the ungrouped row that zona needs cannot arise here.
+    const c2 = rows.find((r) => r.idZona === 'C2');
+    expect(c2.totalDomicilios).toBe(2);
+    expect(c2.recusa).toBe(1);
+    expect(c2.realizada).toBe(1);
+    expect(rows.some((r) => r.idZona === null)).toBe(false);
   });
 
   test('unrecognized tipoEntrevista values count under outros', () => {
     const rows = UM.aggregateZonas([
-      { idZona: 'Z1', zona: 'Zona 1', tipoEntrevista: 'Endereço Não Localizado', temCoordenadas: true, temZona: true },
+      { controle: 'C9', idZona: 'Z1', zona: 'Zona 1', tipoEntrevista: 'Endereço Não Localizado', temCoordenadas: true, temZona: true },
     ], new Map());
     expect(rows[0].outros).toBe(1);
     expect(rows[0].realizada).toBe(0);
@@ -176,7 +196,7 @@ describe('aggregateZonas coverage and agenda stats', () => {
       controle: 'C1', domicilio: '1', idZona: '29JDM8', zona: '29JDM8 - x',
       temZona: true, temCoordenadas: true, tipoEntrevista: 'REALIZADA', agendado: '',
     }];
-    const rows = I.aggregateZonas(joined, enderecos);
+    const rows = I.aggregateZonas(joined, enderecos, UM.MODO_BIOMARCADORES);
     const ids = rows.map((r) => r.idZona).sort();
     expect(ids).toContain('29LR9E');
     const vazia = rows.find((r) => r.idZona === '29LR9E');
@@ -206,7 +226,11 @@ describe('aggregateZonas coverage and agenda stats', () => {
       // Neither: not yet field demand.
       row('4', { tipoEntrevista: 'Não Iniciada', ultimaPosicao: 'Distribuido' }),
     ];
-    const z = I.aggregateZonas(joined, enderecos).find((r) => r.idZona === '29JDM8');
+    // MODO_MOVIMENTO: these three counters use the ultimaPosicao
+    // predicates, which only that variant applies. It now groups by
+    // controle, so the row to look at is C1's.
+    const z = I.aggregateZonas(joined, enderecos, UM.MODO_MOVIMENTO)
+      .find((r) => r.idZona === 'C1');
     expect(z.agendados).toBe(1);
     expect(z.realizadasSemAgendamento).toBe(1);
     // Realizadas sem agendamento is a SUBSET of pendentes: domicílio 2
@@ -743,20 +767,32 @@ describe('Zonas tab — turno columns and the capacity flag', () => {
 });
 
 describe('Domicílios tab — Zona column', () => {
-  test('shows the zona id per household', () => {
+  test('Último Movimento shows no Zona column at all', () => {
+    // That variant groups by Controle everywhere — aggregate tab, hulls,
+    // pin — so a lone Zona column here would be the one place a grouping
+    // survived that nothing else in the variant can act on. The Controle
+    // is already its own column.
     const I = window.__sigcProUltimoMovimentoMapInternals;
     const html = I.buildDomiciliosTabHtml([{
       controle: 'C1', domicilio: '1', idZona: '29JDM8', zona: '29JDM8 - Lauro',
       agendado: '', futura: false, ultimaPosicao: 'TRANSMITIDO',
       tipoEntrevista: 'Realizada', entrevistador: 'MARIA', data: '28/07/2026',
     }], I.MODO_MOVIMENTO);
+    expect(html).not.toContain('<th>Zona</th>');
+    expect(html).not.toContain('29JDM8');
+    expect(html).toContain('<th>Controle</th>');
+    expect(html).toContain('C1');
+  });
+
+  test('biomarcadores keeps the zona id and name', () => {
+    const I = window.__sigcProUltimoMovimentoMapInternals;
+    const html = I.buildDomiciliosTabHtml([{
+      controle: 'C1', domicilio: '1', idZona: '29JDM8', zona: '29JDM8 - Lauro',
+      agendado: '', futura: false, ultimaPosicao: 'TRANSMITIDO',
+      tipoEntrevista: 'Realizada', entrevistador: 'MARIA', data: '28/07/2026',
+    }], I.MODO_BIOMARCADORES);
     expect(html).toContain('<th>Zona</th>');
     expect(html).toContain('29JDM8');
-    // Último Movimento keeps the short ID: that column exists to tell
-    // rows apart and to sort by, and the id does it in far less width.
-    // The biomarcadores variant DOES show the name — see "the zona name
-    // survives to the Domicílios tab".
-    expect(html).not.toContain('29JDM8 - Lauro');
   });
 
   test('a household with no zona renders — rather than blank', () => {
@@ -767,9 +803,9 @@ describe('Domicílios tab — Zona column', () => {
       entrevistador: '', data: '',
     }], I.MODO_MOVIMENTO);
     const row = html.split('<tbody>')[1];
-    // Every empty cell in this variant's 5 nullable columns (no Agendado
-    // here — MODO_MOVIMENTO makes no agenda request).
-    expect((row.match(/—/g) || []).length).toBe(5);
+    // Four now, not five: the Zona column that used to contribute one of
+    // the em-dashes is gone from this variant.
+    expect((row.match(/—/g) || []).length).toBe(4);
   });
 });
 
@@ -1998,6 +2034,59 @@ describe('zona pin instead of whole-row click', () => {
     expect(html).not.toMatch(/<tr[^>]*data-id-zona=/);
   });
 
+  // The pin writes the grouping key and focusZonaOnMap reads it back. If
+  // the two ever disagree the filter matches nothing and the panel
+  // switches to the Mapa tab and then sits there — no error, no zoom, no
+  // clue why. So the round trip is asserted per variant.
+  describe('the pin round-trips its grouping key', () => {
+    const comMapa = (fn) => {
+      document.body.innerHTML =
+        '<div id="p">' +
+        '<div id="sigc-pro-mapa-panel" class="sigc-pro-tab-panel"></div>' +
+        '<div id="sigc-pro-zonas-panel" class="sigc-pro-tab-panel sigc-pro-tab-panel-active"></div>' +
+        '<button class="sigc-pro-tab-btn" data-tab="mapa"></button>' +
+        '<button class="sigc-pro-tab-btn sigc-pro-tab-active" data-tab="zonas"></button>' +
+        '</div>';
+      const bounds = [];
+      UM.setCurrentMapForTest({ setView: () => {}, fitBounds: (b) => bounds.push(b) });
+      try {
+        fn(document.getElementById('p'), bounds);
+      } finally {
+        UM.setCurrentMapForTest(null);
+        document.body.innerHTML = '';
+      }
+    };
+
+    const linhas = [
+      { controle: 'C1', domicilio: '1', idZona: 'Z1', temZona: true, temCoordenadas: true, lat: -12, lon: -38 },
+      { controle: 'C2', domicilio: '1', idZona: 'Z2', temZona: true, temCoordenadas: true, lat: -13, lon: -39 },
+    ];
+
+    test('Último Movimento focuses the controle the pin names', () => {
+      const html = UM.buildZonasTableHtml(
+        [{ idZona: 'C2', nomeZona: 'C2', totalDomicilios: 1, semCoordenadas: 0 }],
+        new Map(), new Map(), UM.MODO_MOVIMENTO);
+      const m = html.match(/data-id-zona="([^"]+)"/);
+      expect(m[1]).toBe('C2');
+      comMapa((panelEl, bounds) => {
+        UM.focusZonaOnMap(panelEl, linhas, m[1], UM.MODO_MOVIMENTO);
+        expect(bounds).toEqual([[[-13, -39]]]);
+      });
+    });
+
+    test('biomarcadores focuses the zona the pin names', () => {
+      const html = UM.buildZonasTableHtml(
+        [{ idZona: 'Z2', nomeZona: 'Zona 2', totalDomicilios: 1, semCoordenadas: 0 }],
+        new Map(), new Map(), UM.MODO_BIOMARCADORES);
+      const m = html.match(/data-id-zona="([^"]+)"/);
+      expect(m[1]).toBe('Z2');
+      comMapa((panelEl, bounds) => {
+        UM.focusZonaOnMap(panelEl, linhas, m[1], UM.MODO_BIOMARCADORES);
+        expect(bounds).toEqual([[[-13, -39]]]);
+      });
+    });
+  });
+
   test('a zona with no mapped coordinates gets no pin', () => {
     const semCoords = [{ ...ZONA_ROWS[0], semCoordenadas: 3 }];
     const html = UM.buildZonasTableHtml(semCoords, new Map(), new Map());
@@ -2117,8 +2206,8 @@ describe('capacity flag is agenda-derived', () => {
     const html = UM.buildZonasTableHtml([zona], new Map(), new Map(), UM.MODO_MOVIMENTO);
     expect(html).not.toContain('sigc-pro-zona-sem-capacidade');
     expect(html).not.toContain('slot(s) livre(s)');
-    // The pin's own tooltip survives.
-    expect(html).toContain('Ver esta zona no mapa');
+    // The pin's own tooltip survives, naming this variant's own unit.
+    expect(html).toContain('Ver este controle no mapa');
   });
 });
 
@@ -2580,11 +2669,27 @@ describe('zonas with no fieldwork yet', () => {
     const enderecos = new Map([
       ['C1|1', { lat: -12, lon: -38, zona: 'Zona Nova', idZona: 'ZNOVA' }],
     ]);
-    const zonas = UM.aggregateZonas([], enderecos, UM.MODO_MOVIMENTO);
+    const zonas = UM.aggregateZonas([], enderecos, UM.MODO_BIOMARCADORES);
     const nova = zonas.find((z) => z.idZona === 'ZNOVA');
     expect(nova).toBeDefined();
     expect(nova.nomeZona).toBe('Zona Nova');
     expect(nova.totalDomicilios).toBe(0);
+  });
+
+  test('the same holds for a controle on Último Movimento', () => {
+    // Same invariant, that variant's unit: a controle with addresses and
+    // no movement is the one nobody has started. The controle comes from
+    // the endereços KEY ("controle|domicilio"), since the value object
+    // carries only lat/lon/zona/idZona.
+    const enderecos = new Map([
+      ['C1|1', { lat: -12, lon: -38, zona: 'Zona Nova', idZona: 'ZNOVA' }],
+    ]);
+    const rows = UM.aggregateZonas([], enderecos, UM.MODO_MOVIMENTO);
+    const novo = rows.find((z) => z.idZona === 'C1');
+    expect(novo).toBeDefined();
+    expect(novo.totalDomicilios).toBe(0);
+    // No zona leaked into this variant's rows.
+    expect(rows.some((z) => z.idZona === 'ZNOVA')).toBe(false);
   });
 
   test('it survives alongside zonas that do have movimento', () => {
@@ -2597,7 +2702,7 @@ describe('zonas with no fieldwork yet', () => {
       temZona: true, temCoordenadas: true, tipoEntrevista: 'Realizada',
       ultimaPosicao: 'Descarregado', agendado: '',
     }];
-    const zonas = UM.aggregateZonas(joined, enderecos, UM.MODO_MOVIMENTO);
+    const zonas = UM.aggregateZonas(joined, enderecos, UM.MODO_BIOMARCADORES);
     expect(zonas.map((z) => z.idZona).sort()).toEqual(['ZNOVA', 'ZVELHA']);
     expect(zonas.find((z) => z.idZona === 'ZNOVA').totalDomicilios).toBe(0);
     expect(zonas.find((z) => z.idZona === 'ZVELHA').totalDomicilios).toBe(1);
@@ -3321,10 +3426,13 @@ describe('renderLeafletMap wires the three map features', () => {
     };
     // addTo returns the layer itself, as real Leaflet does — returning
     // anything else breaks the chained .bindPopup() the render path uses.
-    const mkLayer = () => {
+    // Hull tooltips carry the grouping key, so recording them is how a
+    // test can tell WHAT the outlines were drawn around.
+    rec.hullTooltips = [];
+    const mkLayer = (isHull) => {
       const layer = {
         addTo(dest) { rec.addedTo.push(dest === rec.map ? 'map' : 'grupo'); return layer; },
-        bindTooltip() { return layer; },
+        bindTooltip(t) { if (isHull) rec.hullTooltips.push(t); return layer; },
         bindPopup() { return layer; },
         setRadius(r) { rec.circles.push({ raio: r, set: true }); return layer; },
       };
@@ -3338,7 +3446,7 @@ describe('renderLeafletMap wires the three map features', () => {
     const L = {
       map: (c) => { if (c) c.innerHTML = ''; return rec.map; },
       tileLayer: () => mkLayer(),
-      polygon: () => mkLayer(), polyline: () => mkLayer(), circle: () => mkLayer(),
+      polygon: () => mkLayer(true), polyline: () => mkLayer(true), circle: () => mkLayer(true),
       circleMarker: (_ll, opts) => {
         const m = mkLayer();
         rec.circles.push({ raio: opts.radius, cor: opts.color, peso: opts.weight });
@@ -3409,6 +3517,40 @@ describe('renderLeafletMap wires the three map features', () => {
     expect(rec.camadas).toEqual([
       'Agência 290570100 (2)', 'Agência 292740800 (1)',
     ]);
+  });
+
+  // The hull is the map's picture of whatever the aggregate tab counts.
+  // If the two ever group by different fields, an outline and a row
+  // claim to be the same set of households while containing different
+  // ones — and nothing errors.
+  describe('hulls outline the same unit the aggregate tab counts', () => {
+    const doisControles = [
+      linha({ controle: 'C1', domicilio: '1', idZona: 'Z1', lat: -12, lon: -38 }),
+      linha({ controle: 'C1', domicilio: '2', idZona: 'Z1', lat: -12.1, lon: -38.1 }),
+      linha({ controle: 'C2', domicilio: '1', idZona: 'Z1', lat: -13, lon: -39 }),
+    ];
+
+    test('Último Movimento draws one hull per controle', () => {
+      const rec = render(doisControles, UM.MODO_MOVIMENTO);
+      expect(rec.hullTooltips.sort()).toEqual(['C1', 'C2']);
+    });
+
+    test('biomarcadores still draws one hull per zona', () => {
+      // Same three households, one zona: the zona grouping must be
+      // untouched by the movimento change.
+      const rec = render(doisControles, UM.MODO_BIOMARCADORES);
+      expect(rec.hullTooltips).toEqual(['Z1']);
+    });
+
+    test('a row with no zona still gets a controle hull on Último Movimento', () => {
+      // Zona is absent from this variant entirely, so its absence on a
+      // row cannot cost that row an outline.
+      const rec = render([
+        linha({ controle: 'C7', domicilio: '1', idZona: '', zona: '', temZona: false, lat: -12, lon: -38 }),
+        linha({ controle: 'C7', domicilio: '2', idZona: '', zona: '', temZona: false, lat: -12.2, lon: -38.2 }),
+      ], UM.MODO_MOVIMENTO);
+      expect(rec.hullTooltips).toEqual(['C7']);
+    });
   });
 });
 

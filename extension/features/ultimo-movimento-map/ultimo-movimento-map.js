@@ -269,10 +269,67 @@
   // whose temZona is false (non-biomarcador selecionados — see spec
   // "Selecionados without zona"). Never silently drops a movimento row:
   // every row in `joined` lands in exactly one output row.
+  // WHAT A ROW OF THE AGGREGATE TAB IS, per variant.
+  //
+  // Biomarcadores groups by zona because that is the unit the AGENDA is
+  // built on: slots are created per zona, so "does this group have
+  // capacity" is only answerable there. Último Movimento asks no agenda
+  // question — it has no slots, no demand and no déficit — and grouping
+  // it by zona borrowed a unit it had no use for. Its natural unit is
+  // the CONTROLE: the survey's own sampling unit, the thing an
+  // interviewer is assigned and the report itself is keyed by.
+  //
+  // Everything downstream (hulls, the pin, the row click, the CSV) reads
+  // this one field, so the two variants share every line of the
+  // aggregation and differ only in what they group by.
+  const GRUPO = {
+    movimento: {
+      campo: 'controle',
+      // A Controle is a 15-digit code with no name in SIGC, so there is
+      // no second column to show beside it — unlike a zona, which has
+      // one. Aggregation still fills nomeGrupo (with the id) so every
+      // consumer can read the same two fields regardless of variant.
+      rotulo: 'Controle',
+      rotuloPlural: 'Controles',
+      temNome: false,
+      semGrupoLabel: 'Sem controle',
+    },
+    biomarcadores: {
+      campo: 'idZona',
+      rotulo: 'Zona',
+      rotuloPlural: 'Zonas',
+      temNome: true,
+      semGrupoLabel: 'Sem zona',
+    },
+  };
+
+  function grupoDe(modo) {
+    return GRUPO[(modo || MODO_MOVIMENTO).id] || GRUPO.movimento;
+  }
+
+  // The grouping key of a row, and whether it has one at all. A row with
+  // no zona is real (households arrive before zona assignment); a row
+  // with no controle is not, but the same shape covers both.
+  function chaveGrupo(r, g) {
+    if (g.campo === 'controle') {
+      const c = (r && r.controle) || '';
+      return { tem: !!c, id: c || null, nome: c || null };
+    }
+    return {
+      tem: !!(r && r.temZona), id: (r && r.idZona) || null,
+      nome: (r && r.zona) || null,
+    };
+  }
+
   function aggregateZonas(joined, enderecosMap, modo, hojeIso) {
     const m = modo || MODO_MOVIMENTO;
-    const byZona = new Map(); // key: idZona || special string
+    const g = grupoDe(m);
+    const byZona = new Map(); // key: group id || special string
     const SEM_ZONA_KEY = '__SEM_ZONA__';
+    // idZona/nomeZona keep their names through the whole pipeline even
+    // when they hold a Controle: renaming them would touch every
+    // consumer, every test and the CSV headers for no gain — the label
+    // the reader sees comes from GRUPO.rotulo, not from these keys.
     const novoBucket = (idZona, nomeZona) => ({
       idZona, nomeZona,
       realizada: 0, naoIniciada: 0, domicilioFechado: 0, recusa: 0, outros: 0,
@@ -291,17 +348,30 @@
       aAgendar: 0, jaAgendados: 0,
     });
 
-    (enderecosMap || new Map()).forEach((info) => {
+    // Seed from the address list so a group with no fieldwork yet still
+    // gets a row — a zona (or controle) missing from a MOVEMENT report is
+    // precisely the one where nothing has moved, which is the row a
+    // supervisor most needs to see.
+    (enderecosMap || new Map()).forEach((info, chave) => {
+      if (g.campo === 'controle') {
+        // enderecosMap is keyed "controle|domicilio"; the controle is the
+        // half before the pipe.
+        const id = String(chave || '').split('|')[0];
+        if (!id) return;
+        if (!byZona.has(id)) byZona.set(id, novoBucket(id, id));
+        return;
+      }
       const id = info && info.idZona;
       if (!id) return;
       if (!byZona.has(id)) byZona.set(id, novoBucket(id, info.zona || id));
     });
 
     (joined || []).forEach((r) => {
-      const key = r.temZona ? r.idZona : SEM_ZONA_KEY;
+      const gk = chaveGrupo(r, g);
+      const key = gk.tem ? gk.id : SEM_ZONA_KEY;
       if (!byZona.has(key)) {
-        byZona.set(key, novoBucket(r.temZona ? r.idZona : null,
-          r.temZona ? r.zona : 'Sem zona'));
+        byZona.set(key, novoBucket(gk.tem ? gk.id : null,
+          gk.tem ? (gk.nome || gk.id) : g.semGrupoLabel));
       }
       const bucket = byZona.get(key);
       // Posição wins over tipo for the untouched states. A household that
@@ -1153,14 +1223,18 @@
     const TIP_JA_AGENDADOS =
       'Entrevista realizada e biomarcador com data futura marcada. Somado a ' +
       '"A agendar" dá a carga agendável da zona.';
-    const TIP_PIN = 'Ver esta zona no mapa';
+    const g = grupoDe(m);
+    const TIP_PIN = `Ver ${g.campo === 'controle' ? 'este controle' : 'esta zona'} no mapa`;
     // Header and body segments are gated by the SAME flags, so a column
     // can never appear in one and not the other — the failure mode that
     // silently shifts every later cell into the wrong column.
+    //
+    // The Nome column exists only where the group HAS a name: a Controle
+    // is a bare 15-digit code, so a second column would repeat the first.
     const head =
       '<tr>' +
       `<th class="sigc-pro-zona-pin-col" data-orderable="false" title="${esc(TIP_PIN)}"></th>` +
-      '<th>Zona</th><th>Nome</th>' +
+      `<th>${esc(g.rotulo)}</th>` + (g.temNome ? '<th>Nome</th>' : '') +
       // Left to right IS the pipeline, with the two dead ends pulled out
       // of it. See classificaDomicilio for the predicates.
       (m.comDemanda
@@ -1200,7 +1274,14 @@
           (b.agendamentoPendente || 0) - (a.agendamentoPendente || 0) ||
           String(a.idZona || '').localeCompare(String(b.idZona || ''));
       })
-      : zonaRows;
+      // No deficit to rank by on this variant, so order by the id itself.
+      // The alternative is insertion order — endereços first, then the
+      // report — which is arbitrary from the reader's side and changes
+      // between runs as the address list does. A Controle sorts
+      // meaningfully: its digits are UF, município and setor, so
+      // ascending order groups the map's neighbours together.
+      : [...zonaRows].sort((a, b) => String(a.idZona || '')
+        .localeCompare(String(b.idZona || '')));
     const body = ordenadas.map((r) => {
       const clickable = zonaRowIsClickable(r);
       const zonaKey = r.idZona || '';
@@ -1251,7 +1332,7 @@
         `<tr${rowAttrs}>` +
         `<td class="sigc-pro-zona-pin-col">${pinCell}</td>` +
         `<td>${zonaLabel}</td>` +
-        `<td>${esc(r.nomeZona)}</td>` +
+        (g.temNome ? `<td>${esc(r.nomeZona)}</td>` : '') +
         (m.comDemanda
           ? `<td>${r.aEntrevistar || 0}</td>` +
             `<td>${r.emAndamento || 0}</td>` +
@@ -1344,7 +1425,10 @@
         // switching to the Zonas tab, finding the row and switching back
         // — once per call. Same listing, same source, no extra request.
         `<th title="${esc(TIP_SLOTS_DOM)}">Slots livres</th></tr>`
-      : `<tr>${pinTh}<th>Controle</th><th>Domicílio</th><th>Zona</th>` +
+      // No Zona column: this variant groups by Controle, which already
+      // has its own column two to the left. Keeping zona here would show
+      // a grouping the tab, the map and the CSV no longer use.
+      : `<tr>${pinTh}<th>Controle</th><th>Domicílio</th>` +
         (m.comAgenda ? '<th>Agendado</th>' : '') +
         '<th>Situação</th><th>Tipo</th>' +
         '<th>Entrevistador</th><th>Data</th></tr>';
@@ -1406,9 +1490,11 @@
         // Último Movimento keeps the bare id — its column exists to tell
         // rows apart and to sort/filter, which the short id does in far
         // less width.
-        `<td>${m.comDemanda && r.zona
-          ? `${esc(r.idZona)} <span class="sigc-pro-zona-nome">${esc(r.zona)}</span>`
-          : dash(r.idZona)}</td>` +
+        (m.comDemanda
+          ? `<td>${r.zona
+            ? `${esc(r.idZona)} <span class="sigc-pro-zona-nome">${esc(r.zona)}</span>`
+            : dash(r.idZona)}</td>`
+          : '') +
         (m.comDemanda
           ? `<td>${dash(CLASSE_LABEL[classificaDomicilio(r, hoje)])}</td>` +
             `<td>${dash(acaoDoDomicilio(r, hoje))}</td>` +
@@ -1790,6 +1876,10 @@
         'Para enxergar recusas de coleta, abra o Relatório de ' +
         'Acompanhamento de Biomarcadores.',
         'Sem consulta à agenda: não há agendamentos nem slots livres aqui.',
+        'Sem zona: esta página agrupa por controle. A zona é a unidade da ' +
+        'agenda, e sem consulta à agenda não há o que comparar por zona — ' +
+        'para ver o andamento por zona, abra o Relatório de Acompanhamento ' +
+        'de Biomarcadores.',
       ];
     }
     return [
@@ -1831,6 +1921,18 @@
       '<div class="sigc-pro-entenda">',
       `<p class="sigc-pro-entenda-fonte"><b>Fonte:</b> ${esc(FONTE_LABEL[m.id])}. ` +
         `${esc(FONTE_TIP[m.id])}</p>`,
+      // Which unit the tab counts and the map outlines, said once and
+      // plainly: the two variants group differently, and a reader who
+      // only ever opens one has nothing to compare against.
+      `<p class="sigc-pro-entenda-fonte"><b>Agrupamento:</b> ${esc(
+        m.comDemanda
+          ? 'por ZONA, que é a unidade da agenda — os slots são criados ' +
+            'por zona, então só ali faz sentido perguntar se há capacidade. ' +
+            'Cada contorno no mapa é uma zona.'
+          : 'por CONTROLE, a unidade de amostragem da pesquisa. Esta ' +
+            'página não consulta a agenda, então não há slots nem ' +
+            'capacidade a comparar por zona; cada contorno no mapa é um ' +
+            'controle, com sua etiqueta no centro.')}</p>`,
       '<h4>De onde vem cada número</h4>',
       '<p class="sigc-pro-entenda-legenda-prov">' +
         `${grau(PROV_RELATO)} o relatório afirma; aqui só se contou. ` +
@@ -1885,8 +1987,11 @@
     // The demand sentences are dropped with the columns they describe:
     // explaining a highlight this variant never paints is worse than
     // saying nothing.
+    const gPainel = grupoDe(m);
     const zonasHint = zonaRows.some(zonaRowIsClickable)
-      ? '<p class="sigc-pro-zonas-hint">Clique no 📍 de uma zona para vê-la no mapa.' +
+      ? '<p class="sigc-pro-zonas-hint">Clique no 📍 de ' +
+        `${gPainel.campo === 'controle' ? 'um controle para vê-lo' : 'uma zona para vê-la'}` +
+        ' no mapa.' +
         (m.comSlots
           ? ' Linhas destacadas devem mais biomarcadores do que têm slots livres na janela.'
           : ' Sem consulta à agenda: sem agendamentos nem slots livres.') +
@@ -1905,7 +2010,7 @@
       // compare against — so the one that runs on a proxy says so.
       `      <span class="sigc-pro-panel-fonte" title="${esc(FONTE_TIP[m.id])}">${esc(FONTE_LABEL[m.id])}</span>`,
       '      <button type="button" class="sigc-pro-tab-btn sigc-pro-tab-active" data-tab="mapa">Mapa</button>',
-      `      <button type="button" class="sigc-pro-tab-btn" data-tab="zonas">Zonas (${zonaRows.length})</button>`,
+      `      <button type="button" class="sigc-pro-tab-btn" data-tab="zonas">${esc(gPainel.rotuloPlural)} (${zonaRows.length})</button>`,
       `      <button type="button" class="sigc-pro-tab-btn" data-tab="domicilios">Domicílios (${joined.length})${alertaLabel}</button>`,
       // Last, and visually set apart: it is documentation, not a fourth
       // view of the data. Reachable from every tab because the question
@@ -2001,7 +2106,7 @@
       substituirTabela(domPanel,
         buildDomiciliosTabHtml(joined, modo, hoje, slotsPorZona));
       initPanelTables(panelEl);
-      wireZonaRowClicks(panelEl, joined);
+      wireZonaRowClicks(panelEl, joined, modo);
       if (stamp) {
         // Without this the reader cannot tell a fresh count from one read
         // twenty minutes ago, which is the whole point of the button.
@@ -2191,10 +2296,15 @@
   // point arrays from renderLeafletMap: every clickable row has at
   // least one temCoordenadas domicílio (zonaRowIsClickable's condition
   // mirrors that), regardless of whether a hull was drawable for it.
-  function focusZonaOnMap(panelEl, joined, idZona) {
+  // `idZona` is the aggregate tab's grouping key — a zona on the
+  // biomarcadores variant, a Controle on Último Movimento. The pin writes
+  // whichever one its row was built from, so this only has to match on
+  // the same field the rows were grouped by.
+  function focusZonaOnMap(panelEl, joined, idZona, modo) {
     switchToTab(panelEl, 'mapa');
+    const g = grupoDe(modo);
     const coords = joined
-      .filter((r) => r.temCoordenadas && (r.idZona || '') === idZona)
+      .filter((r) => r.temCoordenadas && (chaveGrupo(r, g).id || '') === idZona)
       .map((r) => [r.lat, r.lon]);
     if (coords.length === 0) return;
 
@@ -2339,7 +2449,7 @@
   // are handled — a tabbable element that only responds to the mouse is
   // worse than one that isn't tabbable at all. Space is prevented from
   // scrolling the panel, its default on a focused non-button.
-  function wireZonaRowClicks(panelEl, joined) {
+  function wireZonaRowClicks(panelEl, joined, modo) {
     panelEl.querySelectorAll('.sigc-pro-dom-pin').forEach((pin) => {
       const ir = () => focusDomicilioOnMap(panelEl, joined, pin.dataset.domKey || '');
       pin.addEventListener('click', (event) => { event.preventDefault(); ir(); });
@@ -2350,7 +2460,7 @@
       });
     });
     panelEl.querySelectorAll('.sigc-pro-zona-pin:not(.sigc-pro-dom-pin)').forEach((pin) => {
-      const ir = () => focusZonaOnMap(panelEl, joined, pin.dataset.idZona || '');
+      const ir = () => focusZonaOnMap(panelEl, joined, pin.dataset.idZona || '', modo);
       pin.addEventListener('click', (event) => {
         event.preventDefault();
         ir();
@@ -2567,7 +2677,12 @@
       // reader to infer which one — the same reason the Zonas tooltip
       // spells out "recusa da coleta de biomarcador".
       (m.comDemanda ? `Biomarcadores: ${esc(r.status || '—')}<br>` : '') +
-      `Zona: ${esc(r.idZona || 'Sem zona')}` +
+      // Zona only where the panel groups by it. Último Movimento neither
+      // aggregates nor draws by zona any more, and a lone Zona line in
+      // the popup would be the one place it survived — a grouping the
+      // rest of that variant cannot act on. The Controle is already two
+      // lines above.
+      (m.comDemanda ? `Zona: ${esc(r.idZona || 'Sem zona')}` : '') +
       agendadoLinha +
       gmapsLine
     );
@@ -2596,12 +2711,19 @@
       return;
     }
 
-    // --- Layer 1: zona hulls, drawn first so markers sit on top ------
-    const byZona = new Map(); // idZona -> [[lat, lon], ...]
+    // --- Layer 1: group hulls, drawn first so markers sit on top ------
+    // Zona on the biomarcadores variant, Controle on Último Movimento —
+    // the same unit its aggregate tab counts, so an outline on the map
+    // and a row in the table always describe the same set of households.
+    // On Último Movimento this also puts each hull around the Controle
+    // label that layer 3 already draws at its centroid.
+    const grupoMapa = grupoDe(m);
+    const byZona = new Map(); // group id -> [[lat, lon], ...]
     withCoords.forEach((r) => {
-      if (!r.idZona) return; // "Sem zona" gets no hull (spec §2)
-      if (!byZona.has(r.idZona)) byZona.set(r.idZona, []);
-      byZona.get(r.idZona).push([r.lat, r.lon]);
+      const gk = chaveGrupo(r, grupoMapa);
+      if (!gk.tem || !gk.id) return; // ungrouped rows get no hull (spec §2)
+      if (!byZona.has(gk.id)) byZona.set(gk.id, []);
+      byZona.get(gk.id).push([r.lat, r.lon]);
     });
     byZona.forEach((coords, idZona) => {
       const hull = convexHull(coords);
@@ -3215,7 +3337,7 @@
       wireTabs(panelEl, modo, {
         zonaRows, joined: comAgenda, filtro, hoje: todayIso,
       });
-      wireZonaRowClicks(panelEl, comAgenda);
+      wireZonaRowClicks(panelEl, comAgenda, modo);
       initPanelTables(panelEl);
       mapInitialized = false;
       maybeLoadTiles();
@@ -3466,6 +3588,7 @@
     buildDomiciliosTabHtml,
     buildPopupHtml,
     buildZonaPopupHtml,
+    focusZonaOnMap,
     focusDomicilioOnMap,
     setCurrentMapForTest,
     spiderfyRows,

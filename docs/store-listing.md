@@ -29,11 +29,15 @@ Biomarcadores, filtrados por agência, município ou controle:
   que crescem com o zoom, destaque para os que estão perto do prazo e
   camadas por agência que podem ser ligadas e desligadas uma a uma;
   domicílios no mesmo endereço abrem em leque, para que nenhum fique
-  escondido sob o outro. Zonas: a situação de cada zona — inclusive as
-  que ainda não tiveram coleta — o que já foi coletado, o que está
-  agendado, o que ainda precisa de agendamento e quantos horários
-  seguem livres, com as zonas mais problemáticas no topo. Domicílios: a
-  lista completa, com zona, situação, a ação devida em cada caso e um
+  escondido sob o outro. Zonas (ou Controles): o andamento de cada
+  grupo — inclusive os que ainda não tiveram coleta — o que já foi
+  coletado, o que está agendado, o que ainda precisa de agendamento e
+  quantos horários seguem livres, com os casos mais problemáticos no
+  topo. Cada página agrupa pela unidade que sabe responder: o relatório
+  de biomarcadores por ZONA, que é a unidade da agenda, e o Último
+  Movimento por CONTROLE, a unidade de amostragem — sem consulta à
+  agenda não há capacidade por zona a comparar. Domicílios: a
+  lista completa, com situação, a ação devida em cada caso e um
   pino que leva ao domicílio no mapa. Cada aba de dados pode ser baixada
   em CSV. E a aba Entenda, que diz de onde vem cada número do painel: o
   que o relatório afirma, o que foi calculado a partir dele e o que é

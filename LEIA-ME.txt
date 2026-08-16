@@ -23,12 +23,16 @@ um deles basta (rode o Filtrar):
   * MAPA-PRO — abre um painel com quatro abas. Mapa: os domicílios do
     recorte filtrado, coloridos pela situação de cada um, com destaque
     para os que estão perto do prazo e camadas por agência; domicílios no
-    mesmo endereço abrem em leque. Zonas: o andamento de cada zona
-    (inclusive as ainda sem coleta), o que falta agendar, o que já
-    venceu, e os horários ainda livres dia a dia — as zonas mais
-    problemáticas no topo. Domicílios: a lista completa, ordenável, com
-    situação, a ação devida em cada caso e um pino que leva ao domicílio
-    no mapa. Cada aba baixa em CSV.
+    mesmo endereço abrem em leque. Zonas (ou Controles): o andamento de
+    cada grupo (inclusive os ainda sem coleta), o que falta agendar, o
+    que já venceu, e os horários ainda livres dia a dia — os casos mais
+    problemáticos no topo. Cada página agrupa pela unidade que sabe
+    responder: o relatório de biomarcadores por ZONA, que é a unidade da
+    agenda; o Último Movimento por CONTROLE, a unidade de amostragem,
+    já que sem agenda não há capacidade por zona a comparar. Os
+    contornos no mapa seguem o mesmo agrupamento. Domicílios: a lista
+    completa, ordenável, com situação, a ação devida em cada caso e um
+    pino que leva ao domicílio no mapa. Cada aba baixa em CSV.
     A quarta aba, "❓ Entenda", explica de onde vem cada número: o que o
     relatório afirma, o que foi calculado e o que é apenas provável.
     Vale ler antes de tomar decisão em cima das colunas.
