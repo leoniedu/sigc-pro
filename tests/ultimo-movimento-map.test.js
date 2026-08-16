@@ -4373,3 +4373,108 @@ describe('popups carry what the reader is standing on', () => {
     }
   });
 });
+
+describe('Domicílios rows link to the map', () => {
+  const hoje = '2026-08-15';
+  const d = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', tipoEntrevista: 'Realizada',
+    ultimaPosicao: 'Descarregado', status: 'A agendar', agendado: '',
+    dataAgendada: '', dataFinalColeta: '20/08/2026', dataVisita: '',
+    nomeEquipe: '', siapeAgendamento: '', siapeColeta: '', statusSangue: '',
+    statusUrina: '', entrevistador: '', data: '', lat: -12, lon: -38,
+    temCoordenadas: true, ...over,
+  });
+
+  test('a mapped household gets a pin carrying its key', () => {
+    // The Zonas tab has had one since the row-click was retired; the
+    // household table had no way to the map at all, so finding a
+    // household in the table left you unable to locate it.
+    const html = UM.buildDomiciliosTabHtml([d()], UM.MODO_BIOMARCADORES, hoje);
+    expect(html).toContain('sigc-pro-dom-pin');
+    expect(html).toContain('data-dom-key="C1|1"');
+  });
+
+  test('a household with no coordinates gets no pin', () => {
+    // Same rule as the Zonas pin: never offer a click that silently does
+    // nothing.
+    const html = UM.buildDomiciliosTabHtml(
+      [d({ temCoordenadas: false })], UM.MODO_BIOMARCADORES, hoje);
+    expect(html).not.toContain('sigc-pro-dom-pin');
+  });
+
+  test('the pin column is unsortable and does not reach the CSV', () => {
+    const html = UM.buildDomiciliosTabHtml([d()], UM.MODO_BIOMARCADORES, hoje);
+    expect(html).toMatch(/<th[^>]*data-orderable="false"/);
+    document.body.innerHTML = `<div>${html}</div>`;
+    try {
+      const { header, rows } = UM.tabelaParaCsv(document.querySelector('table'));
+      expect(header[0]).toBe('Controle');
+      expect(rows[0][0]).toBe('C1');
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('both variants keep header and body aligned', () => {
+    [UM.MODO_MOVIMENTO, UM.MODO_BIOMARCADORES].forEach((modo) => {
+      const html = UM.buildDomiciliosTabHtml([d()], modo, hoje);
+      const ths = (html.match(/<th[ >]/g) || []).length;
+      const tds = (html.match(/<td[ >]/g) || []).length;
+      expect(tds).toBe(ths);
+    });
+  });
+});
+
+describe('focusing a single household on the map', () => {
+  test('switches to the Mapa tab and zooms to that household', () => {
+    document.body.innerHTML =
+      '<div id="p">' +
+      '<div id="sigc-pro-mapa-panel" class="sigc-pro-tab-panel"></div>' +
+      '<div id="sigc-pro-domicilios-panel" class="sigc-pro-tab-panel sigc-pro-tab-panel-active">' +
+      '</div>' +
+      '<button class="sigc-pro-tab-btn" data-tab="mapa"></button>' +
+      '<button class="sigc-pro-tab-btn sigc-pro-tab-active" data-tab="domicilios"></button>' +
+      '</div>';
+    const panelEl = document.getElementById('p');
+    const chamadas = [];
+    UM.setCurrentMapForTest({
+      setView: (ll, z) => { chamadas.push({ ll, z }); },
+      fitBounds: () => {},
+    });
+    try {
+      UM.focusDomicilioOnMap(panelEl, [
+        { controle: 'C1', domicilio: '1', temCoordenadas: true, lat: -12, lon: -38 },
+        { controle: 'C1', domicilio: '2', temCoordenadas: true, lat: -13, lon: -39 },
+      ], 'C1|2');
+      // The Mapa tab is now the active one.
+      expect(document.getElementById('sigc-pro-mapa-panel').classList
+        .contains('sigc-pro-tab-panel-active')).toBe(true);
+      // Zoomed to the household asked for, not the first in the list, and
+      // close enough to see the building rather than the state.
+      expect(chamadas).toHaveLength(1);
+      expect(chamadas[0].ll).toEqual([-13, -39]);
+      expect(chamadas[0].z).toBeGreaterThanOrEqual(16);
+    } finally {
+      UM.setCurrentMapForTest(null);
+      document.body.innerHTML = '';
+    }
+  });
+
+  test('an unknown or unmapped key does nothing', () => {
+    document.body.innerHTML =
+      '<div id="p"><div id="sigc-pro-mapa-panel" class="sigc-pro-tab-panel"></div></div>';
+    const panelEl = document.getElementById('p');
+    const chamadas = [];
+    UM.setCurrentMapForTest({ setView: () => chamadas.push(1), fitBounds: () => {} });
+    try {
+      UM.focusDomicilioOnMap(panelEl, [
+        { controle: 'C1', domicilio: '1', temCoordenadas: false, lat: null, lon: null },
+      ], 'C1|1');
+      UM.focusDomicilioOnMap(panelEl, [], 'Z|9');
+      expect(chamadas).toHaveLength(0);
+    } finally {
+      UM.setCurrentMapForTest(null);
+      document.body.innerHTML = '';
+    }
+  });
+});

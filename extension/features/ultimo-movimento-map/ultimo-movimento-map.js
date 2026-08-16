@@ -1261,6 +1261,7 @@
     const TIP_ACAO =
       'O próximo passo deste domicílio. Agendar e reagendar são trabalho ' +
       'de agenda; reverter recusa é convencimento, e nenhum slot resolve.';
+    const TIP_PIN_DOM = 'Ver este domicílio no mapa';
     const TIP_SITUACAO =
       'Mesma classificação das colunas da aba Zonas — cada domicílio está ' +
       'em exatamente uma situação.';
@@ -1279,8 +1280,14 @@
     // collection state and what do I do about it" — so Situação carries
     // the same nine-way vocabulary the Zonas columns use, and the people
     // and dates are the collection's, not Último Movimento's.
+    // Pin first, same contract as the Zonas table: narrow, unsortable,
+    // and excluded from the CSV (sigc-pro-zona-pin-col is what
+    // tabelaParaCsv drops). Without it the household table had no way to
+    // the map — you could find a domicílio here and still not locate it.
+    const pinTh =
+      `<th class="sigc-pro-zona-pin-col" data-orderable="false" title="${esc(TIP_PIN_DOM)}"></th>`;
     const head = m.comDemanda
-      ? '<tr><th>Controle</th><th>Domicílio</th><th>Zona</th>' +
+      ? `<tr>${pinTh}<th>Controle</th><th>Domicílio</th><th>Zona</th>` +
         `<th title="${esc(TIP_SITUACAO)}">Situação</th>` +
         `<th title="${esc(TIP_ACAO)}">Ação</th>` +
         `<th title="${esc(TIP_PRAZO)}">Prazo</th>` +
@@ -1292,7 +1299,7 @@
         // switching to the Zonas tab, finding the row and switching back
         // — once per call. Same listing, same source, no extra request.
         `<th title="${esc(TIP_SLOTS_DOM)}">Slots livres</th></tr>`
-      : '<tr><th>Controle</th><th>Domicílio</th><th>Zona</th>' +
+      : `<tr>${pinTh}<th>Controle</th><th>Domicílio</th><th>Zona</th>` +
         (m.comAgenda ? '<th>Agendado</th>' : '') +
         '<th>Situação</th><th>Tipo</th>' +
         '<th>Entrevistador</th><th>Data</th></tr>';
@@ -1336,8 +1343,17 @@
           // exports numerically whether it was on screen or not.
           `<span class="sigc-pro-prazo-num${dias < 0 ? ' sigc-pro-prazo-num-oculto' : ''}">` +
           `${dias}</span>${dias < 0 ? 'Vencido' : ''}</td>`;
+      // Only where there is somewhere to go: a household without
+      // coordinates would give a click that silently does nothing.
+      const pinDom = r.temCoordenadas
+        ? '<span class="sigc-pro-zona-pin sigc-pro-dom-pin" role="button" tabindex="0"' +
+          ` data-dom-key="${esc(`${r.controle}|${r.domicilio}`)}"` +
+          ` title="${esc(TIP_PIN_DOM)}"` +
+          ` aria-label="${esc(`${TIP_PIN_DOM}: ${r.controle}/${r.domicilio}`)}">📍</span>`
+        : '';
       return (
         `<tr${alerta ? ' class="sigc-pro-prazo-alerta-row"' : ''}>` +
+        `<td class="sigc-pro-zona-pin-col">${pinDom}</td>` +
         `<td>${dash(r.controle)}</td>` +
         `<td>${dash(r.domicilio)}</td>` +
         // The zona ID alone, not the full "ID - nome" label: the Zonas tab
@@ -1939,6 +1955,34 @@
     pollFor(() => currentMap, { onFound: (map) => map.fitBounds(coords, { padding: [20, 20] }) });
   }
 
+  // One household rather than a whole zona: setView at street zoom, not
+  // fitBounds, because a single point has no extent to fit — fitBounds on
+  // it would zoom to the maximum and lose all context.
+  const ZOOM_DOMICILIO = 17;
+
+  function focusDomicilioOnMap(panelEl, joined, chave) {
+    switchToTab(panelEl, 'mapa');
+    const alvo = (joined || []).find(
+      (r) => r.temCoordenadas && `${r.controle}|${r.domicilio}` === chave);
+    if (!alvo) return;
+    // Uses the TRUE geocode, not the spiderfied ring position: the ring
+    // is a display device, and centring on it would be off by ~13 m.
+    const ll = [alvo.origLat != null ? alvo.origLat : alvo.lat,
+      alvo.origLon != null ? alvo.origLon : alvo.lon];
+    if (currentMap) {
+      currentMap.setView(ll, ZOOM_DOMICILIO);
+      return;
+    }
+    // Same reasoning as focusZonaOnMap: the map may not have rendered yet.
+    pollFor(() => currentMap, { onFound: (map) => map.setView(ll, ZOOM_DOMICILIO) });
+  }
+
+  // Test seam: currentMap is set by renderLeafletMap, which needs a real
+  // Leaflet. Focus behaviour is worth testing without one.
+  function setCurrentMapForTest(map) {
+    currentMap = map;
+  }
+
   // SIGC's own page script auto-initializes DataTables over the tables it
   // finds in the document, and this panel's tables are injected into
   // document.body — so they get swept up and paged at the library's
@@ -2030,7 +2074,16 @@
   // worse than one that isn't tabbable at all. Space is prevented from
   // scrolling the panel, its default on a focused non-button.
   function wireZonaRowClicks(panelEl, joined) {
-    panelEl.querySelectorAll('.sigc-pro-zona-pin').forEach((pin) => {
+    panelEl.querySelectorAll('.sigc-pro-dom-pin').forEach((pin) => {
+      const ir = () => focusDomicilioOnMap(panelEl, joined, pin.dataset.domKey || '');
+      pin.addEventListener('click', (event) => { event.preventDefault(); ir(); });
+      pin.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        ir();
+      });
+    });
+    panelEl.querySelectorAll('.sigc-pro-zona-pin:not(.sigc-pro-dom-pin)').forEach((pin) => {
       const ir = () => focusZonaOnMap(panelEl, joined, pin.dataset.idZona || '');
       pin.addEventListener('click', (event) => {
         event.preventDefault();
@@ -3147,6 +3200,8 @@
     buildDomiciliosTabHtml,
     buildPopupHtml,
     buildZonaPopupHtml,
+    focusDomicilioOnMap,
+    setCurrentMapForTest,
     spiderfyRows,
     domicilioLabel,
     buildPanelHtml,
