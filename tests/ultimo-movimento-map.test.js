@@ -4600,6 +4600,29 @@ describe('the two refusals are counted apart, as the map already draws them', ()
       .toBe('recusaEntrevista');
   });
 
+  test('the column and the map agree on every refusal, not just Não iniciado', () => {
+    // The split is only honest if the "Recusa entrev." column and the
+    // #A63603 markers cover the same households — the comment on
+    // classificaDomicilio justifies the split by saying the map already
+    // drew them apart. statusColor used to check tipo === 'Recusa' only
+    // inside the 'Não iniciado' branch, so a refused interview sitting at
+    // 'A agendar', 'Indefinido', 'Outro Motivo' or 'Não elegível' was
+    // counted as a refusal and drawn as demand.
+    const statuses = ['Coletado Sangue e Urina', 'Agendado', 'Recusa',
+      'Outro Motivo', 'Não elegível', 'A agendar', 'Indefinido',
+      'Não iniciado', ''];
+    const tipos = ['Recusa', 'Realizada', 'Não Iniciada', 'Domicílio Fechado',
+      'Domicílio Vago', 'Não Foi Encontrado', ''];
+    const divergentes = [];
+    statuses.forEach((status) => tipos.forEach((tipoEntrevista) => {
+      const row = d({ status, tipoEntrevista });
+      const naColuna = UM.classificaDomicilio(row, hoje) === 'recusaEntrevista';
+      const noMapa = UM.statusColor(row, UM.MODO_BIOMARCADORES, hoje) === '#A63603';
+      if (naColuna !== noMapa) divergentes.push(`${status}/${tipoEntrevista}`);
+    }));
+    expect(divergentes).toEqual([]);
+  });
+
   test('a household that refused BOTH counts once, under the biomarcador', () => {
     // R lets its two columns overlap (51 + 18 for 68 households). These
     // columns must sum to Total, so the overlap has to land somewhere:

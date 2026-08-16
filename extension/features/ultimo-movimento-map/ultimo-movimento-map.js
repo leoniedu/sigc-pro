@@ -737,17 +737,25 @@
       return coletaEmAberto(row, hojeIso) ? BIO_ACAO : BIO_AGENDADO;
     }
     if (s === 'Recusa') return BIO_RECUSA_COLETA;
+    // Why it has not started matters more than that it has not. The
+    // interview refusal gets a colour of its own, distinct from the
+    // collection refusal above: reverting one means arguing for the
+    // exam, the other for the whole survey — different work.
+    //
+    // Checked before the remaining biomarcador statuses, not only inside
+    // 'Não iniciado', because a refused interview is a fact about the
+    // interview: it stays true whether the biomarcador side reads
+    // 'A agendar', 'Indefinido', 'Outro Motivo' or nothing at all. Held
+    // inside 'Não iniciado' this disagreed with classificaDomicilio,
+    // which has always claimed every tipo === 'Recusa' for the column —
+    // so the map drew as demand what the table counted as a refusal.
+    const tipoEntrev = (row && row.tipoEntrevista) || '';
+    if (tipoEntrev === 'Recusa') return BIO_RECUSA_ENTREVISTA;
     if (s === 'Outro Motivo') return BIO_OUTRO_MOTIVO;
     if (s === 'Não elegível') return BIO_NAO_ELEGIVEL;
     if (s === 'A agendar' || s === 'Indefinido') return BIO_ACAO;
     if (s === 'Não iniciado') {
-      // Why it has not started matters more than that it has not. The
-      // interview refusal gets a colour of its own, distinct from the
-      // collection refusal above: reverting one means arguing for the
-      // exam, the other for the whole survey — different work.
-      const tipo = (row && row.tipoEntrevista) || '';
-      if (tipo === 'Recusa') return BIO_RECUSA_ENTREVISTA;
-      if (TIPOS_REVERSIVEIS.has(tipo)) return BIO_BLOQUEADO;
+      if (TIPOS_REVERSIVEIS.has(tipoEntrev)) return BIO_BLOQUEADO;
       return BIO_NAO_INICIADO;
     }
     return BIO_DESCONHECIDO;
@@ -2009,8 +2017,13 @@
     const alvo = (joined || []).find(
       (r) => r.temCoordenadas && `${r.controle}|${r.domicilio}` === chave);
     if (!alvo) return;
-    // Uses the TRUE geocode, not the spiderfied ring position: the ring
-    // is a display device, and centring on it would be off by ~13 m.
+    // Centres on the TRUE geocode, never on a spiderfied ring position:
+    // the ring is a display device, and centring on it would be off by
+    // ~13 m. Today the rows handed in are the plain joined ones, so
+    // lat/lon IS the geocode and origLat is absent; the guard is there
+    // for the day someone passes spiderfyRows output instead, where
+    // lat/lon has been moved onto the ring and origLat holds the real
+    // point.
     const ll = [alvo.origLat != null ? alvo.origLat : alvo.lat,
       alvo.origLon != null ? alvo.origLon : alvo.lon];
     if (currentMap) {
