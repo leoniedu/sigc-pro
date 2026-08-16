@@ -2610,6 +2610,26 @@
   // scope-matched fetch suggests a truncated or paginated response,
   // which would otherwise be indistinguishable from ordinary missing
   // geocoding once joinEnderecos folds both into temCoordenadas:false.
+  // Distinguishes "some households lack geocoding" from "the two sides
+  // did not join at all". A 100% miss against a NON-EMPTY response is not
+  // a coverage gap: the keys disagree, or the two requests were scoped to
+  // different populations. Same symptom, different cause, different fix —
+  // and the example keys are what tell them apart in a bug report.
+  function diagnosticoEnderecos(movimentoMap, enderecosMap) {
+    const faltando = missingEnderecoCount(movimentoMap, enderecosMap);
+    const primeira = (mapa) => {
+      const it = mapa.keys().next();
+      return it.done ? '' : it.value;
+    };
+    return {
+      faltando,
+      total: movimentoMap.size,
+      todosFaltando: movimentoMap.size > 0 && faltando === movimentoMap.size,
+      exemploRelatorio: primeira(movimentoMap),
+      exemploEnderecos: primeira(enderecosMap),
+    };
+  }
+
   function missingEnderecoCount(movimentoMap, enderecosMap) {
     let missing = 0;
     movimentoMap.forEach((_row, key) => {
@@ -2680,11 +2700,22 @@
       }
       // A short response looks identical to ordinary missing geocoding
       // once joined, so say so rather than let it pass silently.
-      const missing = missingEnderecoCount(movimentoMap, enderecosMap);
-      if (enderecosMap.size > 0 && missing > 0) {
-        console.warn(`${TAG} ${missing}/${movimentoMap.size} domicílio(s) sem entrada na Lista de Endereços.`);
-        alert(`SIGC-PRO: ${missing} de ${movimentoMap.size} domicílio(s) não retornaram ` +
-          'endereço na consulta e ficarão sem coordenadas/zona.');
+      const diag = diagnosticoEnderecos(movimentoMap, enderecosMap);
+      if (enderecosMap.size > 0 && diag.faltando > 0) {
+        console.warn(`${TAG} ${diag.faltando}/${diag.total} domicílio(s) sem entrada ` +
+          `na Lista de Endereços. Exemplo relatório: "${diag.exemploRelatorio}" | ` +
+          `exemplo endereços: "${diag.exemploEnderecos}" | ` +
+          `endereços recebidos: ${enderecosMap.size}`);
+        alert(diag.todosFaltando
+          // Nothing matched at all: this is a join failure, not missing
+          // geocoding, and telling the user "they have no address" would
+          // send them looking in the wrong place.
+          ? `SIGC-PRO: a Lista de Endereços respondeu ${enderecosMap.size} domicílio(s), ` +
+            `mas nenhum corresponde aos ${diag.total} do relatório — as duas consultas ` +
+            'parecem estar em recortes diferentes. O mapa sai sem coordenadas/zona. ' +
+            '(Detalhes no console.)'
+          : `SIGC-PRO: ${diag.faltando} de ${diag.total} domicílio(s) não retornaram ` +
+            'endereço na consulta e ficarão sem coordenadas/zona.');
       }
       // The biomarcadores report has no Última Posição column, so without
       // this every household there looked equally untouched: the "Não
@@ -3077,6 +3108,7 @@
     motivoBloqueio,
     isWildcard,
     missingEnderecoCount,
+    diagnosticoEnderecos,
     atualizarEstadoBotaoMapa,
   };
 })();

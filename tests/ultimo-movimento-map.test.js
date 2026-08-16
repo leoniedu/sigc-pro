@@ -4205,3 +4205,29 @@ describe('the fan draws its own explanation', () => {
     }
   });
 });
+
+describe('a total key mismatch is reported as such', () => {
+  test('none-matched reads differently from some-missing', () => {
+    // "1185 de 1185 não retornaram endereço" reads as a coverage gap,
+    // but a 100% miss against a NON-EMPTY response is a join failure —
+    // the two sides are keyed on different things, or scoped to
+    // different populations. Different cause, different fix.
+    const movimento = new Map([['A|1', {}], ['B|2', {}]]);
+    const enderecos = new Map([['X|9', {}], ['Y|8', {}]]);
+    expect(UM.missingEnderecoCount(movimento, enderecos)).toBe(2);
+    expect(UM.diagnosticoEnderecos(movimento, enderecos).todosFaltando).toBe(true);
+    const parcial = new Map([['A|1', {}], ['Z|9', {}]]);
+    expect(UM.diagnosticoEnderecos(movimento, parcial).todosFaltando).toBe(false);
+  });
+
+  test('the diagnostic carries example keys from both sides', () => {
+    // Without a sample of each, "they do not match" is untestable from a
+    // bug report: the shapes are what say whether it is a key format or
+    // a scope problem.
+    const d = UM.diagnosticoEnderecos(
+      new Map([['290570105000292|1', {}]]),
+      new Map([['290030605000023|9', {}]]));
+    expect(d.exemploRelatorio).toBe('290570105000292|1');
+    expect(d.exemploEnderecos).toBe('290030605000023|9');
+  });
+});

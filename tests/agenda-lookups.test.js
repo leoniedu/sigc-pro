@@ -472,3 +472,68 @@ describe('biomarcadores: the collection-side columns', () => {
     expect(row.nomeEquipe).toBe('EQ1');
   });
 });
+
+describe('endereços cache keys every field it was scoped by', () => {
+  test('two zonas in one município do not share a cached response', async () => {
+    // The cache key was uf|agencia|municipio|controle, so a biomarcadores
+    // filter narrowed by IdZona hit the SAME entry as any other zona in
+    // that município. A second Mapa click then reused the first zona's
+    // addresses, and the join count changed between identical runs with
+    // no data change — 1185/1185 missing on one press, 540/1185 on the
+    // next (reported live 2026-08-15).
+    const pedidos = [];
+    const originalFetch = window.fetch;
+    window.fetch = async (url, opts) => {
+      pedidos.push(String(opts && opts.body));
+      return {
+        ok: true,
+        text: async () => '<table id="tableRelatorio"><thead><tr>' +
+          '<th>Controle</th><th>N.º Domicilio</th><th>Latitude</th>' +
+          '<th>Longitude</th><th>ID Zona</th><th>Nome ZONA</th></tr></thead>' +
+          '<tbody><tr><td>C1</td><td>1</td><td>-12,0</td><td>-38,0</td>' +
+          '<td>Z1</td><td>Zona 1</td></tr></tbody></table>',
+      };
+    };
+    try {
+      AM.resetEnderecosAgenciaCache();
+      await AM.fetchEnderecosPorFiltro({
+        IdUf: '29', IdAgencia: '*', IdMunicipio: '2927408', Controle: '*', IdZona: 'Z1',
+      });
+      await AM.fetchEnderecosPorFiltro({
+        IdUf: '29', IdAgencia: '*', IdMunicipio: '2927408', Controle: '*', IdZona: 'Z2',
+      });
+      // Two distinct scopes must produce two requests, not one plus a
+      // cache hit.
+      expect(pedidos).toHaveLength(2);
+    } finally {
+      window.fetch = originalFetch;
+      AM.resetEnderecosAgenciaCache();
+    }
+  });
+
+  test('the same scope is still served from cache', async () => {
+    const pedidos = [];
+    const originalFetch = window.fetch;
+    window.fetch = async (url, opts) => {
+      pedidos.push(String(opts && opts.body));
+      return {
+        ok: true,
+        text: async () => '<table id="tableRelatorio"><thead><tr>' +
+          '<th>Controle</th><th>N.º Domicilio</th><th>Latitude</th>' +
+          '<th>Longitude</th><th>ID Zona</th><th>Nome ZONA</th></tr></thead>' +
+          '<tbody><tr><td>C1</td><td>1</td><td>-12,0</td><td>-38,0</td>' +
+          '<td>Z1</td><td>Zona 1</td></tr></tbody></table>',
+      };
+    };
+    try {
+      AM.resetEnderecosAgenciaCache();
+      const f = { IdUf: '29', IdAgencia: '*', IdMunicipio: '2927408', Controle: '*', IdZona: 'Z1' };
+      await AM.fetchEnderecosPorFiltro(f);
+      await AM.fetchEnderecosPorFiltro({ ...f });
+      expect(pedidos).toHaveLength(1);
+    } finally {
+      window.fetch = originalFetch;
+      AM.resetEnderecosAgenciaCache();
+    }
+  });
+});

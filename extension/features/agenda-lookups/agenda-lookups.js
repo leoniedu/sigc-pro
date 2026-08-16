@@ -62,13 +62,17 @@
   //
   // municipio is last and optional so the Agenda call sites, which never
   // scope by it, keep working unchanged.
-  function filtroBody(uf, controle, idFiltro, agencia, municipio) {
+  function filtroBody(uf, controle, idFiltro, agencia, municipio, zona) {
     return 'filtro=' + encodeURIComponent(JSON.stringify({
       IdFiltro: idFiltro,
       IdUf: String(uf),
       IdAgencia: agencia ? String(agencia) : '*',
       IdMunicipio: municipio ? String(municipio) : '*',
       Controle: String(controle),
+      // The biomarcadores page can narrow by zona, and Lista de Endereços
+      // honours the same field. Dropping it returned the whole município
+      // for a zona-scoped report.
+      IdZona: zona ? String(zona) : '*',
       TipoVisualizacao: 'S',
     }));
   }
@@ -603,12 +607,18 @@
     const agencia = String(f.IdAgencia || '*');
     const municipio = String(f.IdMunicipio || '*');
     const controle = String(f.Controle || '*');
-    const chave = `${uf}|${agencia}|${municipio}|${controle}`;
+    const zona = String(f.IdZona || '*');
+    // EVERY field the request was scoped by belongs in the key. With zona
+    // missing, two zonas of one município shared an entry: the second
+    // Mapa click reused the first zona's addresses, so the same data
+    // joined differently between presses (1185/1185 missing, then
+    // 540/1185, with nothing changed).
+    const chave = `${uf}|${agencia}|${municipio}|${controle}|${zona}`;
     const hit = enderecosAgenciaCache.get(chave);
     if (hit) return hit;
     const p = postRelatorio({
       slug: 'ListaEnderecos',
-      body: filtroBody(uf, controle, 'ListaEnderecos', agencia, municipio),
+      body: filtroBody(uf, controle, 'ListaEnderecos', agencia, municipio, zona),
       parse: parseEnderecosHtml,
     }).catch((err) => {
       // A failed fetch must not poison the cache — the next click retries.
@@ -838,8 +848,12 @@
 
   function fetchPosicoesPorFiltro(filtro) {
     const f = filtro || {};
+    // IdZona is in the key even though Último Movimento has no such
+    // field to send: two zona-scoped biomarcadores filters would
+    // otherwise share this entry, and the second would silently reuse the
+    // first's posições — the same collision the endereços cache had.
     const chave = [f.IdUf, f.IdAgencia, f.IdMunicipio, f.Controle,
-      f.IdEntrevistadores].map((v) => String(v == null ? '*' : v)).join('|');
+      f.IdEntrevistadores, f.IdZona].map((v) => String(v == null ? '*' : v)).join('|');
     const hit = posicoesCache.get(chave);
     if (hit) return hit;
     const p = postRelatorio({
