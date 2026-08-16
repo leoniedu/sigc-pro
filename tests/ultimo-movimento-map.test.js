@@ -4273,3 +4273,103 @@ describe('the agência layer control does not depend on a missing icon', () => {
     }
   });
 });
+
+describe('popups carry what the reader is standing on', () => {
+  test('a household popup names its agência', () => {
+    // The map can be filtered by agência layer, so "whose household is
+    // this" is a question the marker should answer without going back to
+    // the table.
+    const html = UM.buildPopupHtml({
+      controle: 'C1', domicilio: '1', entrevistador: 'F', idZona: 'Z1',
+      tipoEntrevista: 'Realizada', status: 'A agendar', lat: -12, lon: -38,
+      agendado: '', agencia: '292740800',
+    }, UM.MODO_BIOMARCADORES);
+    expect(html).toContain('292740800');
+  });
+
+  test('a household with no agência does not print an empty line', () => {
+    const html = UM.buildPopupHtml({
+      controle: 'C1', domicilio: '1', entrevistador: 'F', idZona: 'Z1',
+      tipoEntrevista: 'Realizada', status: 'A agendar', lat: -12, lon: -38,
+      agendado: '', agencia: '',
+    }, UM.MODO_BIOMARCADORES);
+    expect(html).not.toContain('Agência:');
+  });
+
+  test('the zona popup summarises the zona, not just its id', () => {
+    const zona = {
+      idZona: 'Z1', nomeZona: '29.2.01.02 Pituba', aEntrevistar: 30,
+      emAndamento: 5, semAgendamento: 2, agendamentoPendente: 8, vencidos: 3,
+      agendadoBio: 4, coletado: 12, recusaBio: 1, inelegivel: 6,
+      semEntrevista: 2, totalDomicilios: 70, semCoordenadas: 0,
+    };
+    const slots = [{ isoDate: '2026-08-20', horas: ['08:30', '09:00'] }];
+    const html = UM.buildZonaPopupHtml(zona, { manha: 2, tarde: 1 }, slots);
+    expect(html).toContain('Z1');
+    expect(html).toContain('29.2.01.02 Pituba');
+    // The numbers that decide whether to send anyone.
+    expect(html).toContain('8');   // agendamento pendente
+    expect(html).toContain('3');   // vencidos
+    expect(html).toContain('70');  // total
+    // And the slots it can be booked into.
+    expect(html).toContain('08:30');
+  });
+
+  test('a zona with no free slots says so rather than showing nothing', () => {
+    const zona = {
+      idZona: 'Z1', nomeZona: 'Pituba', aEntrevistar: 0, emAndamento: 0,
+      semAgendamento: 0, agendamentoPendente: 2, vencidos: 0, agendadoBio: 0,
+      coletado: 0, recusaBio: 0, inelegivel: 0, semEntrevista: 0,
+      totalDomicilios: 2, semCoordenadas: 0,
+    };
+    const html = UM.buildZonaPopupHtml(zona, { manha: 0, tarde: 0 }, []);
+    expect(html).toContain('Nenhum slot livre');
+  });
+
+  test('the hull binds that popup', () => {
+    const rec = { popups: [] };
+    const layer = () => {
+      const l = {
+        addTo: () => l, setRadius: () => l,
+        bindTooltip: () => l,
+        bindPopup: (h) => { rec.popups.push(h); return l; },
+      };
+      return l;
+    };
+    const L = {
+      map: (c) => { if (c) c.innerHTML = ''; return {
+        addLayer: () => {}, setView() { return this; }, fitBounds() { return this; },
+        getZoom: () => 13, on: () => {},
+      }; },
+      tileLayer: layer, polygon: layer, polyline: layer, circle: layer,
+      circleMarker: layer, marker: layer, divIcon: () => ({}), layerGroup: layer,
+      DomUtil: { create: () => document.createElement('div') },
+      control: Object.assign(() => ({ addTo: () => {}, onAdd: null }),
+        { layers: () => ({ addTo: () => {} }) }),
+    };
+    const linha = (domicilio, lat, lon) => ({
+      controle: 'C1', domicilio, idZona: 'Z1', zona: 'Pituba', temZona: true,
+      temCoordenadas: true, lat, lon, tipoEntrevista: 'Realizada',
+      ultimaPosicao: 'Descarregado', status: 'A agendar', agendado: '',
+      dataAgendada: '', dataFinalColeta: '', entrevistador: '', agencia: 'A1',
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      // Three points so the hull is a polygon.
+      UM.renderLeafletMap(L, container, [
+        linha('1', -12, -38), linha('2', -12.01, -38.01), linha('3', -12.02, -38),
+      ], UM.MODO_BIOMARCADORES,
+      new Map([['Z1', {
+        idZona: 'Z1', nomeZona: 'Pituba', aEntrevistar: 0, emAndamento: 0,
+        semAgendamento: 0, agendamentoPendente: 3, vencidos: 0, agendadoBio: 0,
+        coletado: 0, recusaBio: 0, inelegivel: 0, semEntrevista: 0,
+        totalDomicilios: 3, semCoordenadas: 0,
+      }]]),
+      new Map([['Z1', { manha: 1, tarde: 0 }]]), new Map());
+      expect(rec.popups.some((h) => h.includes('Pituba'))).toBe(true);
+    } finally {
+      container.remove();
+    }
+  });
+});

@@ -525,6 +525,44 @@
     return CLASSE_ACAO[classe] || '';
   }
 
+  // What a zona hull says when clicked. The R's equivalent carries route
+  // and lab data from an OSRM cache this extension has no access to
+  // (map_corredores.R:232-239), so this answers the question the panel
+  // can actually answer: what is in this zona, and can it be booked.
+  //
+  // Ordered like the Zonas columns — pipeline first, then the two dead
+  // ends — so the popup and the table tell the same story in the same
+  // order.
+  function buildZonaPopupHtml(z, turnos, grupos) {
+    const esc = window.__sigcPro.escapeHtml;
+    const AM = window.__sigcProAgendaLookups;
+    const t = turnos || {};
+    const linha = (rotulo, valor) =>
+      (valor ? `${esc(rotulo)}: <b>${valor}</b><br>` : '');
+    const nome = z.nomeZona && z.nomeZona !== z.idZona
+      ? ` — ${esc(z.nomeZona)}` : '';
+    return (
+      `<b>${esc(z.idZona || 'Sem zona')}</b>${nome}<br>` +
+      `${z.totalDomicilios} domicílio(s)<br><br>` +
+      linha('A entrevistar', z.aEntrevistar) +
+      linha('Em campo (indefinida)', z.emAndamento) +
+      linha('Sem agendamento iniciado', z.semAgendamento) +
+      // The actionable number, with the overdue share beside it: a queue
+      // of 8 with 3 already blown is not the same job as 8 fresh.
+      (z.agendamentoPendente
+        ? `Agendamento pendente: <b>${z.agendamentoPendente}</b>` +
+          (z.vencidos ? ` (${z.vencidos} vencido(s))` : '') + '<br>'
+        : '') +
+      linha('Agendado', z.agendadoBio) +
+      linha('Coletado', z.coletado) +
+      linha('Recusa', z.recusaBio) +
+      linha('Inelegível', z.inelegivel) +
+      linha('Encerrado sem entrevista', z.semEntrevista) +
+      `<br>Slots livres: ${(t.manha || 0)} manhã, ${(t.tarde || 0)} tarde<br>` +
+      AM.buildSlotsLivresHtml(grupos || [])
+    );
+  }
+
   // --- Agência layers ----------------------------------------------------
   //
   // One toggleable marker layer per agência, so a supervisor covering
@@ -2076,6 +2114,11 @@
   // would risk colouring rows by a different rule than the table beside
   // them used.
   let pendingModo = MODO_MOVIMENTO;
+  // Parked with the rows for the same reason: the map renders after the
+  // tiles load, long after onMapaClick computed these.
+  let pendingZonas = new Map();
+  let pendingTurnos = new Map();
+  let pendingSlots = new Map();
   // Live Leaflet map instance, once rendered — lets a Zonas-tab row
   // click (see focusZonaOnMap below) call fitBounds without threading
   // the map object through every function in between. Cleared on
@@ -2111,7 +2154,8 @@
     tileLoadInFlight = true;
     try {
       const L = await loadLeafletAssets();
-      renderLeafletMap(L, container, pendingJoined || [], pendingModo);
+      renderLeafletMap(L, container, pendingJoined || [], pendingModo,
+        pendingZonas, pendingTurnos, pendingSlots);
       mapInitialized = true;
     } catch (err) {
       container.innerHTML = `<p class="sigc-pro-map-declined">Falha ao carregar o mapa: ${window.__sigcPro.escapeHtml(String(err && err.message || err))}</p>`;
@@ -2185,6 +2229,11 @@
     // leader lines already show it, and the sentence never said WHICH
     // households shared the point — the one thing the reader wanted.
     return (
+      // Agência: the map can be filtered by agência layer, so "whose
+      // household is this" should be answerable without going back to
+      // the table. Omitted entirely when absent — Último Movimento has
+      // no such column, and an empty label is worse than no label.
+      (r.agencia ? `Agência: ${esc(r.agencia)}<br>` : '') +
       `Controle: ${esc(r.controle)}<br>` +
       `Domicílio: ${esc(r.domicilio)}<br>` +
       `Entrevistador: ${esc(r.entrevistador)}<br>` +
@@ -2205,8 +2254,15 @@
     );
   }
 
-  function renderLeafletMap(L, container, joined, modo) {
+  // zonaPorId / turnosPorZona / slotsPorZona are optional: without them
+  // the hull keeps its bare id tooltip, which is what the Último
+  // Movimento variant gets.
+  function renderLeafletMap(L, container, joined, modo, zonaPorId, turnosPorZona,
+    slotsPorZona) {
     const m = modo || MODO_MOVIMENTO;
+    const zonasIdx = zonaPorId || new Map();
+    const turnosIdx = turnosPorZona || new Map();
+    const slotsIdx = slotsPorZona || new Map();
     const hojeIso = new Date().toISOString().slice(0, 10);
     const withCoords = joined.filter((r) => r.temCoordenadas);
     const map = L.map(container);
@@ -2233,13 +2289,24 @@
       if (!hull) return;
       const color = zonaColor(idZona);
       const zonaTooltip = window.__sigcPro.escapeHtml(idZona);
+      const zonaRow = zonasIdx.get(idZona);
+      // Clicking the hull answers "what is in this zona and can it be
+      // booked" — the same figures the Zonas row carries, without
+      // leaving the map.
+      const zonaPopup = zonaRow
+        ? buildZonaPopupHtml(zonaRow, turnosIdx.get(idZona), slotsIdx.get(idZona))
+        : null;
+      const comPopup = (camada) =>
+        (zonaPopup ? camada.bindPopup(zonaPopup) : camada);
       if (hull.type === 'polygon') {
-        L.polygon(hull.points, { color, weight: 2, fillColor: color, fillOpacity: 0.18 })
-          .bindTooltip(zonaTooltip)
+        comPopup(L.polygon(hull.points,
+          { color, weight: 2, fillColor: color, fillOpacity: 0.18 })
+          .bindTooltip(zonaTooltip))
           .addTo(map);
       } else if (hull.type === 'capsule') {
-        L.polyline([hull.a, hull.b], { color, weight: 10, opacity: 0.35, lineCap: 'round' })
-          .bindTooltip(zonaTooltip)
+        comPopup(L.polyline([hull.a, hull.b],
+          { color, weight: 10, opacity: 0.35, lineCap: 'round' })
+          .bindTooltip(zonaTooltip))
           .addTo(map);
       } else if (hull.type === 'circle') {
         L.circle(hull.center, { radius: 30, color, fillColor: color, fillOpacity: 0.35 })
@@ -2816,6 +2883,11 @@
       // Agenda's own Slots Abertos panel uses — the 13:00 cut lives in
       // one place (TARDE_FROM_MIN) or the two features drift apart.
       const turnosPorZona = AM.indexZonaLivres(agendaSlots, minDateIso, fimIso);
+      // Parked for the map, which renders after the tiles load — long
+      // after this function has returned.
+      pendingZonas = new Map(zonaRows.map((z) => [z.idZona || '', z]));
+      pendingTurnos = turnosPorZona;
+      pendingSlots = slotsPorZona;
 
       closePanel();
       document.body.insertAdjacentHTML('beforeend',
@@ -3074,6 +3146,7 @@
     buildZonasTableHtml,
     buildDomiciliosTabHtml,
     buildPopupHtml,
+    buildZonaPopupHtml,
     spiderfyRows,
     domicilioLabel,
     buildPanelHtml,
