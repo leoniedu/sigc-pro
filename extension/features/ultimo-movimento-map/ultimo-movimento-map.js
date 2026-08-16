@@ -2181,14 +2181,12 @@
       ? `<br>Agendado: <span class="${r.futura ? 'sigc-pro-futura' : 'sigc-pro-passada'}">` +
         `${esc(r.agendado)}</span>`
       : '';
-    // Only shown when the marker was fanned out of a shared geocode, so
-    // the user knows the ring is one address, not neighbouring ones.
-    const coLocadoLinha = r.coLocated > 1
-      ? `<br><em>${r.coLocated} domicílios neste mesmo ponto</em>`
-      : '';
+    // No "N domicílios neste mesmo ponto" caption: the fan and its
+    // leader lines already show it, and the sentence never said WHICH
+    // households shared the point — the one thing the reader wanted.
     return (
       `Controle: ${esc(r.controle)}<br>` +
-      `Domicílio: ${esc(r.domicilio)}${coLocadoLinha}<br>` +
+      `Domicílio: ${esc(r.domicilio)}<br>` +
       `Entrevistador: ${esc(r.entrevistador)}<br>` +
       `Tipo: ${esc(r.tipoEntrevista)}<br>` +
       // The collection outcome, which the marker colour now encodes and
@@ -2275,12 +2273,20 @@
     spiderfyRows(withCoords).forEach((r) => {
       const color = statusColor(r, m, hojeIso);
       if (r.coLocated > 1) {
-        // Thin leader line back to the true geocode, so the fan reads as
-        // "these all live at that one point" rather than as separate
-        // addresses scattered around it.
+        // Leader line back to the true geocode, so the ring reads as one
+        // address rather than as neighbours scattered around it. This
+        // replaces a written caption: at 1px and half opacity the line
+        // was invisible until fully zoomed in, which is why the fan
+        // needed explaining in the first place.
         L.polyline([[r.origLat, r.origLon], [r.lat, r.lon]], {
-          color: '#666', weight: 1, opacity: 0.5, interactive: false,
-        }).addTo(map);
+          color: '#444', weight: 1.5, opacity: 0.85, interactive: false,
+        }).addTo(destinoDe(r));
+        // And a dot at the shared point, or every line converges on
+        // nothing and the geometry still has to be inferred.
+        L.circleMarker([r.origLat, r.origLon], {
+          radius: 2, color: '#444', fillColor: '#444', fillOpacity: 1,
+          weight: 0, interactive: false,
+        }).addTo(destinoDe(r));
       }
       // Urgent markers are bigger and darker-edged, and the radius tracks
       // zoom (see raioPorZoom): what needs action is a small minority —

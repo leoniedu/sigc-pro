@@ -4130,3 +4130,78 @@ describe('reloading slots does not duplicate the table chrome', () => {
     }
   });
 });
+
+describe('co-located households are shown, not explained', () => {
+  test('the popup no longer states the count in words', () => {
+    // The fan already says it visually; the sentence was a caption for a
+    // picture the reader is looking at, and it never said WHICH other
+    // households shared the point.
+    const html = UM.buildPopupHtml({
+      controle: 'C1', domicilio: '1', entrevistador: 'F', idZona: 'Z1',
+      tipoEntrevista: 'Realizada', status: 'A agendar', lat: -12, lon: -38,
+      agendado: '', coLocated: 4,
+    }, UM.MODO_BIOMARCADORES);
+    expect(html).not.toContain('neste mesmo ponto');
+    // The household still identifies itself.
+    expect(html).toContain('C1');
+  });
+
+  test('a lone household still renders a popup', () => {
+    const html = UM.buildPopupHtml({
+      controle: 'C1', domicilio: '1', entrevistador: 'F', idZona: 'Z1',
+      tipoEntrevista: 'Realizada', status: 'A agendar', lat: -12, lon: -38,
+      agendado: '', coLocated: 1,
+    }, UM.MODO_BIOMARCADORES);
+    expect(html).toContain('Domicílio: 1');
+  });
+});
+
+describe('the fan draws its own explanation', () => {
+  test('each fanned marker gets a leader line and the shared point a dot', () => {
+    const rec = { linhas: [], pontos: [] };
+    const layer = () => {
+      const l = {
+        addTo: () => l, bindTooltip: () => l, bindPopup: () => l, setRadius: () => l,
+      };
+      return l;
+    };
+    const L = {
+      map: (c) => { if (c) c.innerHTML = ''; return {
+        addLayer: () => {}, setView() { return this; }, fitBounds() { return this; },
+        getZoom: () => 16, on: () => {},
+      }; },
+      tileLayer: layer, polygon: layer, circle: layer, marker: layer,
+      polyline: (pts, opts) => { rec.linhas.push({ pts, opts }); return layer(); },
+      circleMarker: (ll, opts) => { rec.pontos.push({ ll, opts }); return layer(); },
+      divIcon: () => ({}), layerGroup: layer,
+      DomUtil: { create: () => document.createElement('div') },
+      control: Object.assign(() => ({ addTo: () => {}, onAdd: null }),
+        { layers: () => ({ addTo: () => {} }) }),
+    };
+    // Three households on one geocode.
+    const rows = ['1', '2', '3'].map((domicilio) => ({
+      controle: 'C1', domicilio, idZona: 'Z1', temZona: true, temCoordenadas: true,
+      lat: -12, lon: -38, tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado',
+      status: 'A agendar', agendado: '', dataAgendada: '', dataFinalColeta: '',
+      entrevistador: '', agencia: 'A1',
+    }));
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      UM.renderLeafletMap(L, container, rows, UM.MODO_BIOMARCADORES);
+      // One line per fanned household.
+      expect(rec.linhas).toHaveLength(3);
+      // Visible without zooming all the way in: the old 1px/0.5 line was
+      // why the fan needed a written caption.
+      expect(rec.linhas[0].opts.weight).toBeGreaterThan(1);
+      expect(rec.linhas[0].opts.opacity).toBeGreaterThan(0.5);
+      // Every line ends on the true geocode, and a dot marks it so they
+      // do not converge on nothing.
+      rec.linhas.forEach((l) => expect(l.pts[0]).toEqual([-12, -38]));
+      const dots = rec.pontos.filter((p) => p.opts.radius === 2);
+      expect(dots.length).toBeGreaterThan(0);
+    } finally {
+      container.remove();
+    }
+  });
+});
