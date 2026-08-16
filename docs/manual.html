@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SIGC-PRO — Manual do supervisor</title>
+<style>
+  :root { --blue: #005a9c; --ink: #1a1a1a; --muted: #555; --bg: #f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.6 -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: #fff; }
+  header { background: var(--blue); color: #fff; padding: 2.5rem 1rem 2rem; text-align: center; }
+  header h1 { margin: 0 0 .3rem; font-size: 2.1rem; letter-spacing: .02em; }
+  header p { margin: 0; opacity: .9; }
+  main { max-width: 48rem; margin: 0 auto; padding: 2rem 1rem 4rem; }
+  h2 { color: var(--blue); margin-top: 2.4rem; border-bottom: 2px solid #e1e4e8; padding-bottom: .3rem; }
+  h3 { margin-top: 1.8rem; font-size: 1.08rem; }
+  .aviso { background: #fff8e1; border: 1px solid #e6c96b; border-radius: 8px; padding: .8rem 1rem; margin: 1.5rem 0; font-size: .95rem; }
+  .perigo { background: #fdecea; border: 1px solid #e6a29b; border-radius: 8px; padding: .8rem 1rem; margin: 1.5rem 0; font-size: .95rem; }
+  .card { background: var(--bg); border: 1px solid #e1e4e8; border-radius: 8px; padding: 1rem 1.2rem; margin: 1rem 0; }
+  .card h3 { margin: 0 0 .4rem; font-size: 1.05rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .93rem; }
+  th, td { border: 1px solid #ddd; padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  thead th { background: var(--bg); }
+  tbody th { white-space: nowrap; font-weight: 600; }
+  .prov { font-size: .72rem; font-weight: 700; padding: .1rem .4rem; border-radius: 3px; white-space: nowrap; }
+  .relato { background: #e6f2ea; color: #005c3c; }
+  .derivado { background: #e7eff7; color: #00456e; }
+  .inferencia { background: #fff0e0; color: #8a3b00; }
+  .swatch { display: inline-block; width: 11px; height: 11px; margin-right: .35rem; border: 1px solid rgba(0,0,0,.25); vertical-align: middle; }
+  code { background: var(--bg); border: 1px solid #e1e4e8; border-radius: 4px; padding: .1rem .35rem; font-size: .9em; }
+  ol li, ul li { margin: .35rem 0; }
+  footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 2rem 1rem; border-top: 1px solid #e1e4e8; }
+  a { color: var(--blue); }
+  .sumario { background: var(--bg); border: 1px solid #e1e4e8; border-radius: 8px; padding: 1rem 1.2rem; }
+  .sumario ul { margin: .3rem 0; padding-left: 1.1rem; }
+  @media print {
+    header { background: #fff; color: var(--ink); padding: 1rem 0; }
+    .sumario { display: none; }
+    h2 { page-break-after: avoid; }
+    table { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Manual do supervisor</h1>
+  <p>SIGC-PRO — como ler o que o painel mostra</p>
+</header>
+<main>
+
+<p>Este manual trata da <b>interpretação</b>: o que cada número significa,
+de onde ele vem e onde ele pode enganar. Para instalar a extensão e ver a
+lista de botões, veja o <a href="index.html">início</a> ou o arquivo
+LEIA-ME.txt que acompanha o ZIP.</p>
+
+<div class="sumario">
+  <b>Neste manual</b>
+  <ul>
+    <li><a href="#dois">1. Dois relatórios, dois painéis diferentes</a></li>
+    <li><a href="#origem">2. De onde vem cada número</a></li>
+    <li><a href="#colunas">3. As colunas da aba Zonas</a></li>
+    <li><a href="#cores">4. As cores do mapa</a></li>
+    <li><a href="#decisoes">5. Três decisões e como tomá-las</a></li>
+    <li><a href="#cuidado">6. Onde o painel pode enganar</a></li>
+  </ul>
+</div>
+
+<h2 id="dois">1. Dois relatórios, dois painéis diferentes</h2>
+
+<p>O botão MAPA-PRO aparece em duas páginas do SIGC, e o painel que ele
+abre <b>não é o mesmo nas duas</b>. A diferença não é cosmética: é o que o
+painel tem condição de afirmar.</p>
+
+<table>
+  <thead><tr><th>&nbsp;</th><th>Acompanhamento de Biomarcadores</th><th>Último Movimento</th></tr></thead>
+  <tbody>
+    <tr><th>Situação da coleta</th>
+      <td>Informada pelo relatório.</td>
+      <td><b>Não existe.</b> A página não fala de biomarcador.</td></tr>
+    <tr><th>Colunas de demanda</th>
+      <td>Completas (o que falta agendar, o que venceu, déficit).</td>
+      <td>Omitidas — não estimadas. Uma coluna de traços diria "nada a
+          fazer" quando a verdade é "não foi perguntado".</td></tr>
+    <tr><th>Agenda / slots livres</th>
+      <td>Consultados.</td>
+      <td>Não consultados (uma requisição só).</td></tr>
+    <tr><th>Serve para</th>
+      <td>Decidir coleta: onde abrir slots, quem está atrasado.</td>
+      <td>Ver o andamento das <i>entrevistas</i> e onde estão os
+          domicílios.</td></tr>
+  </tbody>
+</table>
+
+<div class="perigo">
+<b>A confusão mais cara.</b> No Último Movimento, quem <b>recusou a
+coleta</b> aparece como entrevista "Realizada" — e <b>verde no mapa</b>,
+igualzinho a quem já coletou. Não é bug: a recusa da coleta acontece
+<i>depois</i> de uma entrevista bem-sucedida, e entrevista bem-sucedida é
+tudo o que esse relatório enxerga. Na Bahia isso são cerca de 50
+domicílios que somem da vista. <b>Para qualquer decisão sobre coleta, abra
+o Relatório de Acompanhamento de Biomarcadores.</b>
+</div>
+
+<h2 id="origem">2. De onde vem cada número</h2>
+
+<p>O painel mistura três tipos de número na mesma tabela, e eles não
+merecem a mesma confiança. A aba <b>❓ Entenda</b>, dentro do próprio
+painel, repete esta classificação coluna a coluna, sempre atualizada.</p>
+
+<table>
+  <tbody>
+    <tr><th><span class="prov relato">RELATO</span></th>
+      <td>O relatório do SIGC afirma; a extensão só contou. Se estiver
+          errado, o erro é do dado de origem.</td></tr>
+    <tr><th><span class="prov derivado">DERIVADO</span></th>
+      <td>Calculado a partir de campos informados — uma soma, uma
+          subtração, uma data comparada com hoje. A conta não erra sobre o
+          dado; pode errar sobre a pergunta.</td></tr>
+    <tr><th><span class="prov inferencia">⚠ INFERÊNCIA</span></th>
+      <td>Deduzido de evidência indireta. <b>Pode errar.</b> Onde aparece,
+          o manual diz em que medição se apoia e onde ela foi feita.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="colunas">3. As colunas da aba Zonas</h2>
+
+<p>Da esquerda para a direita, as colunas seguem o caminho de um
+domicílio: ainda não visitado → entrevista → agendamento → coleta. As
+saídas do caminho (recusas, inelegíveis, encerrados) ficam à parte.
+Cada domicílio está em <b>exatamente uma</b> coluna, e elas somam o
+Total.</p>
+
+<table>
+  <thead><tr><th>Coluna</th><th>Origem</th><th>O que conta — e o que NÃO afirma</th></tr></thead>
+  <tbody>
+    <tr><th>A entrevistar</th><td><span class="prov relato">RELATO</span></td>
+      <td>Ainda não chegou ao entrevistador. <b>Não é atraso de campo</b> —
+          ninguém esteve lá ainda.</td></tr>
+    <tr><th>Em campo (indefinida)</th><td><span class="prov relato">RELATO</span></td>
+      <td>Saiu da distribuição sem tipo de entrevista registrado.
+          <b>Não afirma que a entrevista começou</b>: afirma que não há
+          desfecho.</td></tr>
+    <tr><th>Sem agendamento iniciado</th><td><span class="prov derivado">DERIVADO</span></td>
+      <td>Entrevista feita, mas o item 25A.01 ("deseja iniciar o
+          agendamento?") nunca foi respondido — não há prazo correndo, e
+          também não há coleta encaminhada.</td></tr>
+    <tr><th>Agendamento pendente</th><td><span class="prov derivado">DERIVADO</span></td>
+      <td><b>A fila de trabalho da zona.</b> Prazo correndo, sem horário
+          marcado. Inclui os já vencidos.</td></tr>
+    <tr><th>Vencidos</th><td><span class="prov derivado">DERIVADO</span></td>
+      <td>Quantos dos pendentes já passaram do prazo. <b>Estão contidos na
+          coluna anterior</b> — não somar as duas.</td></tr>
+    <tr><th>Agendado</th><td><span class="prov relato">RELATO</span></td>
+      <td>Com data futura marcada.</td></tr>
+    <tr><th>Coletado</th><td><span class="prov relato">RELATO</span></td>
+      <td>Sangue, urina ou ambos.</td></tr>
+    <tr><th>Recusa biomarc.</th><td><span class="prov relato">RELATO</span></td>
+      <td>Recusou a <b>coleta</b>. Reverter exige convencer sobre o exame.
+          Quem recusou as duas coisas conta aqui.</td></tr>
+    <tr><th>Recusa entrev.</th><td><span class="prov relato">RELATO</span></td>
+      <td>Recusou a <b>entrevista</b>, então não se chegou à coleta.
+          Reverter exige convencer sobre a pesquisa inteira — trabalho
+          diferente.</td></tr>
+    <tr><th>Inelegível</th><td><span class="prov inferencia">⚠ INFERÊNCIA</span></td>
+      <td>Entrevista concluída e descarregada sem abrir o biomarcador, sem
+          prazo. A leitura é que o morador sorteado tem menos de 35 anos,
+          abaixo da idade de coleta. <b>Medido só na Bahia: 69 de 74.</b>
+          Os outros 5 não têm explicação, e a regra ainda não foi conferida
+          em outras UFs. Trate como provável, não como certo.</td></tr>
+    <tr><th>Encerrado sem entrevista</th><td><span class="prov relato">RELATO</span></td>
+      <td>Domicílio vago, uso ocasional, demolido, fora de âmbito ou
+          encerrado por outro motivo.</td></tr>
+    <tr><th>Déficit</th><td><span class="prov derivado">DERIVADO</span></td>
+      <td>Agendamento pendente <b>menos</b> slots livres na janela.
+          Positivo: a zona deve mais do que consegue marcar. Veja a
+          ressalva sobre slots compartilhados na seção 6.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="cores">4. As cores do mapa</h2>
+
+<p>Paleta Okabe-Ito, segura para daltonismo. No Relatório de
+Biomarcadores a cor vem da situação da coleta:</p>
+
+<ul style="list-style:none; padding-left:0;">
+  <li><span class="swatch" style="background:#009E73"></span><b>Verde</b> — coletado: pronto.</li>
+  <li><span class="swatch" style="background:#0072B2"></span><b>Azul</b> — agendado: encaminhado.</li>
+  <li><span class="swatch" style="background:#F0E442"></span><b>Amarelo</b> — a agendar ou vencido: <b>precisa de agenda</b>.</li>
+  <li><span class="swatch" style="background:#D55E00"></span><b>Laranja</b> — recusou a coleta.</li>
+  <li><span class="swatch" style="background:#A63603"></span><b>Vermelho escuro</b> — recusou a entrevista.</li>
+  <li><span class="swatch" style="background:#E69F00"></span><b>Âmbar</b> — sem entrevista, mas reversível (fechado, não encontrado, recusa).</li>
+  <li><span class="swatch" style="background:#999999"></span><b>Cinza</b> — não iniciado: esperando a vez.</li>
+  <li><span class="swatch" style="background:#882255"></span><b>Roxo</b> — outro motivo.</li>
+  <li><span class="swatch" style="background:#000000"></span><b>Preto</b> — não elegível.</li>
+  <li><span class="swatch" style="background:#CC79A7"></span><b>Rosa</b> — status não reconhecido. <b>Se aparecer rosa, avise:</b> o SIGC passou a usar um valor que a extensão não conhece.</li>
+</ul>
+
+<p>Um halo destaca quem está perto do prazo <i>e</i> ainda tem trabalho em
+aberto — quem já coletou nunca é destacado. Domicílios no mesmo endereço
+abrem em leque, para que nenhum fique escondido sob o outro; o pino da
+aba Domicílios leva ao ponto real, não à posição do leque.</p>
+
+<h2 id="decisoes">5. Três decisões e como tomá-las</h2>
+
+<div class="card">
+<h3>Onde abrir mais slots?</h3>
+<p>Aba <b>Zonas</b>, coluna <b>Déficit</b> — já vem ordenada com o pior
+em cima. Déficit positivo significa que a zona deve mais coletas do que
+consegue marcar na janela. As linhas em âmbar são essas. Antes de abrir,
+confira a ressalva de slots compartilhados na seção 6.</p>
+</div>
+
+<div class="card">
+<h3>Quem está atrasado?</h3>
+<p>Aba <b>Domicílios</b>, ordene por <b>Prazo</b>: os vencidos vêm
+primeiro, com dias negativos. O campo nativo do SIGC trunca em zero e não
+distingue "vence hoje" de "venceu há três semanas" — por isso o painel
+recalcula. A aba mostra no próprio título quantos estão com prazo a
+vencer.</p>
+</div>
+
+<div class="card">
+<h3>Isso se resolve com agenda ou com conversa?</h3>
+<p>Aba <b>Domicílios</b>, coluna <b>Ação</b>. "Agendar" e "reagendar" são
+trabalho de agenda — abrir slot resolve. "Reverter recusa" é
+convencimento, e <b>nenhum slot resolve</b>. Na Bahia, a maioria dos
+domicílios com prazo estourado eram recusas: abrir agenda não teria
+adiantado nada.</p>
+</div>
+
+<h2 id="cuidado">6. Onde o painel pode enganar</h2>
+
+<div class="perigo">
+<b>Slots compartilhados inflam a capacidade.</b> Um slot que atende várias
+zonas é contado <b>inteiro em cada uma delas</b>. Se três zonas dividem um
+slot livre, cada uma mostra "1 livre", mas existe só um. Onde há
+compartilhamento, a capacidade soma mais do que existe e o
+<b>Déficit fica subestimado</b> — a zona está pior do que o número diz. A
+aba <b>Slots Abertos</b> da Agenda mostra também a fração ponderada;
+use-a para conferir antes de decidir com base em pouca margem.
+</div>
+
+<div class="aviso">
+<b>"Inelegível" é provável, não certo.</b> Ver a seção 3. Na Bahia, 5 de
+74 domicílios desse grupo não se explicam pela regra de idade. Como a
+coluna não sugere nenhuma ação, esses domicílios saem do radar de vez —
+se a zona estiver apertada, vale conferir alguns na mão.
+</div>
+
+<div class="aviso">
+<b>É uma fotografia, não um acompanhamento.</b> Tudo que o painel mostra é
+o momento da consulta. Outras pessoas marcam slots enquanto ele está
+aberto — use <b>↻ Slots</b> para reconsultar só a agenda. E como nada é
+armazenado, o painel não sabe se uma zona está melhorando ou piorando:
+uma zona com déficit 5 em queda parece idêntica a uma em alta. Para
+acompanhar tendência, exporte o CSV com data e compare fora do SIGC.
+</div>
+
+<div class="aviso">
+<b>As regras envelhecem.</b> A classificação foi medida na Bahia em agosto
+de 2026. Se o SIGC passar a usar um status novo, ele aparece em
+<b>rosa</b> ("Status não reconhecido") em vez de ser absorvido em alguma
+coluna — de propósito: é melhor uma cor estranha do que um número errado.
+Rosa no mapa quer dizer que a regra precisa ser revista.
+</div>
+
+<h2>Privacidade, em uma linha</h2>
+<p>Nenhum dado do SIGC sai do circuito usuário–IBGE. As consultas vão ao
+próprio servidor do SIGC, na sua sessão, sempre mediante clique e
+confirmação; nada é armazenado; a extensão não pede nenhuma permissão do
+navegador. Detalhes na
+<a href="PRIVACY_POLICY.html">política de privacidade</a>.</p>
+
+</main>
+<footer>
+  SIGC-PRO — projeto independente, sem vínculo oficial com o IBGE.<br>
+  <a href="https://github.com/leoniedu/sigc-pro">Código-fonte</a> ·
+  <a href="index.html">Início</a> ·
+  <a href="PRIVACY_POLICY.html">Privacidade</a>
+</footer>
+</body>
+</html>

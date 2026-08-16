@@ -1517,6 +1517,36 @@
       box-shadow: inset 3px 0 0 #D55E00; }
     .sigc-pro-zonas-table td.sigc-pro-devidas { font-weight: 700; }
     .sigc-pro-zonas-hint { margin: 0 0 8px; font-size: 12px; color: #555; }
+    /* Set apart from the three data tabs: it is documentation, not a fourth
+       view of the households. A left rule and muted colour do that without
+       margin-left:auto, which would fight the close button's own auto
+       margin and strand it mid-bar. */
+    #${PANEL_ID} .sigc-pro-tab-entenda { color: #555;
+      border-left: 1px solid #ddd; margin-left: 6px; }
+    .sigc-pro-entenda { padding: 12px 16px; max-width: 70em; font-size: 13px;
+      line-height: 1.5; }
+    .sigc-pro-entenda h4 { margin: 18px 0 6px; font-size: 13px; }
+    .sigc-pro-entenda-fonte { margin: 0 0 4px; }
+    .sigc-pro-entenda-legenda-prov { margin: 0 0 8px; color: #555; font-size: 12px; }
+    .sigc-pro-entenda-table { border-collapse: collapse; width: 100%; }
+    .sigc-pro-entenda-table th, .sigc-pro-entenda-table td {
+      border: 1px solid #ddd; padding: 4px 8px; text-align: left;
+      vertical-align: top; }
+    .sigc-pro-entenda-table thead th { background: #f4f4f4; }
+    .sigc-pro-entenda-table tbody th { font-weight: 600; white-space: nowrap; }
+    /* The grade is spelled out in the text too — never colour alone, so it
+       survives printing, greyscale and colour blindness. */
+    .sigc-pro-prov { font-size: 10px; font-weight: 700; padding: 1px 5px;
+      border-radius: 3px; white-space: nowrap; }
+    .sigc-pro-prov-relato { background: #e6f2ea; color: #005c3c; }
+    .sigc-pro-prov-derivado { background: #e7eff7; color: #00456e; }
+    .sigc-pro-prov-inferencia { background: #fff0e0; color: #8a3b00; }
+    .sigc-pro-entenda-cores, .sigc-pro-entenda-limites { margin: 0; padding-left: 18px; }
+    .sigc-pro-entenda-cores { list-style: none; padding-left: 0; }
+    .sigc-pro-entenda-cores li { display: inline-block; margin: 0 14px 4px 0; }
+    .sigc-pro-entenda-swatch { display: inline-block; width: 10px; height: 10px;
+      margin-right: 4px; border: 1px solid rgba(0,0,0,.25); vertical-align: middle; }
+    .sigc-pro-entenda-limites li { margin-bottom: 6px; }
     /* Secondary to the id it follows: the id is what you sort and filter
        by, the name is what tells you where that is. */
     .sigc-pro-zona-nome { color: #666; font-size: 11px; }
@@ -1652,6 +1682,172 @@
       window.__sigcProUltimoMovimentoExportInternals.onUltimoMovimento();
   }
 
+  // --- The Entenda tab --------------------------------------------------
+  //
+  // Every other tab shows numbers; this one says where they came from.
+  //
+  // The panel presents a reported status and an inferred one in the same
+  // visual register — "Coletado" and "Inelegível" are both just a count in
+  // a column — and the caveats live in `title` tooltips that a CSV export
+  // does not carry, a screenshot does not show, and a hurried reader never
+  // hovers. That gap is the tool's main epistemic risk: it invites acting
+  // on a guess as though it were a fact.
+  //
+  // So each entry carries its PROVENANCE explicitly, in three grades:
+  //   RELATO    — the SIGC report states it; we only counted it.
+  //   DERIVADO  — computed from reported fields by a rule that cannot be
+  //               wrong about the data, only about the question (e.g.
+  //               Déficit is a subtraction; the inputs are reported).
+  //   INFERÊNCIA — a guess from indirect evidence, with the measurement
+  //               that supports it and the UF it was measured in.
+  //
+  // Grades are stated in the text, not only in colour, so they survive
+  // printing and copy-paste.
+  const PROV_RELATO = 'RELATO';
+  const PROV_DERIVADO = 'DERIVADO';
+  const PROV_INFERENCIA = 'INFERÊNCIA';
+
+  // Column explanations per variant. Deliberately built from the SAME
+  // predicates classificaDomicilio uses, described in words: if the two
+  // ever disagree, the tab is lying, which is worse than having no tab.
+  function entendaColunas(modo) {
+    const m = modo || MODO_BIOMARCADORES;
+    if (!m.comDemanda) {
+      return [
+        ['Não distribuída', PROV_RELATO,
+          'Última Posição é "Distribuido" ou "Enviado para Carga": ainda não ' +
+          'chegou ao entrevistador. Ninguém esteve lá — não é atraso de campo.'],
+        ['Realizada', PROV_RELATO,
+          'Tipo Entrevista = "Realizada". Diz que a ENTREVISTA terminou, e ' +
+          'nada sobre o biomarcador.'],
+        ['Não Iniciada', PROV_RELATO, 'Tipo Entrevista = "Não Iniciada".'],
+        ['Dom. Fechado', PROV_RELATO, 'Tipo Entrevista = "Domicílio Fechado".'],
+        ['Recusa entrev.', PROV_RELATO,
+          'Recusou a ENTREVISTA. Este relatório não enxerga quem recusou só ' +
+          'a coleta — essa recusa aparece aqui como entrevista realizada.'],
+        ['Outros', PROV_RELATO,
+          'Demais valores de Tipo Entrevista, incluindo os em branco.'],
+      ];
+    }
+    return [
+      ['A entrevistar', PROV_RELATO,
+        'Última Posição é "Distribuido" ou "Enviado para Carga". Ninguém ' +
+        'esteve lá ainda — não é atraso de campo.'],
+      ['Em campo (indefinida)', PROV_RELATO,
+        'Saiu da distribuição, mas o SIGC não registrou tipo de entrevista. ' +
+        'NÃO afirma que a entrevista começou: afirma que não há desfecho.'],
+      ['Sem agendamento iniciado', PROV_DERIVADO,
+        'Entrevista realizada e sem prazo de coleta — o item 25A.01 ' +
+        '("deseja iniciar o agendamento?") nunca foi respondido. Sem prazo ' +
+        'correndo, mas também sem coleta encaminhada.'],
+      ['Agendamento pendente', PROV_DERIVADO,
+        'Entrevista realizada, prazo do biomarcador correndo e sem horário ' +
+        'marcado. É a fila de trabalho da zona; inclui agendamento vencido.'],
+      ['Vencidos', PROV_DERIVADO,
+        'Quantos dos "Agendamento pendente" já passaram do prazo. Estão ' +
+        'CONTIDOS naquela coluna — as duas não se somam.'],
+      ['Agendado', PROV_RELATO, 'Status "Agendado" com data futura.'],
+      ['Coletado', PROV_RELATO,
+        'Status de coleta realizada (sangue, urina ou ambos).'],
+      ['Recusa biomarc.', PROV_RELATO,
+        'Recusou a COLETA. A entrevista costuma ter sido realizada. Quem ' +
+        'recusou as DUAS conta aqui, não em "Recusa entrev." — as colunas ' +
+        'precisam somar o Total.'],
+      ['Recusa entrev.', PROV_RELATO,
+        'Recusou a ENTREVISTA, então não se chegou à coleta. Reverter exige ' +
+        'convencer sobre a pesquisa inteira, não sobre o exame.'],
+      ['Inelegível', PROV_INFERENCIA,
+        'Entrevista concluída e descarregada sem abrir o biomarcador, e sem ' +
+        'prazo. A leitura é que o morador sorteado tem menos de 35 anos, ' +
+        'abaixo da idade mínima de coleta. MEDIDO SÓ NA BAHIA: 69 dos 74 ' +
+        'domicílios deste grupo tinham morador sorteado com menos de 35 ' +
+        'anos — os outros 5 não têm explicação, e a regra ainda não foi ' +
+        'conferida em outras UFs. Trate como provável, não como certo.'],
+      ['Encerrado sem entrevista', PROV_RELATO,
+        'Sem entrevista aproveitável: domicílio vago, uso ocasional, ' +
+        'demolido, fora de âmbito ou encerrado por outro motivo.'],
+      ['Déficit', PROV_DERIVADO,
+        'Agendamento pendente MENOS os slots livres na janela agendável. ' +
+        'Positivo: a zona deve mais coletas do que consegue marcar. ' +
+        'ATENÇÃO: um slot que atende várias zonas é contado inteiro em cada ' +
+        'uma delas, então a capacidade pode estar superestimada e o déficit ' +
+        'subestimado quando há slots compartilhados.'],
+    ];
+  }
+
+  // What this variant CANNOT answer. First person plural avoided on
+  // purpose: these are limits of the report, not of the reader.
+  function entendaLimites(modo) {
+    const m = modo || MODO_BIOMARCADORES;
+    if (!m.comDemanda) {
+      return [
+        'Este relatório não informa a situação do biomarcador. Não há como ' +
+        'saber daqui quem já coletou, quem está agendado nem quem deve ' +
+        'coleta — por isso o painel não mostra nenhuma coluna de demanda.',
+        'No mapa, quem recusou a COLETA aparece como "Realizada" (verde), ' +
+        'igualzinho a quem já coletou: a recusa da coleta acontece depois ' +
+        'de uma entrevista bem-sucedida, e é isso que este relatório viu. ' +
+        'Para enxergar recusas de coleta, abra o Relatório de ' +
+        'Acompanhamento de Biomarcadores.',
+        'Sem consulta à agenda: não há agendamentos nem slots livres aqui.',
+      ];
+    }
+    return [
+      'Os slots livres contam um slot inteiro em cada zona que ele atende. ' +
+      'Onde há slots compartilhados entre zonas, a capacidade soma mais do ' +
+      'que existe de fato — confira na aba Slots Abertos da Agenda, que ' +
+      'mostra também a fração ponderada.',
+      'Tudo aqui é uma fotografia do momento da consulta. Slots são ' +
+      'marcados por outras pessoas enquanto o painel está aberto; use ' +
+      '"↻ Slots" para reconsultar só a agenda.',
+      'As regras de classificação foram medidas na Bahia em agosto de 2026. ' +
+      'Um status que o SIGC passe a usar e que não esteja previsto aqui ' +
+      'aparece em rosa ("Status não reconhecido") em vez de ser absorvido ' +
+      'em alguma coluna — se aparecer rosa, a regra envelheceu.',
+    ];
+  }
+
+  function buildEntendaHtml(modo) {
+    const m = modo || MODO_BIOMARCADORES;
+    const esc = window.__sigcPro.escapeHtml;
+    const grau = (g) => {
+      const cls = g === PROV_INFERENCIA ? 'sigc-pro-prov-inferencia'
+        : (g === PROV_DERIVADO ? 'sigc-pro-prov-derivado' : 'sigc-pro-prov-relato');
+      const marca = g === PROV_INFERENCIA ? '⚠ ' : '';
+      return `<span class="sigc-pro-prov ${cls}">${marca}${esc(g)}</span>`;
+    };
+    const colunas = entendaColunas(m).map(([nome, prov, texto]) => (
+      `<tr><th scope="row">${esc(nome)}</th><td>${grau(prov)}</td>` +
+      `<td>${esc(texto)}</td></tr>`
+    )).join('');
+    // Straight from legendEntries, so a colour can never be on the map
+    // and missing here — the drift that a hand-written list guarantees.
+    const cores = legendEntries(m).map(([label, cor]) => (
+      `<li><span class="sigc-pro-entenda-swatch" style="background:${esc(cor)}"></span>` +
+      `${esc(label)}</li>`
+    )).join('');
+    const limites = entendaLimites(m).map((t) => `<li>${esc(t)}</li>`).join('');
+    return [
+      '<div class="sigc-pro-entenda">',
+      `<p class="sigc-pro-entenda-fonte"><b>Fonte:</b> ${esc(FONTE_LABEL[m.id])}. ` +
+        `${esc(FONTE_TIP[m.id])}</p>`,
+      '<h4>De onde vem cada número</h4>',
+      '<p class="sigc-pro-entenda-legenda-prov">' +
+        `${grau(PROV_RELATO)} o relatório afirma; aqui só se contou. ` +
+        `${grau(PROV_DERIVADO)} calculado a partir de campos informados. ` +
+        `${grau(PROV_INFERENCIA)} deduzido de evidência indireta — pode errar.</p>`,
+      '<table class="sigc-pro-entenda-table">',
+      '<thead><tr><th>Coluna</th><th>Origem</th><th>O que conta</th></tr></thead>',
+      `<tbody>${colunas}</tbody>`,
+      '</table>',
+      '<h4>Cores do mapa</h4>',
+      `<ul class="sigc-pro-entenda-cores">${cores}</ul>`,
+      '<h4>O que este painel NÃO responde</h4>',
+      `<ul class="sigc-pro-entenda-limites">${limites}</ul>`,
+      '</div>',
+    ].join('\n');
+  }
+
   function buildPanelHtml(joined, zonaRows, slotsPorZona, turnosPorZona, modo, hojeIso) {
     const m = modo || MODO_BIOMARCADORES;
     const esc = window.__sigcPro.escapeHtml;
@@ -1711,6 +1907,12 @@
       '      <button type="button" class="sigc-pro-tab-btn sigc-pro-tab-active" data-tab="mapa">Mapa</button>',
       `      <button type="button" class="sigc-pro-tab-btn" data-tab="zonas">Zonas (${zonaRows.length})</button>`,
       `      <button type="button" class="sigc-pro-tab-btn" data-tab="domicilios">Domicílios (${joined.length})${alertaLabel}</button>`,
+      // Last, and visually set apart: it is documentation, not a fourth
+      // view of the data. Reachable from every tab because the question
+      // it answers ("is this number a fact or a guess?") arises while
+      // reading the others.
+      '      <button type="button" class="sigc-pro-tab-btn sigc-pro-tab-entenda"' +
+        ' data-tab="entenda" title="De onde vem cada número deste painel">❓ Entenda</button>',
       '      <button type="button" class="sigc-pro-panel-close" title="Fechar">×</button>',
       '    </div>',
       '    <div id="sigc-pro-mapa-panel" class="sigc-pro-tab-panel sigc-pro-tab-panel-active">',
@@ -1727,6 +1929,9 @@
       '    <div id="sigc-pro-domicilios-panel" class="sigc-pro-tab-panel">',
       `      <div class="sigc-pro-tab-toolbar">${csvBtn('domicilios', 'Domicílios')}</div>`,
       `      ${domiciliosTable}`,
+      '    </div>',
+      '    <div id="sigc-pro-entenda-panel" class="sigc-pro-tab-panel">',
+      `      ${buildEntendaHtml(m)}`,
       '    </div>',
       '  </div>',
       '</div>',
@@ -2080,7 +2285,11 @@
   function initPanelTables(panelEl) {
     const jq = window.jQuery || window.$;
     if (!jq || !jq.fn || !jq.fn.dataTable || !panelEl) return;
-    panelEl.querySelectorAll('table').forEach((tbl) => {
+    // Data tables only. The Entenda tab's glossary is prose in a table:
+    // sorting it would scramble a reading order chosen to follow the
+    // collection pipeline, and a search box over twelve static rows
+    // invites the reader to treat documentation as data.
+    panelEl.querySelectorAll('table:not(.sigc-pro-entenda-table)').forEach((tbl) => {
       // DataTables reports a column-count mismatch through its own
       // alert(), NOT a thrown error, so the try/catch below cannot
       // contain it — the user just gets a modal. The only defence is
@@ -3262,6 +3471,7 @@
     spiderfyRows,
     domicilioLabel,
     buildPanelHtml,
+    buildEntendaHtml,
     onMapaClick,
     convexHull,
     controleCentroids,

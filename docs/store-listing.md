@@ -24,7 +24,7 @@ Na Lista de Endereços:
 
 No relatório Último Movimento e no Relatório de Acompanhamento de
 Biomarcadores, filtrados por agência, município ou controle:
-• Mapa-pro — abre um painel com três abas. Mapa: os domicílios do
+• Mapa-pro — abre um painel com quatro abas. Mapa: os domicílios do
   recorte filtrado, coloridos pela situação de cada um, com marcadores
   que crescem com o zoom, destaque para os que estão perto do prazo e
   camadas por agência que podem ser ligadas e desligadas uma a uma;
@@ -34,7 +34,10 @@ Biomarcadores, filtrados por agência, município ou controle:
   agendado, o que ainda precisa de agendamento e quantos horários
   seguem livres, com as zonas mais problemáticas no topo. Domicílios: a
   lista completa, com zona, situação, a ação devida em cada caso e um
-  pino que leva ao domicílio no mapa. Cada aba pode ser baixada em CSV.
+  pino que leva ao domicílio no mapa. Cada aba de dados pode ser baixada
+  em CSV. E a aba Entenda, que diz de onde vem cada número do painel: o
+  que o relatório afirma, o que foi calculado a partir dele e o que é
+  apenas provável — para que uma estimativa não seja lida como um fato.
   As coordenadas e a agenda vêm do próprio servidor do SIGC, mediante
   clique e confirmação, no mesmo recorte filtrado na tela.
   No Último Movimento o painel faz uma requisição só (a lista de

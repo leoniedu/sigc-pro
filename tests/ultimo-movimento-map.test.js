@@ -457,6 +457,73 @@ describe('buildPanelHtml', () => {
     expect(html).toContain('sigc-pro-zonas-table');
   });
 
+  describe('the Entenda tab', () => {
+    // The panel states inferences in the same visual register as facts:
+    // "Inelegível" looks exactly like "Coletado", though one is a status
+    // the report gives us and the other is a guess measured in a single
+    // UF. The tooltips carry the caveats, but a tooltip does not survive
+    // a CSV export, a screenshot, or a reader who never hovers.
+    test('is present in both variants', () => {
+      [UM.MODO_MOVIMENTO, UM.MODO_BIOMARCADORES].forEach((modo) => {
+        const html = UM.buildPanelHtml(
+          joined, zonaRows, new Map(), new Map(), modo, '2026-08-15');
+        expect(html).toContain('data-tab="entenda"');
+        expect(html).toContain('sigc-pro-entenda-panel');
+      });
+    });
+
+    test('names the source report and what it can answer', () => {
+      const bio = UM.buildEntendaHtml(UM.MODO_BIOMARCADORES);
+      expect(bio).toContain('Biomarcadores');
+      const mov = UM.buildEntendaHtml(UM.MODO_MOVIMENTO);
+      expect(mov).toContain('Último Movimento');
+    });
+
+    // The whole point of the tab: a reader must be able to tell, per
+    // column, whether the number is reported or inferred.
+    test('marks Inelegível as an inference and says where it was measured', () => {
+      const html = UM.buildEntendaHtml(UM.MODO_BIOMARCADORES);
+      expect(html).toContain('Inelegível');
+      expect(html).toMatch(/INFERÊNCIA/);
+      // The provenance that prompt-pns-zonas.md says is still unconfirmed.
+      expect(html).toContain('35');
+      expect(html).toMatch(/Bahia|BA\b/);
+    });
+
+    test('explains only the columns the variant actually renders', () => {
+      const mov = UM.buildEntendaHtml(UM.MODO_MOVIMENTO);
+      // Demand columns do not exist on Último Movimento, so explaining
+      // them would describe a table the reader cannot see.
+      expect(mov).not.toContain('Déficit');
+      expect(mov).not.toContain('Agendamento pendente');
+      const bio = UM.buildEntendaHtml(UM.MODO_BIOMARCADORES);
+      expect(bio).toContain('Déficit');
+      expect(bio).toContain('Agendamento pendente');
+    });
+
+    // The trap Fable found: a collection refusal renders green on this
+    // variant, indistinguishable from a collected household.
+    test('warns that Último Movimento cannot see collection refusals', () => {
+      const mov = UM.buildEntendaHtml(UM.MODO_MOVIMENTO);
+      expect(mov).toMatch(/recusa/i);
+      expect(mov).toMatch(/biomarcador/i);
+    });
+
+    test('documents every colour the map can actually paint', () => {
+      [UM.MODO_MOVIMENTO, UM.MODO_BIOMARCADORES].forEach((modo) => {
+        const html = UM.buildEntendaHtml(modo);
+        UM.legendEntries(modo).forEach(([label]) => {
+          expect(html).toContain(label);
+        });
+      });
+    });
+
+    test('escapes its content', () => {
+      const html = UM.buildEntendaHtml(UM.MODO_BIOMARCADORES);
+      expect(html).not.toContain('<script');
+    });
+  });
+
   test('includes a close control', () => {
     const html = UM.buildPanelHtml(joined, zonaRows);
     expect(html).toMatch(/fechar|close|×/i);
@@ -494,7 +561,11 @@ describe('buildPanelHtml', () => {
   test('empty joined/zonaRows still renders the panel shell but with a "Zonas (0)" tab and no data rows', () => {
     const html = UM.buildPanelHtml([], []);
     expect(html).toContain('Zonas (0)');
-    expect(html).not.toMatch(/<td/);
+    // Scoped to the DATA tables' bodies: the Entenda tab is static
+    // documentation and legitimately has <td>s of its own, so a
+    // panel-wide "<td" search stopped meaning "no data rows".
+    expect(html).toMatch(/<table class="sigc-pro-zonas-table">.*<tbody><\/tbody>/s);
+    expect(html).toMatch(/<table class="sigc-pro-domicilios-table">.*<tbody><\/tbody>/s);
   });
 });
 
@@ -749,6 +820,17 @@ describe('initPanelTables', () => {
     }
     return record;
   };
+
+  test('leaves the Entenda glossary alone', () => {
+    // It is prose laid out as a table. Sorting it would scramble a reading
+    // order that follows the collection pipeline, and a search box over a
+    // dozen static rows invites reading documentation as data.
+    const record = run(false,
+      '<table class="sigc-pro-entenda-table"><thead><tr><th>Coluna</th></tr></thead>' +
+      '<tbody><tr><td>x</td></tr></tbody></table>');
+    expect(record.initOpts).toBeNull();
+    expect(record.len).toBeNull();
+  });
 
   // A real panel table always has a header: initPanelTables refuses to
   // initialize a table whose body disagrees with its header (see
