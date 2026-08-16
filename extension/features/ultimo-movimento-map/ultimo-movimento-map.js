@@ -280,8 +280,8 @@
       // The nine-column partition (MODO_BIOMARCADORES) — see
       // classificaDomicilio. Every household increments exactly one.
       aEntrevistar: 0, emAndamento: 0, inelegivel: 0, semAgendamento: 0,
-      agendamentoPendente: 0, agendadoBio: 0, coletado: 0, recusaBio: 0,
-      semEntrevista: 0,
+      agendamentoPendente: 0, agendadoBio: 0, coletado: 0,
+      recusaBiomarcador: 0, recusaEntrevista: 0, semEntrevista: 0,
       // A subset of agendamentoPendente, not a tenth column: a queue of
       // 29 fresh and one of 29 already blown demand different staffing,
       // and merged they looked identical.
@@ -323,7 +323,9 @@
       // outcomes, which is all that report carries.
       if (m.comDemanda) {
         const CHAVE = {
-          coletado: 'coletado', agendado: 'agendadoBio', recusa: 'recusaBio',
+          coletado: 'coletado', agendado: 'agendadoBio',
+          recusaBiomarcador: 'recusaBiomarcador',
+          recusaEntrevista: 'recusaEntrevista',
           semEntrevista: 'semEntrevista', inelegivel: 'inelegivel',
           agendamentoPendente: 'agendamentoPendente',
           semAgendamento: 'semAgendamento', aEntrevistar: 'aEntrevistar',
@@ -457,7 +459,15 @@
     if (status === STATUS_AGENDADO && !coletaEmAberto(r, hojeIso)) {
       return 'agendado';                                                   // 40
     }
-    if (status === 'Recusa' || tipo === 'Recusa') return 'recusa';         // 68
+    // The two refusals are different jobs — persuading someone about a
+    // blood draw is not persuading them about the survey — and the map
+    // has always drawn them apart (#D55E00 vs #A63603). A household that
+    // refused BOTH counts once, under the biomarcador: R lets its two
+    // columns overlap (51 + 18 over 68 households), but these must sum to
+    // Total, and the biomarcador refusal is the one blocking the
+    // collection this page is about.
+    if (status === 'Recusa') return 'recusaBiomarcador';                   // 51
+    if (tipo === 'Recusa') return 'recusaEntrevista';                      // 17
     if (status === 'Outro Motivo' || status === 'Não elegível' ||
         TIPO_SEM_MORADOR.has(tipo)) {
       return 'semEntrevista';                                              // 43
@@ -493,7 +503,8 @@
     agendamentoPendente: 'Agendamento pendente',
     agendado: 'Agendado',
     coletado: 'Coletado',
-    recusa: 'Recusa',
+    recusaBiomarcador: 'Recusa do biomarcador',
+    recusaEntrevista: 'Recusa da entrevista',
     inelegivel: 'Inelegível',
     semEntrevista: 'Encerrado sem entrevista',
   };
@@ -512,7 +523,8 @@
     agendamentoPendente: 'agendar',
     agendado: '',
     coletado: '',
-    recusa: 'reverter recusa',
+    recusaBiomarcador: 'reverter recusa do biomarcador',
+    recusaEntrevista: 'reverter recusa da entrevista',
     inelegivel: '',
     semEntrevista: '',
   };
@@ -571,7 +583,8 @@
         : '') +
       linha('Agendado', z.agendadoBio) +
       linha('Coletado', z.coletado) +
-      linha('Recusa', z.recusaBio) +
+      linha('Recusa do biomarcador', z.recusaBiomarcador) +
+      linha('Recusa da entrevista', z.recusaEntrevista) +
       linha('Inelegível', z.inelegivel) +
       linha('Encerrado sem entrevista', z.semEntrevista) +
       (m.comSlots
@@ -1106,8 +1119,12 @@
     const TIP_AGENDADO = 'Biomarcador com data futura marcada.';
     const TIP_COLETADO = 'Biomarcador coletado (sangue, urina ou ambos).';
     const TIP_RECUSA_BIO =
-      'Recusa do biomarcador ou da entrevista. Pode ser revertida — por ' +
-      'isso não entra em Encerrado.';
+      'Recusou a COLETA de sangue/urina. A entrevista costuma ter sido ' +
+      'realizada. Reverter exige convencer sobre o exame.';
+    const TIP_RECUSA_ENTREV =
+      'Recusou a ENTREVISTA — não se chegou à coleta. Reverter exige ' +
+      'convencer sobre a pesquisa inteira. Quem recusou as duas conta em ' +
+      'Recusa biomarc.';
     const TIP_INELEGIVEL =
       'Entrevista concluída e descarregada sem abrir o biomarcador. Em ' +
       'geral o morador sorteado tem menos de 35 anos, abaixo da idade de ' +
@@ -1146,7 +1163,8 @@
           `<th title="${esc(TIP_VENCIDOS)}">Vencidos</th>` +
           `<th title="${esc(TIP_AGENDADO)}">Agendado</th>` +
           `<th title="${esc(TIP_COLETADO)}">Coletado</th>` +
-          `<th title="${esc(TIP_RECUSA_BIO)}">Recusa</th>` +
+          `<th title="${esc(TIP_RECUSA_BIO)}">Recusa biomarc.</th>` +
+          `<th title="${esc(TIP_RECUSA_ENTREV)}">Recusa entrev.</th>` +
           `<th title="${esc(TIP_INELEGIVEL)}">Inelegível</th>` +
           `<th title="${esc(TIP_SEM_ENTREVISTA)}">Encerrado sem entrevista</th>` +
           `<th title="${esc(TIP_DEFICIT)}">Déficit</th>` +
@@ -1236,7 +1254,8 @@
             `<td>${r.vencidos || 0}</td>` +
             `<td>${r.agendadoBio || 0}</td>` +
             `<td>${r.coletado || 0}</td>` +
-            `<td>${r.recusaBio || 0}</td>` +
+            `<td>${r.recusaBiomarcador || 0}</td>` +
+            `<td>${r.recusaEntrevista || 0}</td>` +
             `<td>${r.inelegivel || 0}</td>` +
             `<td>${r.semEntrevista || 0}</td>` +
             // The manager's actual question, as a sortable number rather

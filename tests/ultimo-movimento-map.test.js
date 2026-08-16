@@ -3488,7 +3488,8 @@ describe('every household lands in a column that is actually rendered', () => {
     ], new Map(), UM.MODO_BIOMARCADORES, '2026-08-15');
     const soma = z[0].aEntrevistar + z[0].emAndamento + z[0].inelegivel +
       z[0].semAgendamento + z[0].agendamentoPendente + z[0].agendadoBio +
-      z[0].coletado + z[0].recusaBio + z[0].semEntrevista;
+      z[0].coletado + z[0].recusaBiomarcador + z[0].recusaEntrevista +
+      z[0].semEntrevista;
     expect(soma).toBe(z[0].totalDomicilios);
     // Nothing may land in the interview-outcome buckets on this page.
     expect(z[0].naoIniciada).toBe(0);
@@ -3557,12 +3558,13 @@ describe('classificaDomicilio — the nine-column partition', () => {
       .toBe('coletado');
   });
 
-  test('Recusa is its own column — it may still be reversible', () => {
-    expect(c({ status: 'Recusa' })).toBe('recusa');
-    expect(c({ tipoEntrevista: 'Recusa', status: 'Não iniciado' })).toBe('recusa');
+  test('the refusals are their own columns — they may still be reversed', () => {
+    expect(c({ status: 'Recusa' })).toBe('recusaBiomarcador');
+    expect(c({ tipoEntrevista: 'Recusa', status: 'Não iniciado' }))
+      .toBe('recusaEntrevista');
     // Biomarcador refusal wins over an open interview.
     expect(c({ tipoEntrevista: '', ultimaPosicao: 'Reentrevista', status: 'Recusa' }))
-      .toBe('recusa');
+      .toBe('recusaBiomarcador');
   });
 
   test('Encerrado sem entrevista: no usable interview happened', () => {
@@ -3612,10 +3614,11 @@ describe('the Zonas table renders the nine columns', () => {
     expect(z.agendamentoPendente).toBe(1);
     expect(z.agendadoBio).toBe(1);
     expect(z.coletado).toBe(1);
-    expect(z.recusaBio).toBe(1);
+    expect(z.recusaBiomarcador).toBe(1);
     expect(z.semEntrevista).toBe(1);
     const soma = z.aEntrevistar + z.emAndamento + z.inelegivel + z.semAgendamento +
-      z.agendamentoPendente + z.agendadoBio + z.coletado + z.recusaBio + z.semEntrevista;
+      z.agendamentoPendente + z.agendadoBio + z.coletado + z.recusaBiomarcador +
+      z.recusaEntrevista + z.semEntrevista;
     expect(soma).toBe(z.totalDomicilios);
     expect(z.totalDomicilios).toBe(9);
   });
@@ -3626,7 +3629,8 @@ describe('the Zonas table renders the nine columns', () => {
     const html = UM.buildZonasTableHtml([z], new Map(), new Map(), UM.MODO_BIOMARCADORES);
     ['A entrevistar', 'Em campo (indefinida)', 'Inelegível',
       'Sem agendamento iniciado', 'Agendamento pendente', 'Agendado',
-      'Coletado', 'Recusa', 'Encerrado sem entrevista'].forEach((label) =>
+      'Coletado', 'Recusa biomarc.', 'Recusa entrev.',
+      'Encerrado sem entrevista'].forEach((label) =>
       expect(html).toContain(`>${label}</th>`));
     // The names that confused the reader are gone.
     expect(html).not.toContain('Biomarc. devidos');
@@ -4574,5 +4578,63 @@ describe('the zona name survives to the Domicílios tab', () => {
     }], UM.MODO_BIOMARCADORES, hoje);
     expect(html).toContain('29XJYY');
     expect(html).not.toContain('undefined');
+  });
+});
+
+describe('the two refusals are counted apart, as the map already draws them', () => {
+  const hoje = '2026-08-15';
+  const d = (over) => ({
+    tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado',
+    status: 'Não iniciado', dataAgendada: '', dataFinalColeta: '', ...over,
+  });
+
+  test('a biomarcador refusal and an interview refusal are different classes', () => {
+    // The map already coloured them apart (#D55E00 vs #A63603) while the
+    // tables merged them under one "Recusa" — internally inconsistent,
+    // and the merged label reads as one problem when the two need
+    // different responses: arguing for a blood draw is not arguing for
+    // the survey.
+    expect(UM.classificaDomicilio(d({ status: 'Recusa' }), hoje)).toBe('recusaBiomarcador');
+    expect(UM.classificaDomicilio(
+      d({ tipoEntrevista: 'Recusa', status: 'Não iniciado' }), hoje))
+      .toBe('recusaEntrevista');
+  });
+
+  test('a household that refused BOTH counts once, under the biomarcador', () => {
+    // R lets its two columns overlap (51 + 18 for 68 households). These
+    // columns must sum to Total, so the overlap has to land somewhere:
+    // the biomarcador refusal is the one blocking the collection this
+    // page is about.
+    expect(UM.classificaDomicilio(
+      d({ status: 'Recusa', tipoEntrevista: 'Recusa' }), hoje))
+      .toBe('recusaBiomarcador');
+  });
+
+  test('the BA split, exactly', () => {
+    const rows = [
+      ...Array.from({ length: 50 }, (_, i) => d({ domicilio: `a${i}`, status: 'Recusa' })),
+      ...Array.from({ length: 17 }, (_, i) => d({
+        domicilio: `b${i}`, tipoEntrevista: 'Recusa', status: 'Não iniciado',
+      })),
+      d({ domicilio: 'c', status: 'Recusa', tipoEntrevista: 'Recusa' }),
+    ].map((r) => ({ ...r, controle: 'C1', idZona: 'Z1', temZona: true, temCoordenadas: true }));
+    const z = UM.aggregateZonas(rows, new Map(), UM.MODO_BIOMARCADORES, hoje)[0];
+    expect(z.recusaBiomarcador).toBe(51);
+    expect(z.recusaEntrevista).toBe(17);
+    expect(z.recusaBiomarcador + z.recusaEntrevista).toBe(68);
+    expect(z.totalDomicilios).toBe(68);
+  });
+
+  test('both columns are rendered, named for which refusal they are', () => {
+    const z = UM.aggregateZonas([
+      d({ controle: 'C1', domicilio: '1', idZona: 'Z1', temZona: true,
+        temCoordenadas: true, status: 'Recusa' }),
+    ], new Map(), UM.MODO_BIOMARCADORES, hoje)[0];
+    const html = UM.buildZonasTableHtml([z], new Map(), new Map(), UM.MODO_BIOMARCADORES);
+    expect(html).toContain('Recusa biomarc.');
+    expect(html).toContain('Recusa entrev.');
+    const ths = (html.match(/<th[ >]/g) || []).length;
+    const tds = (html.match(/<td[ >]/g) || []).length;
+    expect(tds).toBe(ths);
   });
 });
