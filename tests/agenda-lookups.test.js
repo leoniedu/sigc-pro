@@ -537,3 +537,26 @@ describe('endereços cache keys every field it was scoped by', () => {
     }
   });
 });
+
+describe('the Lista de Endereços filtro keeps to the fields that report knows', () => {
+  test('sends exactly the five fields the R reference sends', () => {
+    // pns.zonas' fetch_enderecos_uf (R/sigc_enderecos.R:51) posts
+    // IdFiltro/IdUf/IdAgencia/IdMunicipio/Controle/TipoVisualizacao and
+    // nothing else. Adding IdZona — which the biomarcadores report does
+    // accept — made this endpoint answer with something that has no
+    // #tableRelatorio at all: "tabela não reconhecida".
+    const body = AM.filtroBody('29', '*', 'ListaEnderecos', '*', '2927408', 'Z1');
+    const filtro = JSON.parse(decodeURIComponent(body.replace(/^filtro=/, '')));
+    expect(Object.keys(filtro).sort()).toEqual([
+      'Controle', 'IdAgencia', 'IdFiltro', 'IdMunicipio', 'IdUf', 'TipoVisualizacao',
+    ]);
+    expect(filtro).not.toHaveProperty('IdZona');
+  });
+
+  test('the zona still separates cache entries', () => {
+    // The scope narrowing has to stay in the KEY even though it cannot
+    // be sent: two zonas of one município must not share a response.
+    expect(AM.chaveEnderecos({ IdUf: '29', IdMunicipio: '2927408', IdZona: 'Z1' }))
+      .not.toBe(AM.chaveEnderecos({ IdUf: '29', IdMunicipio: '2927408', IdZona: 'Z2' }));
+  });
+});

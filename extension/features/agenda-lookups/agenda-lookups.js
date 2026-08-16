@@ -62,17 +62,19 @@
   //
   // municipio is last and optional so the Agenda call sites, which never
   // scope by it, keep working unchanged.
-  function filtroBody(uf, controle, idFiltro, agencia, municipio, zona) {
+  // EXACTLY the fields this report accepts — the same six pns.zonas'
+  // fetch_enderecos_uf posts (R/sigc_enderecos.R:51). Adding IdZona,
+  // which the biomarcadores report does accept, made this endpoint
+  // answer with a page that has no #tableRelatorio at all, surfacing as
+  // "tabela não reconhecida" (2026-08-15). Scope narrowing that this
+  // report cannot express belongs in the CACHE KEY, never in the body.
+  function filtroBody(uf, controle, idFiltro, agencia, municipio) {
     return 'filtro=' + encodeURIComponent(JSON.stringify({
       IdFiltro: idFiltro,
       IdUf: String(uf),
       IdAgencia: agencia ? String(agencia) : '*',
       IdMunicipio: municipio ? String(municipio) : '*',
       Controle: String(controle),
-      // The biomarcadores page can narrow by zona, and Lista de Endereços
-      // honours the same field. Dropping it returned the whole município
-      // for a zona-scoped report.
-      IdZona: zona ? String(zona) : '*',
       TipoVisualizacao: 'S',
     }));
   }
@@ -601,24 +603,28 @@
   // Cached by the full scope for the page's lifetime (in-memory only),
   // no TTL — coordinates don't go stale within a page's life the way
   // free-slot counts do.
+  // Every field the SCOPE was narrowed by, including ones Lista de
+  // Endereços cannot receive: the response is then the whole município,
+  // but reusing it for a DIFFERENT zona is what made the join count
+  // change between presses (1185/1185 missing, then 540/1185).
+  function chaveEnderecos(filtro) {
+    const f = filtro || {};
+    return [f.IdUf, f.IdAgencia, f.IdMunicipio, f.Controle, f.IdZona]
+      .map((v) => String(v == null || v === '' ? '*' : v)).join('|');
+  }
+
   function fetchEnderecosPorFiltro(filtro) {
     const f = filtro || {};
     const uf = String(f.IdUf || '');
     const agencia = String(f.IdAgencia || '*');
     const municipio = String(f.IdMunicipio || '*');
     const controle = String(f.Controle || '*');
-    const zona = String(f.IdZona || '*');
-    // EVERY field the request was scoped by belongs in the key. With zona
-    // missing, two zonas of one município shared an entry: the second
-    // Mapa click reused the first zona's addresses, so the same data
-    // joined differently between presses (1185/1185 missing, then
-    // 540/1185, with nothing changed).
-    const chave = `${uf}|${agencia}|${municipio}|${controle}|${zona}`;
+    const chave = chaveEnderecos(f);
     const hit = enderecosAgenciaCache.get(chave);
     if (hit) return hit;
     const p = postRelatorio({
       slug: 'ListaEnderecos',
-      body: filtroBody(uf, controle, 'ListaEnderecos', agencia, municipio, zona),
+      body: filtroBody(uf, controle, 'ListaEnderecos', agencia, municipio),
       parse: parseEnderecosHtml,
     }).catch((err) => {
       // A failed fetch must not poison the cache — the next click retries.
@@ -1087,6 +1093,7 @@
     parseUltimoMovimentoTable, mergeUltimoMovimento, parseDistribuicaoTable, mergeDistribuicao, filtrarUrl,
     fetchEnderecos, fetchEnderecosByAgencia, fetchEnderecosPorFiltro,
     resetEnderecosAgenciaCache, stripAccents, stripHeaderMarker,
+    filtroBody, chaveEnderecos,
     filtroBodyUltimoMovimentoPorFiltro, parsePosicoesHtml, tableToPosicoesMap,
     fetchPosicoesPorFiltro, resetPosicoesCache,
     filtroBodyBiomarcadores, parseBiomarcadoresHtml, tableToBiomarcadoresMap,
