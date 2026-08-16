@@ -22,17 +22,26 @@ Na Lista de Endereços:
   Google Maps ou QGIS, com camadas separadas para domicílios
   selecionados e não selecionados (cores seguras para daltonismo).
 
-No relatório Último Movimento, filtrado por agência, município ou
-controle:
+No relatório Último Movimento e no Relatório de Acompanhamento de
+Biomarcadores, filtrados por agência, município ou controle:
 • Mapa-pro — abre um painel com três abas. Mapa: os domicílios do
-  recorte filtrado no mapa, agrupados e coloridos por zona, com a
-  entrevista agendada de cada um. Zonas: a situação de coleta de cada
-  zona — inclusive as que ainda não tiveram coleta — quantos domicílios
-  estão agendados e quantos não, e os horários ainda livres, listados dia
-  a dia. Domicílios: a lista completa, com zona, entrevista agendada,
-  situação, tipo e entrevistador, ordenável por qualquer coluna. As
-  coordenadas e a agenda vêm do próprio servidor do SIGC, mediante
+  recorte filtrado, coloridos pela situação de cada um, com marcadores
+  que crescem com o zoom, destaque para os que estão perto do prazo e
+  camadas por agência que podem ser ligadas e desligadas uma a uma;
+  domicílios no mesmo endereço abrem em leque, para que nenhum fique
+  escondido sob o outro. Zonas: a situação de cada zona — inclusive as
+  que ainda não tiveram coleta — o que já foi coletado, o que está
+  agendado, o que ainda precisa de agendamento e quantos horários
+  seguem livres, com as zonas mais problemáticas no topo. Domicílios: a
+  lista completa, com zona, situação, a ação devida em cada caso e um
+  pino que leva ao domicílio no mapa. Cada aba pode ser baixada em CSV.
+  As coordenadas e a agenda vêm do próprio servidor do SIGC, mediante
   clique e confirmação, no mesmo recorte filtrado na tela.
+  No Último Movimento o painel faz uma requisição só (a lista de
+  endereços) e omite as colunas que dependem da agenda, em vez de
+  mostrá-las zeradas. No relatório de biomarcadores, onde a situação da
+  coleta é informada pelo próprio relatório, ele também consulta os
+  horários livres da agenda para dizer onde há capacidade.
 
 Em qualquer relatório com tabela:
 • CSV-pro — exporta a tabela como CSV (todas as páginas, pronto para o
@@ -69,15 +78,17 @@ Em Administrar Agenda:
 PRIVACIDADE: nenhum dado do SIGC sai do circuito usuário–IBGE. A
 extensão não solicita NENHUMA permissão do navegador e não armazena
 nada; todos os arquivos são gerados localmente e salvos pelo mecanismo
-padrão de download do Chrome. As consultas de dados — Guia do Dia, Mapa-pro e
-exportação multi-agência do Último Movimento — vão todas ao próprio servidor
-do SIGC (mesma sessão do usuário), acionadas por clique e confirmação.
+padrão de download do Chrome. As consultas de dados — Guia do Dia, Mapa-pro
+(nos dois relatórios) e exportação multi-agência do Último Movimento — vão
+todas ao próprio servidor do SIGC (mesma sessão do usuário), acionadas por
+clique e confirmação.
 
 O único recurso externo é o fundo cartográfico do Mapa-pro: as imagens
 de mapa (tiles) do OpenStreetMap, buscadas apenas após uma confirmação
 própria e separada — recusando, as abas Zonas e Domicílios continuam
-funcionando. Nenhum dado do SIGC acompanha esse pedido, e a biblioteca
-de mapa vem dentro da extensão, não de um CDN.
+funcionando, e os CSV de cada aba também. Nenhum dado do SIGC acompanha
+esse pedido, e a biblioteca de mapa vem dentro da extensão, não de um
+CDN.
 
 Os arquivos gerados contêm links para o Google Maps nos endereços
 (quando há coordenadas), que são links, não recursos carregados — nada é
@@ -97,22 +108,22 @@ Código-fonte aberto: https://github.com/leoniedu/sigc-pro
 ```
 Adds unofficial productivity tools to SIGC (IBGE) pages: export buttons
 (PDF, KML, CSV) on report tables, a zone map and scheduling panel on the
-Último Movimento report, and Agenda helpers (CSV export, slot checks,
-open-slot capacity panel, printable day guide, date picker), without
-modifying the portal's native features. It requests no browser
-permissions and stores nothing.
+Último Movimento and Biomarcadores reports, and Agenda helpers (CSV
+export, slot checks, open-slot capacity panel, printable day guide, date
+picker), without modifying the portal's native features. It requests no
+browser permissions and stores nothing.
 ```
 
 ## Host permission justification (dashboard field)
 
-Limit: 1000 characters. Current text is 982.
+Limit: 1000 characters. Current text is 997.
 
 ```
-The extension injects a content script only on SIGC portal pages (Sistema Integrado de Gestão da Coleta, IBGE), matched by the three specific hosts SIGC is served from — portalweb.ibge.gov.br, portalweb2.ibge.gov.br and w3sigcpns2025.ibge.gov.br — not the whole ibge.gov.br domain. It adds export buttons (PDF, KML, CSV), a zone map panel and Agenda helpers, reading data already on the page. No other site is accessed, no permission is declared, and nothing is stored.
+The extension injects a content script only on SIGC portal pages (Sistema Integrado de Gestão da Coleta, IBGE), matched by the three specific hosts SIGC is served from — portalweb.ibge.gov.br, portalweb2.ibge.gov.br and w3sigcpns2025.ibge.gov.br — not the whole ibge.gov.br domain. It adds export buttons (PDF, KML, CSV), a zone map panel and Agenda helpers, reading data already on the page. No other site is accessed, no permission is declared, nothing is stored.
 
-Network calls are three optional, click-and-confirm requests to the SIGC server itself, same origin, within the user's session: a printable day guide; a map panel fetching the filtered scope's address list and the UF's agenda slots; and a bulk report export looping one request per agência.
+Network calls are three optional, click-and-confirm requests to the SIGC server itself, same origin, in the user's session: a printable day guide; a map panel, on two of the portal's reports, fetching the filtered scope's address list and the UF's agenda slots; and a bulk report export, one request per agência.
 
-The only external resource is that map's background: OpenStreetMap tiles, fetched after a separate confirmation and carrying no SIGC data. Leaflet is bundled, not from a CDN. Nothing goes to the developer; no telemetry.
+The only external resource is that map's background: OpenStreetMap tiles, fetched after a separate confirmation, carrying no SIGC data. Leaflet is bundled, not from a CDN. Nothing goes to the developer; no telemetry.
 ```
 
 ## Storage permission justification (dashboard field)
@@ -128,7 +139,7 @@ the permission.
 "Collect" here means Google's definition: **transmitting data off the user's
 machine**. Reading data already on the page, showing it, and saving a file
 locally are not collection. Every answer below is No, and none of them has
-changed through 0.2.178.
+changed through 0.2.216.
 
 | Data type | Answer | Why |
 |---|---|---|
@@ -163,11 +174,35 @@ the answers in the table above are unchanged.
   the scoping fields differ.
 - **0.2.178** — the toolbar buttons are 8px wider so the longest label
   ("MAPA") is not truncated. Cosmetic.
+- **0.2.179–0.2.216** — Mapa-pro also runs on the **Relatório de
+  Acompanhamento de Biomarcadores** (`relatorio-acomp-biomarc`), a second
+  SIGC report on the same three hosts. This is the one change in this
+  range a reviewer should look at, and it adds **no new host, no new
+  permission and no new kind of request**: it is the same click-and-confirm,
+  same-origin, `credentials: 'same-origin'` POST the panel already made on
+  Último Movimento, issued from a second page of the same portal. As
+  before, every URL is built from `location.origin` and `location.pathname`
+  — no absolute host appears anywhere in the source, and the privacy gate
+  in `scripts/check-privacy.sh` fails the build if one does.
+
+  On that report the panel also asks for the UF's free agenda slots, so it
+  can say which zones still have capacity. That request already existed for
+  Guia do Dia and goes to the same server; on Último Movimento the panel
+  still makes a single request and simply omits the agenda-derived columns.
+
+  Everything else in this range is presentation of data already fetched:
+  colouring households by collection status, markers that scale with zoom,
+  fanning out households that share coordinates, per-agência layer toggles,
+  a CSV download button per tab (built from the table already on screen),
+  rebuilt Zonas/Domicílios columns, and fixes to counting and labelling.
+  No data leaves the user–IBGE circuit at any point.
 
 ### If a reviewer asks about network activity
 
 These are the only outbound requests. Both were already present in the
-published 0.2.176 and are unchanged in this version:
+published 0.2.176 and are unchanged in kind through 0.2.216 — the only
+difference is that the same-origin panel request is now also available from
+a second SIGC report (biomarcadores), on the same hosts:
 
 1. **Same-origin SIGC requests** (Guia do Dia, Mapa-pro, CSV TODAS) — all to the
    IBGE server the user is already on, inside their authenticated session, each
