@@ -2366,7 +2366,13 @@
       camadaPorAgencia.forEach((camada, agencia) => {
         overlays[`Agência ${agencia} (${gruposAgencia.get(agencia).length})`] = camada;
       });
-      L.control.layers(null, overlays, { collapsed: true }).addTo(map);
+      // Expanded, not collapsed: the collapsed form is a button whose
+      // only content is background-image: url(images/layers.png), and
+      // that file is not vendored — only the three marker PNGs are — so
+      // it rendered as an empty white square. Expanded needs no icon,
+      // and with a handful of agências the list is the useful state
+      // anyway.
+      L.control.layers(null, overlays, { collapsed: false }).addTo(map);
     }
 
     addStatusLegend(L, map, m);

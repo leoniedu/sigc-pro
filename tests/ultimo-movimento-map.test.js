@@ -4231,3 +4231,45 @@ describe('a total key mismatch is reported as such', () => {
     expect(d.exemploEnderecos).toBe('290030605000023|9');
   });
 });
+
+describe('the agência layer control does not depend on a missing icon', () => {
+  test('it is created expanded, so no toggle image is needed', () => {
+    // Leaflet's collapsed control is a button whose only content is
+    // background-image: url(images/layers.png) — and that file is not
+    // vendored (only the three marker PNGs are), so it rendered as an
+    // empty white square.
+    const rec = { layersOpts: null };
+    const layer = () => {
+      const l = { addTo: () => l, bindTooltip: () => l, bindPopup: () => l, setRadius: () => l };
+      return l;
+    };
+    const L = {
+      map: (c) => { if (c) c.innerHTML = ''; return {
+        addLayer: () => {}, setView() { return this; }, fitBounds() { return this; },
+        getZoom: () => 13, on: () => {},
+      }; },
+      tileLayer: layer, polygon: layer, polyline: layer, circle: layer,
+      circleMarker: layer, marker: layer, divIcon: () => ({}), layerGroup: layer,
+      DomUtil: { create: () => document.createElement('div') },
+      control: Object.assign(() => ({ addTo: () => {}, onAdd: null }), {
+        layers: (_base, _overlays, opts) => { rec.layersOpts = opts; return { addTo: () => {} }; },
+      }),
+    };
+    const linha = (agencia, domicilio) => ({
+      controle: 'C1', domicilio, idZona: 'Z1', temZona: true, temCoordenadas: true,
+      lat: -12, lon: -38, tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado',
+      status: 'A agendar', agendado: '', dataAgendada: '', dataFinalColeta: '',
+      entrevistador: '', agencia,
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      UM.renderLeafletMap(L, container,
+        [linha('A1', '1'), linha('A2', '2')], UM.MODO_BIOMARCADORES);
+      expect(rec.layersOpts).not.toBeNull();
+      expect(rec.layersOpts.collapsed).toBe(false);
+    } finally {
+      container.remove();
+    }
+  });
+});
