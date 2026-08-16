@@ -533,7 +533,8 @@
   // Ordered like the Zonas columns — pipeline first, then the two dead
   // ends — so the popup and the table tell the same story in the same
   // order.
-  function buildZonaPopupHtml(z, turnos, grupos) {
+  function buildZonaPopupHtml(z, turnos, grupos, modo) {
+    const m = modo || MODO_BIOMARCADORES;
     const esc = window.__sigcPro.escapeHtml;
     const AM = window.__sigcProAgendaLookups;
     const t = turnos || {};
@@ -544,6 +545,16 @@
     return (
       `<b>${esc(z.idZona || 'Sem zona')}</b>${nome}<br>` +
       `${z.totalDomicilios} domicílio(s)<br><br>` +
+      // Each variant's own counts. Listing the biomarcador ones on
+      // Último Movimento printed a header, a blank gap and a slots line
+      // that variant never has — every field was undefined there.
+      (m.comDemanda ? '' :
+        linha('Não distribuída', z.naoDistribuida) +
+        linha('Realizada', z.realizada) +
+        linha('Não Iniciada', z.naoIniciada) +
+        linha('Dom. Fechado', z.domicilioFechado) +
+        linha('Recusa entrev.', z.recusa) +
+        linha('Outros', z.outros)) +
       linha('A entrevistar', z.aEntrevistar) +
       linha('Em campo (indefinida)', z.emAndamento) +
       linha('Sem agendamento iniciado', z.semAgendamento) +
@@ -558,8 +569,10 @@
       linha('Recusa', z.recusaBio) +
       linha('Inelegível', z.inelegivel) +
       linha('Encerrado sem entrevista', z.semEntrevista) +
-      `<br>Slots livres: ${(t.manha || 0)} manhã, ${(t.tarde || 0)} tarde<br>` +
-      AM.buildSlotsLivresHtml(grupos || [])
+      (m.comSlots
+        ? `<br>Slots livres: ${(t.manha || 0)} manhã, ${(t.tarde || 0)} tarde<br>` +
+          AM.buildSlotsLivresHtml(grupos || [])
+        : '')
     );
   }
 
@@ -2347,7 +2360,7 @@
       // booked" — the same figures the Zonas row carries, without
       // leaving the map.
       const zonaPopup = zonaRow
-        ? buildZonaPopupHtml(zonaRow, turnosIdx.get(idZona), slotsIdx.get(idZona))
+        ? buildZonaPopupHtml(zonaRow, turnosIdx.get(idZona), slotsIdx.get(idZona), m)
         : null;
       const comPopup = (camada) =>
         (zonaPopup ? camada.bindPopup(zonaPopup) : camada);

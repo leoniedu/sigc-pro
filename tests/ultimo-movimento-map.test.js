@@ -4478,3 +4478,40 @@ describe('focusing a single household on the map', () => {
     }
   });
 });
+
+describe('the zona popup speaks each variant\'s own language', () => {
+  const umZona = {
+    idZona: 'Z1', nomeZona: 'Pituba', realizada: 5, naoIniciada: 2,
+    domicilioFechado: 1, recusa: 1, outros: 3, naoDistribuida: 20,
+    totalDomicilios: 32, semCoordenadas: 0,
+  };
+
+  test('Último Movimento shows its interview counts, not empty biomarcador ones', () => {
+    // The popup listed aEntrevistar/coletado/etc, which only exist on the
+    // biomarcadores page — on Último Movimento every one is undefined, so
+    // the popup rendered a header, a blank gap and a slots line that
+    // variant never has.
+    const html = UM.buildZonaPopupHtml(umZona, {}, [], UM.MODO_MOVIMENTO);
+    expect(html).toContain('Realizada');
+    expect(html).toContain('Não distribuída');
+    expect(html).toContain('32');
+    // No agenda on this variant, so no slot line at all.
+    expect(html).not.toContain('Slots livres');
+    expect(html).not.toContain('Agendamento pendente');
+  });
+
+  test('biomarcadores keeps the collection breakdown and its slots', () => {
+    const bioZona = {
+      idZona: 'Z1', nomeZona: 'Pituba', aEntrevistar: 30, emAndamento: 5,
+      semAgendamento: 2, agendamentoPendente: 8, vencidos: 3, agendadoBio: 4,
+      coletado: 12, recusaBio: 1, inelegivel: 6, semEntrevista: 2,
+      totalDomicilios: 70, semCoordenadas: 0,
+    };
+    const html = UM.buildZonaPopupHtml(bioZona, { manha: 2, tarde: 1 },
+      [{ isoDate: '2026-08-20', horas: ['08:30'] }], UM.MODO_BIOMARCADORES);
+    expect(html).toContain('Agendamento pendente');
+    expect(html).toContain('3 vencido');
+    expect(html).toContain('Slots livres');
+    expect(html).toContain('08:30');
+  });
+});
