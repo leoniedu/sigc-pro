@@ -236,6 +236,66 @@ Working checklist; move items up/down freely. Specs live in
       (tests/) pins mount lifecycle, factories, and pure helpers. See
       docs/superpowers/specs/2026-07-19-shared-button-layer-design.md.
 
+- [x] **Mapa-pro on the Relatório de Acompanhamento de Biomarcadores**, as a
+      second variant of the same panel rather than a migration
+      (`docs/mapa-biomarcadores.md`). The biomarcadores page reports the
+      collection `status` literally, so demand is counted instead of
+      inferred; Último Movimento keeps its own variant because one request
+      and no agenda consent is worth having, and it OMITS the agenda-derived
+      columns rather than showing them zeroed. Nine-column taxonomy from
+      `classificaDomicilio`, Déficit column with the zonas sorted worst-first,
+      prazo recomputed (SIGC truncates `Dias Prazo Final` at zero), status
+      colouring, spiderfied co-located households, per-agência layers, a CSV
+      per tab, and a pin per Domicílios row. Shipped across v0.2.179–0.2.216
+
+- [ ] **Déficit and free-slot columns count a shared slot whole in every
+      zona.** `indexZonaLivres` (`agenda-lookups.js:369-377`) already computes
+      `peso` (1/n per zona) and a `compartilhado` flag beside the whole
+      counts, but the map panel reads only `manha`/`tarde`
+      (`ultimo-movimento-map.js:1029`, `:1197`, `:1215`, `:1280`). One free
+      slot listing three zonas therefore reads as capacity 1 in each: the
+      summed capacity overstates what is bookable, and both Déficit and
+      `zonaSemCapacidade` under-flag exactly the zonas a manager is looking
+      for. Slots Abertos hit this same trap and solved it — it prints the
+      weighted share in grey next to the whole count and names the rule in
+      its legend ("Um slot que lista várias zonas conta inteiro em cada uma
+      delas", `agenda-slots-abertos.js:202-208`, `:237-242`). Port that
+      treatment; the data is already on the object, so this is presentation,
+      not new plumbing. The two features currently disagree about a trap one
+      of them documents
+
+- [ ] **"Inelegível" states as fact an inference measured in one UF.**
+      `classificaDomicilio` (`ultimo-movimento-map.js:482-484`) files
+      `Realizada + Descarregado + Não iniciado + sem prazo` as Inelegível — 74
+      households in BA, of which 69 have a selected resident under 35, the
+      floor ever collected. The remaining ~5 are unexplained, and
+      `docs/prompt-pns-zonas.md` still asks the R side to confirm the age-35
+      rule against PE/MA/RJ, so the rule is measured, not established.
+      `CLASSE_ACAO.inelegivel` is the empty string (`:528`), which makes the
+      classification terminal in practice: nothing ever asks about these
+      households again. The tooltip hedges with "Em geral" but ends "não
+      haverá coleta", which reads as settled. Either soften the label and
+      tooltip to name it as an inference, or give the class an action so the
+      residue stays reachable — the current pairing of a confident label with
+      no action is what turns an inference into a silent write-off
+
+- [ ] **The Último Movimento map paints a collection refusal green.** In
+      MODO_MOVIMENTO the colour comes from `tipoEntrevista`, so a household
+      that completed its interview and then refused the blood draw is
+      `Realizada` — indistinguishable from one already collected (~50 such
+      households in BA; `statusColor` comment, `:713-717`). The panel is
+      honest in text (it captions itself "sem demanda estimada" and renders
+      no demand column) but the map is the part people read at a glance, and
+      that variant is the tempting one: one request, no agenda consent. Worth
+      either a visual mark for households the variant cannot speak about, or
+      a caption on the map itself rather than only on the panel
+
+- [ ] Dead code: `TIP_REALIZADAS` and `TIP_PENDENTES`
+      (`ultimo-movimento-map.js:1055-1063`) are assigned per variant and
+      never rendered — leftovers from when Último Movimento had demand
+      columns. Harmless, but they read as live documentation of a proxy rule
+      that no longer reaches the UI
+
 - [ ] **PDF customization** (see `2026-07-14-pdf-customization-design.md`):
   - [ ] per-column styles (`fontSize`, `bold`, …) via pesquisa config
   - [ ] clickable map link per row (OSM template, lat/lon from dropped
@@ -246,6 +306,19 @@ Working checklist; move items up/down freely. Specs live in
 
 ## Later
 
+- [ ] **Workload by entrevistador, not just by zona.** Every view aggregates
+      by zona, so a red zona tells a manager where the problem is but not who
+      to reassign. Último Movimento already carries `Entrevistador` and
+      `Data`, both parsed today, so days-since-last-movement per interviewer
+      is computable from data already in hand — it is the lever actually
+      pulled once a zona flags. Raised in the manager-perspective review
+      (2026-08-15) as the highest-value thing neither raw SIGC nor this
+      extension answers
+- [ ] Trend over time: every panel is a snapshot, so a zona at Déficit 5 and
+      improving looks identical to one deteriorating. Nothing is stored by
+      design, so this would mean dated CSV exports and tooling outside the
+      extension rather than state inside it — noting it so the constraint is
+      a decision on record, not an oversight
 - [ ] Field-test checklist on more report variations (other UFs, empty
       coordinates, filtered exports)
 - [ ] Field-test Agenda CSV-PRO on more UFs/pesquisas/Dia view; consider
