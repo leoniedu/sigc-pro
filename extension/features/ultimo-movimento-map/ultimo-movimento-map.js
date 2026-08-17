@@ -1685,10 +1685,14 @@
   // The prompt must name what is actually requested: MODO_MOVIMENTO makes
   // ONE call, and asking permission for an agenda fetch that never happens
   // trains the user to click through a prompt that didn't mean anything.
+  // The inverse held until 0.2.219: the biomarcadores prompt said "duas"
+  // while three requests were made — the Último Movimento posições fetch
+  // was added without updating this text.
   const FETCH_CONSENT_MSG =
-    'SIGC-PRO: isto fará duas consultas ao próprio servidor do SIGC — a ' +
-    'Lista de Endereços (coordenadas e zona) do mesmo recorte filtrado no ' +
-    'relatório e a agenda da UF. Nenhum dado sai do IBGE. Continuar?';
+    'SIGC-PRO: isto fará três consultas ao próprio servidor do SIGC — a ' +
+    'Lista de Endereços (coordenadas e zona) e o Último Movimento ' +
+    '(posição de cada questionário), ambos do mesmo recorte filtrado no ' +
+    'relatório, e a agenda da UF. Nenhum dado sai do IBGE. Continuar?';
 
   const FETCH_CONSENT_MSG_SEM_AGENDA =
     'SIGC-PRO: isto fará uma consulta ao próprio servidor do SIGC — a ' +
