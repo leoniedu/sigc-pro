@@ -520,14 +520,13 @@ documentado em `enderecoKey()` (`sigc-common.js:70`).
    Ver a tabela no topo.
 5. **~~Como o usuário sabe qual variante está vendo~~** — resolvido: o
    painel se identifica na própria barra ("Biomarcadores" ou "Último
-   Movimento (sem demanda estimada)"), com tooltip dizendo de onde vêm os
-   dados. Antes a diferença só era inferível pelas colunas **ausentes**, o
-   que não ajuda quem nunca viu a outra variante.
+   Movimento"), com tooltip dizendo de onde vêm os dados. Antes a
+   diferença só era inferível pelas colunas **ausentes**, o que não ajuda
+   quem nunca viu a outra variante.
 
-   O rótulo do Último Movimento diz "sem demanda estimada", não "demanda
-   estimada": aquela variante não mostra coluna de demanda nenhuma, então
-   a ressalva honesta é "não há esse número aqui", não "o número é
-   aproximado".
+   O rótulo do Último Movimento é só o nome do relatório; a ressalva de
+   que aquela variante não mostra coluna de demanda nenhuma ("não há esse
+   número aqui") vive no tooltip e na aba Entenda, não no título.
 
 ## 11. O mapa: cor, alfinete e contorno ✅
 

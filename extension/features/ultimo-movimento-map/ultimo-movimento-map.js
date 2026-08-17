@@ -248,7 +248,16 @@
   // its posições are past distribution), so the two columns are nested,
   // never disjoint — the header tooltip says so, or a reader tries to
   // add them up.
-  const POSICAO_NAO_EM_CAMPO = new Set([POSICAO_DISTRIBUIDO, 'Enviado para Carga']);
+  // 'Não Distribuido' never appears in the parquet history (all 13 UFs,
+  // superseded rows included — the five values above are the whole
+  // recorded domain), but the SIGC UI can show it for a questionário
+  // that never left the base. With no row to copy the spelling from,
+  // the plausible case/accent forms are all matched.
+  const POSICAO_NAO_DISTRIBUIDO = new Set([
+    'Não Distribuido', 'Não Distribuído', 'Não distribuido', 'Não distribuído']);
+
+  const POSICAO_NAO_EM_CAMPO = new Set([POSICAO_DISTRIBUIDO, 'Enviado para Carga',
+    ...POSICAO_NAO_DISTRIBUIDO]);
 
   function isPendente(r) {
     if (r.agendado) return false;
@@ -333,7 +342,7 @@
     const novoBucket = (idZona, nomeZona) => ({
       idZona, nomeZona,
       realizada: 0, naoIniciada: 0, domicilioFechado: 0, recusa: 0, outros: 0,
-      naoDistribuida: 0, semDesfecho: 0,
+      naoDistribuida: 0,
       // The nine-column partition (MODO_BIOMARCADORES) — see
       // classificaDomicilio. Every household increments exactly one.
       aEntrevistar: 0, emAndamento: 0, inelegivel: 0, semAgendamento: 0,
@@ -374,20 +383,13 @@
           gk.tem ? (gk.nome || gk.id) : g.semGrupoLabel));
       }
       const bucket = byZona.get(key);
-      // Posição wins over tipo for the untouched states. A household that
-      // is merely 'Distribuido' or 'Enviado para Carga' carries
-      // tipo_entrevista 'Não Iniciada' — measured in BA, ALL of them do —
-      // so counting by tipo filed 4.909 households (69% of the state)
-      // beside the 366 that actually started and stalled mid-collection.
-      // "Nobody has been there yet" and "someone went and it did not
-      // finish" are different problems, and only the second is a backlog.
-      // Three-way, because "no interview outcome" has two very different
-      // causes. The biomarcadores report leaves tipo_entrevista blank
-      // until the interview concludes — 1.416 of 1.860 rows in BA — and
-      // those split into households nobody has reached yet (1.192) and
-      // households already worked whose interview produced no outcome
-      // (224). Filing both under one label hides which of the two a zona
-      // is actually made of.
+      // On Último Movimento each column is the report's own Tipo
+      // Entrevista, verbatim. The one posição-based column is the
+      // literal 'Não Distribuido' — a questionário the base never sent
+      // out is not fieldwork in any state. An earlier version also
+      // filed 'Distribuido' and 'Enviado para Carga' under "Não
+      // distribuída", which put a household whose posição literally
+      // reads 'Distribuido' in a column named the opposite.
       // On the biomarcadores page the columns are collection states (see
       // classificaDomicilio); on Último Movimento they stay interview
       // outcomes, which is all that report carries.
@@ -408,7 +410,7 @@
           if (dias !== null && dias < 0) bucket.vencidos += 1;
         }
       } else {
-        const coluna = POSICAO_NAO_EM_CAMPO.has(r.ultimaPosicao)
+        const coluna = POSICAO_NAO_DISTRIBUIDO.has(r.ultimaPosicao)
           ? 'naoDistribuida'
           : (TIPO_COLUNA[r.tipoEntrevista] || 'outros');
         bucket[coluna] += 1;
@@ -529,6 +531,13 @@
     if (status === STATUS_AGENDADO && !coletaEmAberto(r, hojeIso)) {
       return 'agendado';                                                   // 40
     }
+    // A lapsed 'Agendado' WITHOUT a concluded interview deliberately
+    // falls through to 'emAndamento', not the pendente queue: the
+    // booking proves 25A.01 was once reached, but not that rebooking is
+    // the next step. The one real BA case (292740805060022/15) was a
+    // Realizada rolled back to Reentrevista — the field is still working
+    // it — and an interview done in the wrong domicílio can also reach
+    // agendamento. "Reagendar" on either would be a wrong instruction.
     // The two refusals are different jobs — persuading someone about a
     // blood draw is not persuading them about the survey — and the map
     // has always drawn them apart (#D55E00 vs #A63603). A household that
@@ -630,7 +639,7 @@
     const nome = z.nomeZona && z.nomeZona !== z.idZona
       ? ` — ${esc(z.nomeZona)}` : '';
     return (
-      `<b>${esc(z.idZona || 'Sem zona')}</b>${nome}<br>` +
+      `<b>${esc(z.idZona || grupoDe(m).semGrupoLabel)}</b>${nome}<br>` +
       `${z.totalDomicilios} domicílio(s)<br><br>` +
       // Each variant's own counts. Listing the biomarcador ones on
       // Último Movimento printed a header, a blank gap and a slots line
@@ -791,11 +800,12 @@
   function statusColor(row, modo, hojeIso) {
     const m = modo || MODO_MOVIMENTO;
     if (!m.comDemanda) {
-      // Both untouched states, not just Distribuido: 'Enviado para
-      // Carga' is 850 households in BA that nobody has visited either,
-      // and colouring them as worked was the same conflation the Zonas
-      // column had.
-      if (POSICAO_NAO_EM_CAMPO.has(row.ultimaPosicao)) return STATUS_INATIVO;
+      // Same rule as the Zonas columns: the colour follows the report's
+      // own Tipo Entrevista, and only the literal 'Não Distribuido'
+      // posição is inactive grey — a questionário the base never sent
+      // out. 'Distribuido'/'Enviado para Carga' take their tipo's
+      // colour like every other row.
+      if (POSICAO_NAO_DISTRIBUIDO.has(row.ultimaPosicao)) return STATUS_INATIVO;
       return STATUS_TIPO_COLOR[row.tipoEntrevista] || STATUS_OUTROS;
     }
     const s = (row && row.status) || '';
@@ -1118,19 +1128,6 @@
     const AM = window.__sigcProAgendaLookups;
     const slotsMap = slotsPorZona || new Map();
     const turnosMap = turnosPorZona || new Map();
-    // The two demand columns are computed from different sources per
-    // variant (status vs. the ultimaPosicao proxy), so the tooltips have
-    // to say which — a tooltip describing the other variant's rule is
-    // worse than none.
-    const TIP_REALIZADAS = m.comDemanda
-      ? 'Entrevista feita e biomarcador ainda em aberto, sem agendamento. ' +
-        'Contida em Pendentes — as duas não se somam.'
-      : 'Realizadas sem descarregar e sem agendamento — o biomarcador está ' +
-        'devido. Contida em Pendentes — as duas não se somam.';
-    const TIP_PENDENTES = m.comDemanda
-      ? 'Biomarcador em aberto, sem agendamento, com ou sem entrevista feita.'
-      : 'Domicílios já em campo e sem agendamento, exceto os descarregados. ' +
-        'Não inclui Distribuído.';
     // "Recusa" is two different outcomes in SIGC, in nearly disjoint
     // populations: refusing the INTERVIEW (tipoEntrevista, what this
     // report shows) and refusing the biomarcador COLLECTION (the
@@ -1164,23 +1161,21 @@
     // column indices at all (order: []), so nothing else has to be
     // renumbered when a column is added — which is exactly the trap a
     // positional config would have set here.
-    // Separated from "Não Iniciada" because they answer different
-    // questions. Both carry tipo_entrevista 'Não Iniciada', so counting
-    // by tipo put 69% of BA's households (4.909 of 7.140) in the same
-    // column as the 366 that started and stalled.
     const TIP_NAO_DISTRIBUIDA =
-      'Ainda não chegou ao entrevistador (Distribuído ou Enviado para Carga). ' +
-      'Ninguém esteve lá ainda — não é atraso de campo.';
-    // Both are "no interview outcome recorded", and the report leaves
-    // tipo blank for 76% of households — but one group has been visited
-    // and the other has not, which is the difference between a stalled
-    // zona and one that has not started.
-    const TIP_SEM_DESFECHO =
-      'Já distribuído, mas a entrevista ainda não concluiu — sem tipo ' +
-      'registrado. Alguém já esteve lá; o desfecho é que não veio.';
+      'Última Posição "Não Distribuído": o questionário ainda não foi ' +
+      'distribuído ao entrevistador. As demais colunas seguem o Tipo ' +
+      'Entrevista do relatório.';
+    // "Não Iniciada" is SIGC's word for "no outcome transmitted", not a
+    // literal "untouched": measured against biomarcadores in BA, every
+    // blank-outcome household carries it, including partially-unloaded
+    // interviews and a few with a coleta already booked.
+    const TIP_NAO_INICIADA =
+      'Tipo Entrevista "Não Iniciada": nenhum desfecho de entrevista ' +
+      'transmitido — pode não ter começado, estar no meio do caminho ou ' +
+      'ter terminado sem descarregar por completo.';
     const TIP_A_ENTREVISTAR =
-      'Ainda não chegou ao entrevistador (Distribuído ou Enviado para Carga). ' +
-      'Ninguém esteve lá — não é atraso de campo.';
+      'A entrevista ainda não aconteceu (Última Posição "Não Distribuído", ' +
+      '"Distribuido" ou "Enviado para Carga") — não é atraso de coleta.';
     // NOT "em andamento": the SIGC recorded no tipo at all, so there is
     // no evidence the interview progressed — only that the household
     // left distribution. An interview genuinely under way shows a tipo
@@ -1204,9 +1199,9 @@
       'convencer sobre a pesquisa inteira. Quem recusou as duas conta em ' +
       'Recusa biomarc.';
     const TIP_INELEGIVEL =
-      'Entrevista concluída e descarregada sem abrir o biomarcador. Em ' +
-      'geral o morador sorteado tem menos de 35 anos, abaixo da idade de ' +
-      'coleta — não haverá coleta.';
+      'Entrevista concluída e descarregada sem abrir o biomarcador. ' +
+      'Morador selecionado com menos de 35 anos ou outra inelegibilidade ' +
+      '— não haverá coleta.';
     const TIP_VENCIDOS =
       'Quantos dos "Agendamento pendente" já passaram do prazo. Contidos ' +
       'naquela coluna — não somar as duas.';
@@ -1252,7 +1247,9 @@
           `<th title="${esc(TIP_DEFICIT)}">Déficit</th>` +
           '<th>Total</th><th>Sem coordenadas</th>'
         : `<th title="${esc(TIP_NAO_DISTRIBUIDA)}">Não distribuída</th>` +
-          '<th>Realizada</th><th>Não Iniciada</th><th>Dom. Fechado</th>' +
+          '<th>Realizada</th>' +
+          `<th title="${esc(TIP_NAO_INICIADA)}">Não Iniciada</th>` +
+          '<th>Dom. Fechado</th>' +
           `<th title="${esc(TIP_RECUSA)}">Recusa entrev.</th>` +
           '<th>Outros</th><th>Total</th><th>Sem coordenadas</th>') +
       (m.comSlots
@@ -1413,7 +1410,7 @@
     const pinTh =
       `<th class="sigc-pro-zona-pin-col" data-orderable="false" title="${esc(TIP_PIN_DOM)}"></th>`;
     const head = m.comDemanda
-      ? `<tr>${pinTh}<th>Controle</th><th>Domicílio</th><th>Zona</th>` +
+      ? `<tr>${pinTh}<th>Controle</th><th>Domicílio</th><th>Agência</th><th>Zona</th>` +
         `<th title="${esc(TIP_SITUACAO)}">Situação</th>` +
         `<th title="${esc(TIP_ACAO)}">Ação</th>` +
         `<th title="${esc(TIP_PRAZO)}">Prazo</th>` +
@@ -1490,6 +1487,7 @@
         // Último Movimento keeps the bare id — its column exists to tell
         // rows apart and to sort/filter, which the short id does in far
         // less width.
+        (m.comDemanda ? `<td>${dash(r.agencia)}</td>` : '') +
         (m.comDemanda
           ? `<td>${r.zona
             ? `${esc(r.idZona)} <span class="sigc-pro-zona-nome">${esc(r.zona)}</span>`
@@ -1523,16 +1521,13 @@
     return `<table class="sigc-pro-domicilios-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
   }
 
-  // Names the report each variant was built from, and — for the one that
-  // cannot answer it — says so on the visible label rather than only in a
-  // tooltip nobody hovers over.
-  //
-  // MODO_MOVIMENTO renders NO demand column (comDemanda is false), so the
-  // honest caveat is not "the number is estimated" but "there is no
-  // number here": this page cannot tell who still owes a biomarcador.
+  // Names the report each variant was built from. The movimento caveat
+  // ("this page cannot tell who still owes a biomarcador") lives in the
+  // tooltip and the Entenda tab, not in the label — a parenthetical
+  // there read as a subtitle, not a warning.
   const FONTE_LABEL = {
     biomarcadores: 'Biomarcadores',
-    movimento: 'Último Movimento (sem demanda estimada)',
+    movimento: 'Último Movimento',
   };
   const FONTE_TIP = {
     biomarcadores:
@@ -1801,24 +1796,31 @@
     if (!m.comDemanda) {
       return [
         ['Não distribuída', PROV_RELATO,
-          'Última Posição é "Distribuido" ou "Enviado para Carga": ainda não ' +
-          'chegou ao entrevistador. Ninguém esteve lá — não é atraso de campo.'],
+          'Última Posição é "Não Distribuído": o questionário ainda não ' +
+          'foi distribuído ao entrevistador. Todas as outras colunas ' +
+          'seguem o Tipo Entrevista informado pelo relatório.'],
         ['Realizada', PROV_RELATO,
           'Tipo Entrevista = "Realizada". Diz que a ENTREVISTA terminou, e ' +
           'nada sobre o biomarcador.'],
-        ['Não Iniciada', PROV_RELATO, 'Tipo Entrevista = "Não Iniciada".'],
+        ['Não Iniciada', PROV_RELATO,
+          'Tipo Entrevista = "Não Iniciada": nenhum desfecho de entrevista ' +
+          'foi transmitido. Pode não ter começado, estar no meio do ' +
+          'caminho ou ter terminado sem descarregar por completo — o ' +
+          'relatório não distingue.'],
         ['Dom. Fechado', PROV_RELATO, 'Tipo Entrevista = "Domicílio Fechado".'],
         ['Recusa entrev.', PROV_RELATO,
           'Recusou a ENTREVISTA. Este relatório não enxerga quem recusou só ' +
-          'a coleta — essa recusa aparece aqui como entrevista realizada.'],
+          'a coleta de biomarcadores — essa recusa aparece aqui como ' +
+          'entrevista realizada.'],
         ['Outros', PROV_RELATO,
           'Demais valores de Tipo Entrevista, incluindo os em branco.'],
       ];
     }
     return [
       ['A entrevistar', PROV_RELATO,
-        'Última Posição é "Distribuido" ou "Enviado para Carga". Ninguém ' +
-        'esteve lá ainda — não é atraso de campo.'],
+        'Última Posição é "Não Distribuído", "Distribuido" ou "Enviado ' +
+        'para Carga": a entrevista ainda não aconteceu — não é atraso ' +
+        'de coleta.'],
       ['Em campo (indefinida)', PROV_RELATO,
         'Saiu da distribuição, mas o SIGC não registrou tipo de entrevista. ' +
         'NÃO afirma que a entrevista começou: afirma que não há desfecho.'],
@@ -1844,11 +1846,8 @@
         'convencer sobre a pesquisa inteira, não sobre o exame.'],
       ['Inelegível', PROV_INFERENCIA,
         'Entrevista concluída e descarregada sem abrir o biomarcador, e sem ' +
-        'prazo. A leitura é que o morador sorteado tem menos de 35 anos, ' +
-        'abaixo da idade mínima de coleta. MEDIDO SÓ NA BAHIA: 69 dos 74 ' +
-        'domicílios deste grupo tinham morador sorteado com menos de 35 ' +
-        'anos — os outros 5 não têm explicação, e a regra ainda não foi ' +
-        'conferida em outras UFs. Trate como provável, não como certo.'],
+        'prazo. Morador selecionado com menos de 35 anos ou outra ' +
+        'inelegibilidade.'],
       ['Encerrado sem entrevista', PROV_RELATO,
         'Sem entrevista aproveitável: domicílio vago, uso ocasional, ' +
         'demolido, fora de âmbito ou encerrado por outro motivo.'],
@@ -2025,7 +2024,7 @@
       '    </div>',
       '    <div id="sigc-pro-zonas-panel" class="sigc-pro-tab-panel">',
       '      <div class="sigc-pro-tab-toolbar">' +
-        csvBtn('zonas', 'Zonas') +
+        csvBtn('zonas', gPainel.rotuloPlural) +
         (m.comSlots ? recarregarBtn : '') +
         '<span class="sigc-pro-slots-stamp"></span></div>',
       `      ${zonasHint}`,
@@ -2248,7 +2247,13 @@
   function nomeCsvAba(aba, modo, hojeIso) {
     const m = modo || MODO_MOVIMENTO;
     const dia = hojeIso || new Date().toISOString().slice(0, 10);
-    return `sigc-pro-${CSV_FONTE_SLUG[m.id]}-${aba}-${dia}.csv`;
+    // The tab's internal id stays "zonas" in both variants, but the file
+    // must name what its rows actually are — on Último Movimento they
+    // are controles, and "zonas" in the filename would resurrect the
+    // grouping that page no longer uses.
+    const slug = aba === 'zonas' && grupoDe(m).campo === 'controle'
+      ? 'controles' : aba;
+    return `sigc-pro-${CSV_FONTE_SLUG[m.id]}-${slug}-${dia}.csv`;
   }
 
   function baixarCsvDaAba(panelEl, aba, modo) {

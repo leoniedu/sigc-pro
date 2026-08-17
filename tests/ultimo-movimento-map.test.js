@@ -977,9 +977,9 @@ describe('open slots in the Zonas tab', () => {
 });
 
 describe('statusColor', () => {
-  test('Distribuido wins regardless of tipoEntrevista', () => {
-    expect(UM.statusColor({ ultimaPosicao: 'Distribuido', tipoEntrevista: 'Realizada' })).toBe('#888888');
-    expect(UM.statusColor({ ultimaPosicao: 'Distribuido', tipoEntrevista: '' })).toBe('#888888');
+  test('the tipo wins — only the literal Não Distribuído is grey', () => {
+    expect(UM.statusColor({ ultimaPosicao: 'Distribuido', tipoEntrevista: 'Realizada' })).toBe('#009E73');
+    expect(UM.statusColor({ ultimaPosicao: 'Não Distribuído', tipoEntrevista: 'Não Iniciada' })).toBe('#888888');
   });
 
   test('Realizada -> green', () => {
@@ -2329,7 +2329,7 @@ describe('statusColor per modo', () => {
       .toBe('#009E73');
     expect(UM.statusColor(bio({ tipoEntrevista: 'Recusa' }), UM.MODO_MOVIMENTO, hoje))
       .toBe('#D55E00');
-    expect(UM.statusColor(bio({ ultimaPosicao: 'Distribuido' }), UM.MODO_MOVIMENTO, hoje))
+    expect(UM.statusColor(bio({ ultimaPosicao: 'Não Distribuído' }), UM.MODO_MOVIMENTO, hoje))
       .toBe('#888888');
   });
 
@@ -2620,6 +2620,15 @@ describe('prazo in the Domicílios tab', () => {
     const tds = (html.match(/<td[ >]/g) || []).length;
     expect(tds).toBe(ths);
   });
+
+  test('biomarcadores tab carries the Agência column; movimento does not', () => {
+    const bio = UM.buildDomiciliosTabHtml(
+      [linha({ agencia: 'Salvador' })], UM.MODO_BIOMARCADORES, hoje);
+    expect(bio).toContain('<th>Agência</th>');
+    expect(bio).toContain('Salvador');
+    const mov = UM.buildDomiciliosTabHtml([linha()], UM.MODO_MOVIMENTO, hoje);
+    expect(mov).not.toContain('<th>Agência</th>');
+  });
 });
 
 describe('prazo alert is discoverable', () => {
@@ -2757,9 +2766,9 @@ describe('the panel names its own source', () => {
     const html = UM.buildPanelHtml(
       joined, zonaRows, new Map(), new Map(), UM.MODO_MOVIMENTO, '2026-08-14');
     expect(html).toContain('Último Movimento');
-    // MODO_MOVIMENTO renders no demand column at all, so the label says
-    // the number is ABSENT — not that it is estimated.
-    expect(html).toContain('sem demanda estimada');
+    // The title is just the report's name; the "cannot tell who owes a
+    // biomarcador" caveat lives in the tooltip and the Entenda tab.
+    expect(html).not.toContain('demanda estimada');
   });
 });
 
@@ -2854,6 +2863,9 @@ describe('CSV export per tab', () => {
       .toBe('sigc-pro-biomarcadores-zonas-2026-08-15.csv');
     expect(UM.nomeCsvAba('domicilios', UM.MODO_MOVIMENTO, '2026-08-15'))
       .toBe('sigc-pro-ultimo-movimento-domicilios-2026-08-15.csv');
+    // The movimento "zonas" tab holds controles, and the file says so.
+    expect(UM.nomeCsvAba('zonas', UM.MODO_MOVIMENTO, '2026-08-15'))
+      .toBe('sigc-pro-ultimo-movimento-controles-2026-08-15.csv');
   });
 });
 
@@ -2994,20 +3006,32 @@ describe('untouched households get their own column', () => {
     ultimaPosicao: 'Distribuido', agendado: '', ...over,
   });
 
-  test('Distribuido and Enviado para Carga count as não distribuída work', () => {
-    // Measured in BA: 4.059 Distribuido + 850 Enviado para Carga = 69% of
-    // every household, all carrying tipo_entrevista 'Não Iniciada'. They
-    // were landing in the same column as the 366 households that DID
-    // start and stalled mid-collection, which is the distinction a
-    // supervisor actually needs.
+  test('columns follow the tipo de entrevista, whatever the posição', () => {
+    // A household whose posição literally reads 'Distribuido' must not
+    // land in a column called "Não distribuída" — an earlier version
+    // filed Distribuido/Enviado para Carga there, reinterpreting the
+    // posição instead of carrying the report's own tipo.
     const zonas = UM.aggregateZonas([
       linha({ domicilio: '1', ultimaPosicao: 'Distribuido' }),
       linha({ domicilio: '2', ultimaPosicao: 'Enviado para Carga' }),
       linha({ domicilio: '3', ultimaPosicao: 'Descarregado Parcialmente' }),
     ], new Map(), UM.MODO_MOVIMENTO);
-    expect(zonas[0].naoDistribuida).toBe(2);
-    // Only the genuinely stalled one is left in Não Iniciada.
-    expect(zonas[0].naoIniciada).toBe(1);
+    expect(zonas[0].naoDistribuida).toBe(0);
+    // All three carry tipo 'Não Iniciada', so all three count there.
+    expect(zonas[0].naoIniciada).toBe(3);
+  });
+
+  test('only the literal Não Distribuido counts there, in any case/accent form', () => {
+    // Never seen in the parquet history (its five values are the whole
+    // recorded domain), but the SIGC UI can show it — so the spelling is
+    // unverifiable and every plausible form must land in the same column.
+    const formas = ['Não Distribuido', 'Não Distribuído',
+      'Não distribuido', 'Não distribuído'];
+    const zonas = UM.aggregateZonas(
+      formas.map((p, i) => linha({ domicilio: String(i + 1), ultimaPosicao: p })),
+      new Map(), UM.MODO_MOVIMENTO);
+    expect(zonas[0].naoDistribuida).toBe(formas.length);
+    expect(zonas[0].naoIniciada).toBe(0);
   });
 
   test('the total still accounts for every household exactly once', () => {
@@ -3051,17 +3075,23 @@ describe('untouched households get their own column', () => {
   });
 });
 
-describe('the map treats both untouched states alike', () => {
-  test('Enviado para Carga is inactive on the map, like Distribuido', () => {
-    // 850 households in BA. Colouring only Distribuido grey rendered
-    // these as if someone had already been there — the same conflation
-    // the Zonas column had, on the other surface.
-    const cor = (ultimaPosicao) => UM.statusColor(
-      { ultimaPosicao, tipoEntrevista: 'Não Iniciada' }, UM.MODO_MOVIMENTO, '2026-08-15');
+describe('the map colours by tipo de entrevista', () => {
+  const cor = (ultimaPosicao) => UM.statusColor(
+    { ultimaPosicao, tipoEntrevista: 'Não Iniciada' }, UM.MODO_MOVIMENTO, '2026-08-15');
+
+  test('only the literal Não Distribuído is inactive grey', () => {
+    expect(cor('Não Distribuído')).toBe('#888888');
+    expect(cor('Não Distribuido')).toBe('#888888');
+  });
+
+  test('Distribuido and Enviado para Carga take their tipo colour', () => {
+    // Their tipo is 'Não Iniciada', so they render as not-started —
+    // never as the "não distribuída" grey their posição contradicts.
+    expect(cor('Distribuido')).not.toBe('#888888');
     expect(cor('Enviado para Carga')).toBe(cor('Distribuido'));
   });
 
-  test('the legend says so', () => {
+  test('the legend keeps the Não distribuída entry', () => {
     const labels = UM.legendEntries(UM.MODO_MOVIMENTO).map(([l]) => l);
     expect(labels).toContain('Não distribuída');
     expect(labels).not.toContain('Inativo (Distribuído)');
@@ -3611,7 +3641,7 @@ describe('the capacity flag matches the column on screen', () => {
     const zona = {
       idZona: 'Z1', nomeZona: 'Z1', realizada: 0, naoIniciada: 0,
       domicilioFechado: 0, recusa: 0, outros: 0, naoDistribuida: 0,
-      semDesfecho: 0, totalDomicilios: 5, semCoordenadas: 0, agendados: 0,
+      totalDomicilios: 5, semCoordenadas: 0, agendados: 0,
       aAgendar: 5, jaAgendados: 0, realizadasSemAgendamento: 0, pendentes: 0,
     };
     const turnos = new Map([['Z1', { manha: 1, tarde: 1 }]]);
@@ -3625,7 +3655,7 @@ describe('the capacity flag matches the column on screen', () => {
     const zona = {
       idZona: 'Z1', nomeZona: 'Z1', realizada: 0, naoIniciada: 0,
       domicilioFechado: 0, recusa: 0, outros: 0, naoDistribuida: 0,
-      semDesfecho: 0, totalDomicilios: 2, semCoordenadas: 0, agendados: 0,
+      totalDomicilios: 2, semCoordenadas: 0, agendados: 0,
       aAgendar: 1, jaAgendados: 0, realizadasSemAgendamento: 0, pendentes: 0,
     };
     const turnos = new Map([['Z1', { manha: 3, tarde: 3 }]]);
