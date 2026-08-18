@@ -68,21 +68,28 @@ Em Administrar Agenda:
     preenchidos a tempo (hoje + 3 dias corridos; +4 se hoje for
     sexta-feira) e zonas cujo nome não corresponde à equipe da coluna
     (padrão UF_Equipe_Local).
-  * Guia do Dia (só na visualização Dia) — baixa um guia HTML autônomo
-    com abas: resumo do dia (com grade horário × equipe dos slots), uma
-    aba Lab compartilhável com o laboratório (Controle truncado aos 11
-    primeiros dígitos, sem domicílio nem dados pessoais) e, por equipe,
-    os cartões de cada visita (endereço, morador, telefone,
-    Controle/Domicílio, observações) e os horários livres. Ctrl+P
-    imprime a aba aberta.
+  * Guia do Dia (só na visualização Dia) — baixa um guia HTML autônomo.
+    Cada domicílio agendado recebe UM número para o dia inteiro (ordem
+    de horário), o mesmo em todas as abas e no mapa — assim uma rota
+    montada misturando equipes pode ser conferida e repassada a cada
+    equipe sem confusão. Abas: Resumo (primeiro e último agendamento,
+    zonas distintas e média de agendamentos por zona, mais a lista
+    completa dos domicílios do dia em ordem de horário — cartões
+    numerados com endereço, morador, telefone, Controle/Domicílio e a
+    equipe em destaque), uma aba Lab compartilhável com o laboratório
+    (nº, hora, nome, município e zona — sem Controle, sem domicílio,
+    sem dados pessoais) e, por equipe, os mesmos cartões numerados.
+    Ctrl+P imprime a aba aberta.
     Ao clicar, o Guia do Dia oferece consultar o próprio servidor do
     SIGC (mediante confirmação) para obter coordenadas, zona real,
     agência e entrevistador de cada visita. Aceitando, o guia ganha
-    também o mapa da rota do dia, link de navegação por visita e seleção
-    de paradas por checkbox em cada equipe (até 9 por rota, com link do
-    Google Maps atualizado em tempo real), mais a seção "Rota do dia" no
-    Resumo. Recusando, o guia sai do mesmo jeito, sem esses extras —
-    recusar não cancela o download. Nada vai a terceiros.
+    também o mapa do dia (pontos numerados com o número de cada
+    domicílio, uma cor só — a equipe está escrita no cartão), link de
+    navegação por visita e seleção de paradas por checkbox em cada
+    cartão (até 9 por rota, com link do Google Maps atualizado em tempo
+    real) — no Resumo, misturando equipes. Recusando, o guia sai do
+    mesmo jeito, sem esses extras — recusar não cancela o download.
+    Nada vai a terceiros.
 
 Os botões nativos do SIGC não são alterados — os novos botões apenas se
 somam a eles. O PDF nativo funciona normalmente; CSV e Excel nativos têm

@@ -103,12 +103,27 @@
   </div>
   <div class="card">
     <h3>🗒️ Guia do Dia — Agenda</h3>
-    <p>Na visualização Dia, gera um guia HTML autônomo com abas por equipe:
-    resumo do dia (equipes, agendamentos, ocupação, controles e uma grade
-    horário × equipe dos slots), e por
-    equipe os cartões de cada visita — endereço, morador (nome, sexo,
-    idade), telefone, Controle/Domicílio e observações — além dos horários
-    livres. Pronto para imprimir por equipe (Ctrl+P na aba). Ao clicar, o guia oferece (opcional, mediante confirmação) obter a zona real e as coordenadas de cada visita do próprio servidor do SIGC; cada cartão de visita ganha um checkbox para incluí-la na rota, e a equipe ganha um link do Google Maps que se atualiza em tempo real conforme os checkboxes são marcados (até 9 paradas por rota). O Resumo ganha sua própria seção "Rota do dia", combinando as visitas de todas as equipes. A aba <strong>Lab</strong> repete o resumo em versão compartilhável com o laboratório, na forma como o próprio sistema do laboratório lista as coletas: nome e município por slot, sem Controle, sem domicílio e sem data de nascimento. Aceitando a consulta, cada aba (exceto Lab) também mostra um mapa-esquema (SVG, sem imagens de mapa) com a rota do dia — visitas numeradas na ordem de horário, uma cor por equipe.</p>
+    <p>Na visualização Dia, gera um guia HTML autônomo em que cada domicílio
+    agendado recebe <strong>um número para o dia inteiro</strong> (ordem de
+    horário), o mesmo em todas as abas e no mapa — feito para montar uma
+    rota misturando equipes e repassá-la a cada equipe sem confusão. O
+    Resumo traz primeiro/último agendamento, zonas distintas e média de
+    agendamentos por zona, mais a lista completa dos domicílios do dia:
+    cartões numerados, em ordem de horário, com endereço, morador (nome,
+    sexo, idade), telefone, Controle/Domicílio, observações e a equipe em
+    destaque. Cada equipe tem sua aba com os mesmos cartões. Pronto para
+    imprimir por aba (Ctrl+P). Ao clicar, o guia oferece (opcional,
+    mediante confirmação) obter a zona real e as coordenadas de cada
+    visita do próprio servidor do SIGC; cada cartão ganha um checkbox para
+    incluí-lo na rota — no Resumo, misturando equipes — e um link do
+    Google Maps que se atualiza em tempo real conforme os checkboxes são
+    marcados (até 9 paradas por rota). A aba <strong>Lab</strong> repete o
+    resumo em versão compartilhável com o laboratório, na forma como o
+    próprio sistema do laboratório lista as coletas: nº, hora, nome,
+    município e zona por visita, sem Controle, sem domicílio e sem data de
+    nascimento. Aceitando a consulta, cada aba (exceto Lab) também mostra
+    um mapa-esquema (SVG, sem imagens de mapa) do dia — pontos com o
+    número de cada domicílio, uma cor só.</p>
   </div>
 
   <h2>Instalação</h2>

@@ -70,15 +70,20 @@ Em Administrar Agenda:
 • Slots Abertos — na visão Semana, um painel com a tabela zona × turno
   dos slots ainda abertos sobre o total de cada zona, para decidir onde
   há capacidade a abrir.
-• Guia do Dia — guia HTML autônomo com abas: resumo do dia (com grade
-  horário × equipe dos slots), aba Lab compartilhável com o laboratório
-  (hora, nome, município e zona por slot, sem Controle nem domicílio)
-  e, por equipe, os cartões de cada visita — pronto para imprimir por
-  aba. Ao clicar, oferece obter do próprio servidor do SIGC (mediante
-  confirmação) as coordenadas, a zona real, a agência e o entrevistador
-  de cada visita, para incluir também o mapa da rota do dia, link de
-  navegação por visita e seleção de paradas por checkbox (até 9 por
-  rota, com link do Google Maps atualizado em tempo real); recusando a
+• Guia do Dia — guia HTML autônomo em que cada domicílio agendado tem
+  UM número para o dia inteiro, o mesmo em todas as abas e no mapa —
+  para montar rotas misturando equipes sem confusão. Abas: Resumo
+  (primeiro/último agendamento, zonas distintas, média de agendamentos
+  por zona e a lista completa dos domicílios do dia, numerada e em
+  ordem de horário, com a equipe em destaque em cada cartão), aba Lab
+  compartilhável com o laboratório (nº, hora, nome, município e zona —
+  sem Controle nem domicílio) e, por equipe, os mesmos cartões — pronto
+  para imprimir por aba. Ao clicar, oferece obter do próprio servidor
+  do SIGC (mediante confirmação) as coordenadas, a zona real, a agência
+  e o entrevistador de cada visita, para incluir também o mapa do dia
+  (pontos numerados, uma cor só) e a montagem de rota por checkbox em
+  cada cartão — inclusive misturando equipes no Resumo (até 9 por rota,
+  com link do Google Maps atualizado em tempo real); recusando a
   consulta, o guia é gerado do mesmo jeito, sem esses dados extras.
 • Seletor de data — botão de calendário para pular direto a uma data.
 
