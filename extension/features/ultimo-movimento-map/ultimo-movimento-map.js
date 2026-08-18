@@ -913,6 +913,17 @@
     return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
   }
 
+  // dd/mm/yyyy[ HH:MM[:SS]] -> a "yyyy-mm-dd HH:MM:SS" sort key for
+  // DataTables' data-order. Unlike isoDeDataBr it keeps the time, so
+  // same-day rows still order chronologically. '' for a blank or
+  // unparseable cell — a dateless row groups with the other dateless
+  // rows instead of pretending to be a moment in time.
+  function chaveOrdenavelDataBr(s) {
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})(\s+\d{2}:\d{2}(?::\d{2})?)?/
+      .exec(String(s || '').trim());
+    return m ? `${m[3]}-${m[2]}-${m[1]}${m[4] ? ` ${m[4].trim()}` : ''}` : '';
+  }
+
   // 'Agendado' is the one conditional status: it closes the household
   // only while the booked date has not passed. A booking that lapsed
   // without a collection is demand again — otherwise a visit missed in
@@ -1498,7 +1509,10 @@
             `<td>${dash(acaoDoDomicilio(r, hoje))}</td>` +
             prazoCell +
             `<td data-order="${agendadoSort}">${agendadoCell}</td>` +
-            `<td>${dash(r.dataVisita)}</td>` +
+            // Sortable like Agendado: the report prints dd/mm/yyyy, which
+            // orders by DAY when sorted as text — every 01/… together
+            // regardless of month or year.
+            `<td data-order="${esc(chaveOrdenavelDataBr(r.dataVisita))}">${dash(r.dataVisita)}</td>` +
             // Sangue / urina side by side: "Coletado apenas Sangue" says
             // one was missed, but not which follow-up the other needs.
             `<td>${dash([r.statusSangue, r.statusUrina].filter(Boolean).join(' / '))}</td>` +
@@ -1514,7 +1528,9 @@
             `<td>${dash(r.ultimaPosicao)}</td>` +
             `<td>${dash(r.tipoEntrevista)}</td>` +
             `<td>${dash(r.entrevistador)}</td>` +
-            `<td>${dash(r.data)}</td>`) +
+            // Same sortable treatment as the biomarcadores dates: the
+            // Data column carries "dd/mm/yyyy HH:MM:SS".
+            `<td data-order="${esc(chaveOrdenavelDataBr(r.data))}">${dash(r.data)}</td>`) +
         '</tr>'
       );
     }).join('');

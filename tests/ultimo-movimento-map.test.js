@@ -2564,6 +2564,44 @@ describe('alerta de prazo', () => {
   });
 });
 
+describe('date columns sort chronologically, not lexicographically', () => {
+  const linha = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', entrevistador: 'F',
+    tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado',
+    status: 'A agendar', agendado: '', dataAgendada: '',
+    dataFinalColeta: '', data: '', dataVisita: '', ...over,
+  });
+  const hoje = '2026-08-14';
+
+  // "dd/mm/yyyy HH:MM" as text puts every 01/… together regardless of
+  // month or year, so each date cell carries an ISO data-order key —
+  // the same mechanism the Agendado column already uses.
+  test('movimento Data cell carries an ISO sort key with the time', () => {
+    const html = UM.buildDomiciliosTabHtml(
+      [linha({ data: '05/01/2026 08:30:15' })], UM.MODO_MOVIMENTO, hoje);
+    expect(html).toContain('data-order="2026-01-05 08:30:15"');
+  });
+
+  test('biomarcadores Coleta cell carries an ISO sort key', () => {
+    const html = UM.buildDomiciliosTabHtml(
+      [linha({ dataVisita: '14/08/2026 10:30' })], UM.MODO_BIOMARCADORES, hoje);
+    expect(html).toContain('data-order="2026-08-14 10:30"');
+  });
+
+  test('a blank or unparseable date gets an empty key, not a fake moment', () => {
+    const html = UM.buildDomiciliosTabHtml(
+      [linha({ data: '—invalid—' })], UM.MODO_MOVIMENTO, hoje);
+    expect(html).not.toMatch(/data-order="[^"]*invalid/);
+    expect(html).toContain('data-order=""');
+  });
+
+  test('time-less dates still sort by day', () => {
+    const html = UM.buildDomiciliosTabHtml(
+      [linha({ data: '05/01/2026' })], UM.MODO_MOVIMENTO, hoje);
+    expect(html).toContain('data-order="2026-01-05"');
+  });
+});
+
 describe('prazo in the Domicílios tab', () => {
   const linha = (over) => ({
     controle: 'C1', domicilio: '1', idZona: 'Z1', entrevistador: 'F',
