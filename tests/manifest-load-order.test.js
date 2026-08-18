@@ -63,8 +63,8 @@ describe('manifest content_scripts load order', () => {
   });
 
   // route-map.js assigns window.__sigcPro.routeMap; agenda-day-guide.js
-  // destructures it at its own top level (teamColor, buildRouteMapSvg,
-  // slotInfo, …), so loading the guide first throws immediately on a
+  // destructures it at its own top level (dayNumberMap, buildRouteMapSvg,
+  // STOP_COLOR, …), so loading the guide first throws immediately on a
   // TypeError and the whole Guia do Dia download dies.
   test('route-map.js loads after sigc-common.js and before agenda-day-guide.js', () => {
     const common = idx('common/sigc-common.js');

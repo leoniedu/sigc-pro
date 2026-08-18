@@ -1,11 +1,14 @@
 // SIGC-PRO feature: "Guia do Dia" — downloads a self-contained HTML day
-// guide from the Agenda's Dia view: a Resumo tab (day stats + a time ×
-// equipe slot grid with per-team totals) plus one tab
-// per equipe with a card per slot (reserved: endereço/morador/telefone/
-// Controle/observação; open slots are no longer shown). A "Lab" tab repeats the Resumo
-// in the form the laboratory's own system lists collections: nome +
-// município per slot, no Controle, no Domicílio, no birth date — print
-// it to share. Data comes exclusively from
+// guide from the Agenda's Dia view. Every reserved household carries ONE
+// number for the whole day (dayNumberMap, time order), the same on its
+// Resumo card, its team-tab card, its Lab row and its map dot: the guide
+// exists so a logistics manager can compose a single route mixing teams
+// and hand each team a print-out without ambiguity. Resumo tab: 4 day
+// stats + the full numbered household list (each card with route
+// checkbox) + the day map. One tab per equipe with the same cards. A
+// "Lab" tab lists the day the way the laboratory's own system does: nº,
+// hora, nome, município, zona — no Controle, no Domicílio, no birth
+// date — print it to share. Data comes exclusively from
 // window.__sigcPro.readAgendaSlots() (already-rendered FullCalendar DOM,
 // no network); the file itself is inline-CSS-only with CSS radio tabs and
 // an inline route-selector script for live Google Maps link updates — no
@@ -34,21 +37,23 @@
   }
 
   // Stat block for any row set (whole day or one team). Rows arrive
-  // time-sorted, so first/last reserved row = primeiro/último.
-  function computeStats(rows) {
+  // time-sorted, so first/last reserved row = primeiro/último. `zonas`
+  // is the distinct real zonas of the reserved rows — the agenda's own
+  // unit, unlike the controle the stats used to count — and is null
+  // (unknown, not zero) when the endereços lookup never ran: the
+  // declined-consulta guide must say "—", not claim "0 zonas".
+  function computeStats(rows, enderecos) {
     const reservados = rows.filter((r) => r.reservado);
-    const total = rows.length;
     const primeiro = reservados[0] || null;
     const ultimo = reservados[reservados.length - 1] || null;
-    const controles = [...new Set(reservados.map((r) => r.controle).filter(Boolean))];
+    const zonas = enderecos
+      ? [...new Set(reservados.map((r) => zonaLabel(slotInfo(r, enderecos))).filter(Boolean))]
+      : null;
     return {
-      total,
       reservados: reservados.length,
-      livres: total - reservados.length,
-      ocupacaoPct: total > 0 ? Math.round((100 * reservados.length) / total) : null,
       primeiro: primeiro ? { hora: primeiro.horaInicio, equipe: primeiro.equipe } : null,
       ultimo: ultimo ? { hora: ultimo.horaInicio, equipe: ultimo.equipe } : null,
-      controles,
+      zonas,
     };
   }
 
@@ -84,9 +89,8 @@
 
   // Card-facing variant of zonaLabel: ID plus nome when both are present,
   // same no-nome-only-fallback rule (a row with no idZona renders blank
-  // even if it somehow carries a nome). Used by buildSlotCard,
-  // routeCheckboxHtml and the team Zonas: line — never by buildDayGrid,
-  // which stays ID-only (grid cells are space-constrained).
+  // even if it somehow carries a nome). Used by buildSlotCard — never by
+  // buildLabList, which stays ID-only (list cells are space-constrained).
   function zonaFullLabel(info) {
     const id = zonaLabel(info);
     if (!id) return '';
@@ -106,8 +110,8 @@
       `&destination=${encodeURIComponent(dest)}`;
   }
 
-  // Short label ("HH:MM Nome-or-Controle") shared by routeCheckboxInput's
-  // data-name attribute and routeCheckboxHtml's displayed text.
+  // Short label ("HH:MM Nome-or-Controle") for routeCheckboxInput's
+  // data-name attribute.
   function routeStopLabel(r) {
     return `${r.horaInicio} ${r.nome || r.controle}`;
   }
@@ -115,10 +119,9 @@
   // Builds the bare checkbox <input> for a RESERVED row. Routable rows
   // (info has lat/lon) get an enabled checkbox with data-lat/lon/name,
   // seeded from `checked`; non-routable rows get a permanently disabled,
-  // unchecked <input> with no data-* attributes. Used directly by
-  // buildSlotCard (team-panel cards) and wrapped by routeCheckboxHtml
-  // (Resumo's standalone list) — the data-* attribute shape and escaping
-  // exist in exactly one place either way.
+  // unchecked <input> with no data-* attributes. Used only by
+  // buildSlotCard — the Resumo and team lists are the same cards, so the
+  // data-* attribute shape and escaping exist in exactly one place.
   function routeCheckboxInput(r, info, groupId, checked, idx) {
     const e = escapeHtml;
     if (info && info.lat != null) {
@@ -131,53 +134,13 @@
     return '<input type="checkbox" disabled>';
   }
 
-  // Wraps routeCheckboxInput in the <label> Resumo's standalone list
-  // needs: the checkbox plus a text description of the stop (time, name,
-  // Controle/Dom/Zona) and, for non-routable rows, a "sem coordenadas"
-  // note — present so the list's row count never silently drops a visit.
-  function routeCheckboxHtml(r, info, groupId, checked, idx) {
-    const e = escapeHtml;
-    const label = routeStopLabel(r);
-    // Displayed label adds the same Controle/Dom/Zona detail buildSlotCard
-    // shows on the card itself, so a checked-off stop is identifiable
-    // without cross-referencing the card above/below it.
-    const zona = zonaFullLabel(info);
-    const detail = [
-      r.controle && `Controle: ${e(r.controle)}`,
-      r.domicilio && `Dom: ${e(r.domicilio)}`,
-      zona && `Zona: ${e(zona)}`,
-    ].filter(Boolean).join(' &nbsp;·&nbsp; ');
-    const display = detail ? `${e(label)} — ${detail}` : e(label);
-    const input = routeCheckboxInput(r, info, groupId, checked, idx);
-    if (info && info.lat != null) {
-      return `<label class="route-item">${input} ${display}</label>`;
-    }
-    return `<label class="route-item route-item-missing">${input} ${display} — sem coordenadas</label>`;
-  }
-
-  // groupId namespaces data-group (read by the inline script) and the
-  // trailing rota-link placeholder's id, so multiple independent selectors
-  // (Resumo + each team) can coexist without id/state collisions.
-  function buildRouteSelector(rows, enderecos, groupId, defaultAllChecked) {
-    const e = escapeHtml;
-    const idxMap = routeIdxMap([{ rows }], enderecos);
-    const items = rows.filter((r) => r.reservado).map((r) =>
-      routeCheckboxHtml(r, slotInfo(r, enderecos), groupId, defaultAllChecked, idxMap.get(enderecoKey(r)))
-    );
-    if (items.length === 0) return '';
-    return '<div class="route-selector">' +
-      items.join('\n') +
-      `<div class="rota-link" id="rota-link-${e(groupId)}"></div>` +
-      '</div>';
-  }
-
   // --- SVG day-route map ----------------------------------------------
   // Extracted to route-map.js (2026-08-10) — pure projection geometry
   // and SVG string building, with no dependency on the document
   // assembly below. Bound here so the call sites read unchanged;
   // manifest load order guarantees route-map.js ran first.
   const {
-    teamColor, stopSequenceMap, routeIdxMap, buildRouteMapSvg, buildLegend,
+    STOP_COLOR, dayNumberMap, routeIdxMap, buildRouteMapSvg,
   } = window.__sigcPro.routeMap;
 
 
@@ -185,18 +148,13 @@
 
   const escapeHtml = (s) => window.__sigcPro.escapeHtml(s);
 
-  // Stats/grid table styles, shared by the full guide and the lab page.
+  // Stats/list table styles, shared by the full guide and the lab page.
   const TABLE_CSS = `table.stats { border-collapse: collapse; margin: .6rem 0; }
 table.stats th, table.stats td { border: 1px solid #d0d7de; padding: .25rem .6rem; text-align: left; font-size: .92rem; }
-table.grid td { text-align: center; }
-table.grid .grid-hora { font-weight: 600; }
-table.grid .grid-livre { color: #8a8f98; font-size: .85em; }
-table.grid .grid-dom { color: #555; font-size: .8em; }
-table.grid .grid-nome { font-size: .85em; }
-table.grid .grid-municipio { color: #555; font-size: .78em; text-transform: uppercase; }
-table.grid .grid-zona { color: #555; font-size: .78em; }
-table.grid td.sem-slot { background: #fafafa; }
-table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`;
+table.lab-list .lab-num { font-weight: 700; text-align: center; }
+table.lab-list .lab-hora { font-weight: 600; }
+table.lab-list .lab-municipio { color: #555; text-transform: uppercase; font-size: .85em; }
+table.lab-list .lab-zona { color: #555; font-size: .85em; }`;
 
   function metaLine(meta) {
     const e = escapeHtml;
@@ -212,7 +170,7 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
   // from the endereços fetch, when available — never the inflated slot-text
   // list. Missing fields (already normalized to '' by readAgendaSlots) are
   // omitted line by line — a sparse card never breaks.
-  function buildSlotCard(r, enderecos, seqMap, color, routeGroupId, checked, idx) {
+  function buildSlotCard(r, enderecos, dayNums, routeGroupId, checked, idx) {
     const e = escapeHtml;
     const hora = `${e(r.horaInicio)}–${e(r.horaFim)}`;
     if (!r.reservado) {
@@ -244,17 +202,24 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       zona && `Zona: ${e(zona)}`,
       info && info.entrevistador && `Entrevistador: ${e(info.entrevistador)}`,
     ].filter(Boolean).join(' &nbsp;·&nbsp; ');
-    // Matches the number and color of the visit's dot in the map below
-    // (same per-set sequence, computed by stopSequenceMap) — absent when
-    // the visit has no valid coordinates, since it has no dot to match.
-    const seq = seqMap && seqMap.get(enderecoKey(r));
-    const seqBadge = seq != null
-      ? `<span class="badge badge-seq" style="background:${e(color || '#005a9c')}">${seq}</span> ` : '';
+    // The household's single number for the whole day (dayNumberMap) —
+    // identical on the Resumo card, the team card, the Lab row and the
+    // map dot, so a route composed across teams can be read out by
+    // number. Rendered even for coordinate-less visits: the number
+    // identifies the household in the lists whether or not it has a dot.
+    const num = dayNums && dayNums.get(enderecoKey(r));
+    const numBadge = num != null
+      ? `<span class="badge badge-seq">${num}</span> ` : '';
+    // The equipe, prominent on every card: the map and the numbers no
+    // longer distinguish teams, and the manager composing a cross-team
+    // route needs to see at a glance whose slot each household is.
+    const equipeBadge = r.equipe
+      ? ` <span class="badge badge-equipe">${e(r.equipe)}</span>` : '';
     const chk = `${routeCheckboxInput(r, info, routeGroupId, checked, idx)} `;
 
     return [
       '<div class="card">',
-      `<div class="hora">${chk}${hora} ${seqBadge}<span class="badge">RESERVADO</span></div>`,
+      `<div class="hora">${chk}${numBadge}${hora}${equipeBadge} <span class="badge">RESERVADO</span></div>`,
       r.endereco ? `<div class="endereco">${e(r.endereco)}</div>` : '',
       info && info.lat != null
         // Same Google Maps driving-directions link the Rota row uses
@@ -269,15 +234,19 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     ].filter(Boolean).join('\n');
   }
 
-  function buildTeamPanel(group, enderecos, colorIndex) {
+  function buildTeamPanel(group, enderecos, teamIndex, dayNums) {
     const e = escapeHtml;
-    const s = computeStats(group.rows);
+    const s = computeStats(group.rows, enderecos);
+    // Same stat set as the Resumo table, per team: primeiro, último,
+    // zonas distintas, média por zona. Zona bits are simply omitted when
+    // the endereços lookup never ran (s.zonas null) — an inline "—"
+    // would read as a value.
+    const mediaZona = s.zonas ? media1(s.reservados, s.zonas.length) : null;
     const statBits = [
-      `${s.reservados} reservado(s) × ${s.livres} livre(s)`,
-      s.ocupacaoPct != null ? `ocupação ${s.ocupacaoPct}%` : null,
       s.primeiro ? `primeiro ${e(s.primeiro.hora)}` : null,
       s.ultimo ? `último ${e(s.ultimo.hora)}` : null,
-      s.controles.length ? `${s.controles.length} controle(s) distinto(s)` : null,
+      s.zonas && s.zonas.length ? `${s.zonas.length} zona(s) distinta(s)` : null,
+      mediaZona != null ? `${mediaZona} agendamento(s) por zona` : null,
     ].filter(Boolean).join(' &nbsp;·&nbsp; ');
     // Routable count decides the default: <=9 -> all checked (matches
     // the original auto-route), >9 -> none checked (chunking is gone, the
@@ -288,20 +257,18 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
       const info = slotInfo(r, enderecos);
       return info && info.lat != null;
     }).length;
-    const routeGroupId = `team-${colorIndex}`;
+    const routeGroupId = `team-${teamIndex}`;
     const defaultChecked = routableCount <= 9;
-    const seqMap = stopSequenceMap(group.rows, enderecos);
     const idxMap = routeIdxMap([{ rows: group.rows }], enderecos);
-    const color = teamColor(colorIndex);
     // Only reserved visits render as cards — open (LIVRE) slots are not
     // shown at all, per design decision 2026-08-06.
     const cards = group.rows.filter((r) => r.reservado).map((r) =>
-      buildSlotCard(r, enderecos, seqMap, color, routeGroupId, defaultChecked, idxMap.get(enderecoKey(r)))
+      buildSlotCard(r, enderecos, dayNums, routeGroupId, defaultChecked, idxMap.get(enderecoKey(r)))
     );
     const teamMap = enderecos
       ? buildRouteMapSvg(
-          [{ rows: group.rows.filter((r) => r.reservado), color: teamColor(colorIndex) }],
-          enderecos, 480, 320, routeGroupId
+          [{ rows: group.rows.filter((r) => r.reservado), color: STOP_COLOR }],
+          enderecos, 480, 320, routeGroupId, dayNums
         )
       : '';
     // Bare link placeholder (no checkbox list — checkboxes now live on
@@ -317,137 +284,94 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
     ].filter(Boolean).join('\n');
   }
 
-  function buildSummaryPanel(groups, allRows, lab, enderecos) {
+  function buildSummaryPanel(allRows, lab, enderecos, dayNums) {
     const e = escapeHtml;
-    const day = computeStats(allRows);
-    const comReserva = groups.filter((g) => g.rows.some((r) => r.reservado)).length;
+    const day = computeStats(allRows, enderecos);
     const titulo = lab
       ? 'Resumo do dia — Lab (nome e município, sem Controle nem domicílio)'
       : 'Resumo do dia';
+    // Four stats only — what the logistics manager acts on. Counts of
+    // equipes/slots/ocupação belonged to a capacity view this guide no
+    // longer is; zonas replace controles because the zona is the
+    // agenda's own unit. "—" for the zona stats means UNKNOWN (endereços
+    // lookup declined/failed), never zero.
     const linhas = [
-      ['Equipes ativas', String(groups.length)],
-      ['Equipes com reserva', String(comReserva)],
-      ['Agendamentos (reservados)', String(day.reservados)],
-      ['Slots livres', String(day.livres)],
-      ['Total de slots', String(day.total)],
-      ['Taxa de ocupação', day.ocupacaoPct != null ? `${day.ocupacaoPct}%` : '—'],
       ['Primeiro agendamento', day.primeiro ? `${day.primeiro.hora} — ${day.primeiro.equipe}` : '—'],
       ['Último agendamento', day.ultimo ? `${day.ultimo.hora} — ${day.ultimo.equipe}` : '—'],
-      ['Controles distintos', String(day.controles.length)],
-      ['Média de agendamentos por equipe ativa', media1(day.reservados, groups.length) ?? '—'],
-      ['Média de agendamentos por controle', media1(day.reservados, day.controles.length) ?? '—'],
+      ['Zonas distintas', day.zonas ? String(day.zonas.length) : '—'],
+      ['Média de agendamentos por zona',
+        day.zonas ? (media1(day.reservados, day.zonas.length) ?? '—') : '—'],
     ].map(([k, v]) => `<tr><th>${e(k)}</th><td>${e(v)}</td></tr>`).join('\n');
-    // Combined day route: every team's rows in groups' existing order (name-
-    // sorted teams, each team's own rows already time-sorted) — no new
-    // cross-team sort. Always starts unchecked: the day route is always an
-    // intentional, opt-in selection, unlike a single team's default-all-
-    // checked rule in buildTeamPanel.
-    const routeSelector = !lab
-      ? buildRouteSelector(groups.flatMap((g) => g.rows), enderecos, 'resumo', false)
+    if (lab) {
+      // The shareable, privacy-stripped view: same stats, then the
+      // numbered lab-safe list. Never a map, never route checkboxes —
+      // see spec Placement.
+      return [
+        `<h2>${e(titulo)}</h2>`,
+        `<table class="stats">\n${linhas}\n</table>`,
+        buildLabList(allRows, enderecos, dayNums),
+      ].filter(Boolean).join('\n');
+    }
+    // The day's households, one full card each, in day (time) order
+    // across teams — the same cards the team tabs show, each carrying
+    // its day number and equipe. Always starts unchecked: the day route
+    // is an intentional, opt-in selection, unlike a single team's
+    // default-all-checked rule in buildTeamPanel. The SAME reserved-only
+    // rowSet feeds routeIdxMap and buildRouteMapSvg, which is what keeps
+    // a checkbox's data-idx joined to its dot's.
+    const reservados = allRows.filter((r) => r.reservado);
+    const rowSet = [{ rows: reservados, color: STOP_COLOR }];
+    const idxMap = routeIdxMap(rowSet, enderecos);
+    const cards = reservados.map((r) =>
+      buildSlotCard(r, enderecos, dayNums, 'resumo', false, idxMap.get(enderecoKey(r))));
+    const rotaSection = cards.length
+      ? ['<h3>Rota do dia</h3>', ...cards, '<div class="rota-link" id="rota-link-resumo"></div>'].join('\n')
       : '';
-    const rotaSection = routeSelector
-      ? ['<h3>Rota do dia</h3>', routeSelector].join('\n')
-      : '';
-    // Combined day-route map: every team's reserved, coordinate-having
-    // visits overlaid, one color per team. Lab tab (the shareable,
-    // privacy-stripped view) never gets a map — see spec Placement.
-    const routeMap = !lab && enderecos
+    const routeMap = enderecos
       ? [
           '<h3>Mapa do dia</h3>',
-          buildLegend(groups),
-          buildRouteMapSvg(
-            groups.map((g, i) => ({ rows: g.rows.filter((r) => r.reservado), color: teamColor(i) })),
-            enderecos, 640, 420, 'resumo'
-          ),
-        ].filter(Boolean).join('\n')
+          buildRouteMapSvg(rowSet, enderecos, 640, 420, 'resumo', dayNums),
+        ].join('\n')
       : '';
     return [
       `<h2>${e(titulo)}</h2>`,
       `<table class="stats">\n${linhas}\n</table>`,
-      '<h3>Slots do dia</h3>',
-      buildDayGrid(groups, lab, enderecos),
       rotaSection,
       routeMap,
     ].filter(Boolean).join('\n');
   }
 
-  // Full day at a glance: rows = fixed half-hour marks (slot starts
-  // don't necessarily align to :00/:30, so each slot lands in the mark
-  // containing its start and the cell shows the actual start time),
-  // columns = equipes; cells show blank (sem-slot) for open slots or
-  // Controle/Domicílio for reserved ones. The
-  // per-equipe stats live in the grid's footer rows, so this table
-  // replaces the old separate "Por equipe" one. lab = the shareable
-  // variant: nome + município per slot, no Controle, no Domicílio.
-  // Both variants append the real zona when the endereços fetch supplied
-  // one — it identifies the slot's area without naming the household.
-  function buildDayGrid(groups, lab, enderecos) {
+  // The Lab tab's list: one numbered row per reserved visit, in day
+  // order. SANCTIONED FIELDS — nº, hora, nome, município, zona — and
+  // nothing else; no Controle, no Domicílio, no birth date, no
+  // telefone/endereço/observação. Município comes from the Controle's
+  // first 7 digits (the IBGE código), never from personal data; zona is
+  // here by an explicit decision (the lab needs the area to plan
+  // routes), accepting that it narrows location below município level.
+  // The nº is the household's day number, so the lab and the field talk
+  // about "o 7" and mean the same visit.
+  //
+  // This is the artifact designed to LEAVE the institution. Adding a
+  // field here is a privacy decision, not a formatting one: argue it in
+  // the commit message, and update the whitelist in
+  // tests/agenda-day-guide-lab-list.test.js, which fails until that
+  // list is edited. See ROADMAP.md.
+  function buildLabList(allRows, enderecos, dayNums) {
     const e = escapeHtml;
-    const starts = groups.flatMap((g) => g.rows.map((r) => window.__sigcPro.toMin(r.horaInicio)))
-      .filter((v) => v != null);
-    if (!starts.length) return '';
-    const marks = [];
-    for (let t = Math.min(...starts) - (Math.min(...starts) % 30);
-      t <= Math.max(...starts); t += 30) marks.push(t);
-    const head = `<tr><th>Hora</th>${groups.map((g) => `<th>${e(g.equipe)}</th>`).join('')}</tr>`;
-    const body = marks.map((t) => {
-      const cells = groups.map((g) => {
-        // Open (non-reservado) slots are dropped from the grid entirely —
-        // a mark whose only matches are open renders identically to a
-        // mark with no slot at all for this team. A mark mixing reserved
-        // and open slots (two starts rounding into the same half-hour)
-        // shows only the reserved content.
-        const slots = g.rows.filter((r) => {
-          const s = window.__sigcPro.toMin(r.horaInicio);
-          return s != null && s - (s % 30) === t && r.reservado;
-        });
-        if (!slots.length) return '<td class="sem-slot"></td>';
-        const conteudo = slots.map((r) => {
-          const hora = `<span class="grid-hora">${e(r.horaInicio)}</span>`;
-          // Lab cells name the visit the way the laboratory's own system
-          // lists it. SANCTIONED FIELDS — hora, nome, município, zona —
-          // and nothing else; no Controle, no Domicílio, no birth date,
-          // no telefone/endereço/observação. Município comes from the
-          // Controle's first 7 digits (the IBGE código), never from
-          // personal data; zona is here by an explicit decision (the lab
-          // needs the area to plan routes), accepting that it narrows
-          // location below município level.
-          //
-          // This is the artifact designed to LEAVE the institution.
-          // Adding a field here is a privacy decision, not a formatting
-          // one: argue it in the commit message, and update the
-          // whitelist in tests/agenda-day-guide-lab-grid.test.js, which
-          // fails until that list is edited. See ROADMAP.md.
-          const zona = zonaLabel(slotInfo(r, enderecos));
-          const zonaLine = zona ? `<span class="grid-zona">Zona: ${e(zona)}</span>` : '';
-          if (lab) {
-            const municipio = window.__sigcPro.municipioFromControle(r.controle);
-            return [
-              hora,
-              `<span class="grid-nome">${e(r.nome) || '—'}</span>`,
-              municipio ? `<span class="grid-municipio">${e(municipio)}</span>` : '',
-              zonaLine,
-            ].filter(Boolean).join('<br>');
-          }
-          const dom = r.domicilio ? ` <span class="grid-dom">Dom ${e(r.domicilio)}</span>` : '';
-          return [
-            `${hora}<br><span class="grid-ctrl">${e(r.controle) || '—'}</span>${dom}`,
-            zonaLine,
-          ].filter(Boolean).join('<br>');
-        }).join('<br>');
-        return `<td>${conteudo}</td>`;
-      }).join('');
-      return `<tr><th>${window.__sigcPro.fmtMin(t)}</th>${cells}</tr>`;
+    const reservados = allRows.filter((r) => r.reservado);
+    if (!reservados.length) return '';
+    const head = '<tr><th>Nº</th><th>Hora</th><th>Nome</th><th>Município</th><th>Zona</th></tr>';
+    const body = reservados.map((r) => {
+      const num = dayNums && dayNums.get(enderecoKey(r));
+      const municipio = window.__sigcPro.municipioFromControle(r.controle);
+      const zona = zonaLabel(slotInfo(r, enderecos));
+      return `<tr><td class="lab-num">${num != null ? num : ''}</td>` +
+        `<td class="lab-hora">${e(r.horaInicio)}</td>` +
+        `<td class="lab-nome">${e(r.nome) || '—'}</td>` +
+        `<td class="lab-municipio">${e(municipio)}</td>` +
+        `<td class="lab-zona">${e(zona)}</td></tr>`;
     }).join('\n');
-    const stats = groups.map((g) => computeStats(g.rows));
-    const foot = [
-      ['Reservados', stats.map((s) => String(s.reservados))],
-      ['Livres', stats.map((s) => String(s.livres))],
-      ['Ocupação', stats.map((s) => (s.ocupacaoPct != null ? `${s.ocupacaoPct}%` : '—'))],
-    ].map(([rotulo, vals]) =>
-      `<tr class="grid-foot"><th>${e(rotulo)}</th>${vals.map((v) => `<td>${e(v)}</td>`).join('')}</tr>`
-    ).join('\n');
-    return `<table class="stats grid">\n${head}\n${body}\n${foot}\n</table>`;
+    return `<table class="stats lab-list">\n${head}\n${body}\n</table>`;
   }
 
   // Complete standalone document. Tabs are CSS-only: one hidden radio per
@@ -455,13 +379,18 @@ table.grid tr.grid-foot th, table.grid tr.grid-foot td { background: #f6f8fa; }`
   // @media print hides the tab bar and prints only the checked panel.
   function buildGuideHtml(meta, groups, allRows, enderecos) {
     const e = escapeHtml;
+    // ONE numbering for the whole document, computed here and threaded
+    // to every panel: allRows is the day in time order (readAgendaSlots
+    // sorts by isoDate, horaInicio, equipe), so the numbers read as the
+    // day's chronology on every tab.
+    const dayNums = dayNumberMap(allRows);
     // The Lab tab repeats the Resumo in the shape the laboratory's own
     // system uses (nome + município, no Controle, no Domicílio, no birth
     // date) — Ctrl+P on it prints just that page for the laboratory.
     const panels = [
-      { label: 'Resumo', html: buildSummaryPanel(groups, allRows, false, enderecos) },
-      { label: 'Lab', html: buildSummaryPanel(groups, allRows, true, enderecos) },
-      ...groups.map((g, i) => ({ label: g.equipe, html: buildTeamPanel(g, enderecos, i) })),
+      { label: 'Resumo', html: buildSummaryPanel(allRows, false, enderecos, dayNums) },
+      { label: 'Lab', html: buildSummaryPanel(allRows, true, enderecos, dayNums) },
+      ...groups.map((g, i) => ({ label: g.equipe, html: buildTeamPanel(g, enderecos, i, dayNums) })),
     ];
     const radios = panels.map((_, i) =>
       `<input type="radio" name="tab" id="tab-${i}"${i === 0 ? ' checked' : ''}>`).join('\n');
@@ -496,6 +425,7 @@ h3 { margin: .8rem 0 .2rem; font-size: 1rem; }
 .card .hora { font-weight: 600; }
 .card .hora .route-chk { margin-right: .4rem; font-weight: normal; }
 .badge { background: #005a9c; color: #fff; border-radius: 3px; font-size: .7rem; padding: .1rem .4rem; vertical-align: middle; }
+.badge-equipe { background: #444; }
 .endereco { font-size: 1.05rem; font-weight: 600; margin: .15rem 0; }
 .morador, .ids, .zonas, .obs { font-size: .92rem; margin-top: .1rem; }
 .ids, .zonas { color: #555; }
@@ -505,17 +435,10 @@ h3 { margin: .8rem 0 .2rem; font-size: 1rem; }
 .livre-edge { color: #666; border: 1px dashed #bbb; border-radius: 6px; padding: .25rem .8rem; margin: .5rem 0; font-size: .9rem; }
 a { color: #005a9c; }
 .geo, .rota { font-size: .92rem; margin-top: .1rem; }
-.route-selector { border: 1px solid #d0d7de; border-radius: 6px; padding: .5rem .8rem; margin: .5rem 0; font-size: .9rem; }
-.route-item { display: block; padding: .1rem 0; }
-.route-item input { margin-right: .4rem; }
-.route-item-missing { color: #8a8f98; }
 .rota-link { margin-top: .4rem; font-size: .92rem; }
 .teamstats { color: #333; margin: .2rem 0 .4rem; font-size: .92rem; }
 .route-map { margin: .6rem 0; page-break-inside: avoid; }
 .route-map-missing { color: #666; font-size: .85rem; margin-top: .3rem; }
-.route-map-legend { display: flex; flex-wrap: wrap; gap: .6rem; margin: .4rem 0; font-size: .85rem; }
-.route-map-legend-item { display: inline-flex; align-items: center; gap: .3rem; }
-.route-map-swatch { display: inline-block; width: .7rem; height: .7rem; border-radius: 2px; }
 .route-stop-dim { opacity: .35; }
 ${TABLE_CSS}
 ${tabRules}
@@ -693,7 +616,7 @@ ${sections}
   // nothing to fetch, the fetch fails, or the user declines the consulta.
   // generate(null) is therefore still a live path — the map-free guide —
   // even though no button reaches it directly anymore.
-  window.__sigcPro.dayGuide = { generate, diaViewActive, buildRouteSelector, buildTeamPanel, buildSummaryPanel, buildGuideHtml, routeCheckboxInput, routeCheckboxHtml, buildSlotCard, routeIdxMap, buildRouteMapSvg, buildDayGrid };
+  window.__sigcPro.dayGuide = { generate, diaViewActive, buildTeamPanel, buildSummaryPanel, buildGuideHtml, routeCheckboxInput, buildSlotCard, buildLabList, routeIdxMap, buildRouteMapSvg, dayNumberMap };
 
   // No button of its own: this module renders the guide, agenda-lookups mounts
   // the single "Guia do Dia" button that drives it. Two buttons differing

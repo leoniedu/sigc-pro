@@ -8,7 +8,7 @@ await import('../extension/features/agenda-day-guide/route-map.js');
 await import('../extension/features/agenda-day-guide/agenda-day-guide.js');
 
 const { municipioFromControle } = window.__sigcPro;
-const { buildDayGrid } = window.__sigcPro.dayGuide;
+const { buildLabList, dayNumberMap } = window.__sigcPro.dayGuide;
 
 // Controle carries the 7-digit IBGE código as its first digits:
 // 2927408 = Salvador - BA, 2919207 = Lauro de Freitas - BA.
@@ -22,6 +22,8 @@ function row({
     dtNascimento, telefone, endereco, sexo, idade, observacao, equipe: 'A',
   };
 }
+
+const listFor = (rows, enderecos) => buildLabList(rows, enderecos, dayNumberMap(rows));
 
 describe('municipioFromControle', () => {
   test('maps a Controle to its "MUNICÍPIO - UF" label', () => {
@@ -63,23 +65,21 @@ describe('municipioFromControle', () => {
   });
 });
 
-describe('buildDayGrid — Lab variant', () => {
-  const groups = () => [{ equipe: 'Equipe A', rows: [row()] }];
-
-  test('shows nome and município instead of Controle', () => {
-    const html = buildDayGrid(groups(), true);
+describe('buildLabList', () => {
+  test('shows nº, hora, nome and município — never the Controle', () => {
+    const html = listFor([row()]);
+    expect(html).toContain('<td class="lab-num">1</td>');
+    expect(html).toContain('09:00');
     expect(html).toContain('Fulano de Tal');
     expect(html).toContain('SALVADOR - BA');
-    expect(html).toContain('grid-nome');
-    expect(html).toContain('grid-municipio');
+    expect(html).not.toContain('2927408000123');
   });
 
   test('leaks no Controle, Domicílio or birth date', () => {
-    const html = buildDayGrid(groups(), true);
+    const html = listFor([row()]);
     expect(html).not.toContain('2927408000123');
     // not even the previously truncated 11-digit prefix
     expect(html).not.toContain('29274080001');
-    expect(html).not.toContain('grid-ctrl');
     expect(html).not.toContain('Dom D1');
     expect(html).not.toContain('17/02/1948');
   });
@@ -90,12 +90,13 @@ describe('buildDayGrid — Lab variant', () => {
   // newly added field passes it silently (that is exactly how zona
   // entered the Lab tab in 0c0eb28 without review).
   //
-  // The sanctioned set is {hora, nome, município, zona}. Adding a fifth
-  // field must be a deliberate edit to THIS list, with the privacy
+  // The sanctioned set is {nº, hora, nome, município, zona}. Adding a
+  // sixth field must be a deliberate edit to THIS list, with the privacy
   // question answered in the commit message — not a silent pass. Zona is
   // in the set by an explicit decision: the laboratory needs the area to
-  // plan its collection routes.
-  test('Lab cells carry ONLY the sanctioned fields', () => {
+  // plan its collection routes. The nº carries no data of its own — it
+  // is the day-wide position, shared with every other tab.
+  test('Lab rows carry ONLY the sanctioned fields', () => {
     // Deliberately POPULATED with every sensitive field a real reserved
     // slot carries. A sparse fixture would defeat the whole test: a
     // newly rendered field whose fixture value is empty emits nothing
@@ -111,113 +112,91 @@ describe('buildDayGrid — Lab variant', () => {
     const enderecos = new Map([
       ['2927408000123|D1', { idZona: '12', zona: 'Centro', lat: null, lon: null }],
     ]);
-    const html = buildDayGrid(
-      [{ equipe: 'Equipe A', rows: [cheio] }], true, enderecos);
+    const html = listFor([cheio], enderecos);
 
-    const SANCTIONED = ['grid-hora', 'grid-nome', 'grid-municipio', 'grid-zona'];
-    const spanClasses = [...html.matchAll(/<span class="(grid-[a-z-]+)"/g)]
+    const SANCTIONED = ['lab-num', 'lab-hora', 'lab-nome', 'lab-municipio', 'lab-zona'];
+    const cellClasses = [...html.matchAll(/<td class="(lab-[a-z-]+)"/g)]
       .map((m) => m[1]);
-    const unexpected = [...new Set(spanClasses)]
+    expect(cellClasses.length).toBeGreaterThan(0);
+    const unexpected = [...new Set(cellClasses)]
       .filter((c) => !SANCTIONED.includes(c));
     expect(unexpected).toEqual([]);
 
-    // The sanctioned four are present…
+    // The sanctioned five are present…
+    expect(html).toContain('<td class="lab-num">1</td>');
     expect(html).toContain('09:00');
     expect(html).toContain('Fulano de Tal');
     expect(html).toContain('SALVADOR - BA');
-    expect(html).toContain('Zona: 12');
+    expect(html).toContain('<td class="lab-zona">12</td>');
 
     // …and no populated non-sanctioned value leaked through.
     ['71 99999-0000', 'Rua Exemplo, 100', 'observação sensível', '17/02/1948']
       .forEach((v) => expect(html).not.toContain(v));
   });
 
-  test('unknown código: nome still shown, município omitted', () => {
-    const g = [{ equipe: 'Equipe A', rows: [row({ controle: '9999999000123' })] }];
-    const html = buildDayGrid(g, true);
+  test('unknown código: nome still shown, município cell empty', () => {
+    const html = listFor([row({ controle: '9999999000123' })]);
     expect(html).toContain('Fulano de Tal');
-    expect(html).not.toContain('grid-municipio');
+    expect(html).toContain('<td class="lab-municipio"></td>');
   });
 
   test('reserved row with no nome falls back to em dash', () => {
-    const g = [{ equipe: 'Equipe A', rows: [row({ nome: '' })] }];
-    const html = buildDayGrid(g, true);
-    expect(html).toContain('<span class="grid-nome">—</span>');
+    const html = listFor([row({ nome: '' })]);
+    expect(html).toContain('<td class="lab-nome">—</td>');
   });
 
   test('escapes nome', () => {
-    const g = [{ equipe: 'Equipe A', rows: [row({ nome: '<script>alert(1)</script>' })] }];
-    const html = buildDayGrid(g, true);
+    const html = listFor([row({ nome: '<script>alert(1)</script>' })]);
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');
   });
 
-  test('open slots render as a blank sem-slot cell, not LIVRE', () => {
-    const g = [{ equipe: 'Equipe A', rows: [row({ reservado: false })] }];
-    const html = buildDayGrid(g, true);
-    expect(html).not.toContain('LIVRE');
-    expect(html).not.toContain('grid-nome');
-    expect(html).toContain('class="sem-slot"');
+  test('open slots never render a row; an all-open day renders nothing', () => {
+    expect(listFor([row({ reservado: false })])).toBe('');
+    const html = listFor([row({ reservado: false, horaInicio: '08:00' }), row()]);
+    expect((html.match(/<td class="lab-num">/g) || []).length).toBe(1);
   });
 
-  test('a mark mixing one reserved and one open slot for the same team shows only the reserved content', () => {
-    const g = [{
-      equipe: 'Equipe A',
-      rows: [
-        row({ reservado: true, horaInicio: '09:05', controle: '2927408000123', domicilio: 'D1' }),
-        row({ reservado: false, horaInicio: '09:20' }),
-      ],
-    }];
-    const html = buildDayGrid(g, true);
-    expect(html).not.toContain('LIVRE');
-    expect(html).toContain('SALVADOR - BA');
+  test('rows keep day order and day numbers across teams', () => {
+    const rows = [
+      { ...row({ horaInicio: '08:00', domicilio: 'D1' }), equipe: 'B' },
+      { ...row({ horaInicio: '09:00', domicilio: 'D2' }), equipe: 'A' },
+      { ...row({ horaInicio: '10:00', domicilio: 'D3' }), equipe: 'B' },
+    ];
+    const html = listFor(rows);
+    const nums = [...html.matchAll(/<td class="lab-num">(\d+)<\/td>/g)].map((m) => m[1]);
+    expect(nums).toEqual(['1', '2', '3']);
+    // Time order preserved, not team order.
+    expect(html.indexOf('08:00')).toBeLessThan(html.indexOf('09:00'));
   });
 });
 
-describe('buildDayGrid — non-Lab variant is unchanged', () => {
-  test('still shows the full Controle and Domicílio, no nome/município', () => {
-    const html = buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false);
-    expect(html).toContain('2927408000123');
-    expect(html).toContain('Dom D1');
-    expect(html).not.toContain('grid-nome');
-    expect(html).not.toContain('grid-municipio');
-  });
-});
-
-// The zona comes from the opt-in endereços fetch, so every grid cell must
+// The zona comes from the opt-in endereços fetch, so every list row must
 // still render correctly when that Map is absent (the default path).
-describe('buildDayGrid — zona', () => {
+describe('buildLabList — zona', () => {
   const enderecos = (entry = { lat: -12.9, lon: -38.5, zona: 'Centro', idZona: '12' }) =>
     new Map([['2927408000123|D1', entry]]);
 
-  test('appends the zona in the non-Lab variant', () => {
-    const html = buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, enderecos());
-    expect(html).toContain('<span class="grid-zona">Zona: 12</span>');
-    expect(html).toContain('2927408000123');
-  });
-
-  test('appends the zona in the Lab variant', () => {
-    const html = buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], true, enderecos());
-    expect(html).toContain('<span class="grid-zona">Zona: 12</span>');
-    expect(html).toContain('SALVADOR - BA');
+  test('shows the zona ID when the endereços fetch supplied one', () => {
+    const html = listFor([row()], enderecos());
+    expect(html).toContain('<td class="lab-zona">12</td>');
     expect(html).not.toContain('2927408000123');
   });
 
-  test('omits the zona when no endereços were fetched', () => {
-    expect(buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false)).not.toContain('grid-zona');
-    expect(buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], true)).not.toContain('grid-zona');
+  test('zona cell is empty when no endereços were fetched', () => {
+    expect(listFor([row()])).toContain('<td class="lab-zona"></td>');
   });
 
-  test('omits the zona when the entry carries none', () => {
+  test('zona cell is empty when the entry carries none', () => {
     const e = enderecos({ lat: -12.9, lon: -38.5, zona: null, idZona: null });
-    expect(buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, e)).not.toContain('grid-zona');
+    expect(listFor([row()], e)).toContain('<td class="lab-zona"></td>');
   });
 
   // The ID alone identifies the zona; the nome is never appended to it.
   test('shows the ID alone when both ID and name are present', () => {
     const ambos = enderecos({ lat: null, lon: null, zona: 'Centro', idZona: '12' });
-    const html = buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, ambos);
-    expect(html).toContain('<span class="grid-zona">Zona: 12</span>');
+    const html = listFor([row()], ambos);
+    expect(html).toContain('<td class="lab-zona">12</td>');
     expect(html).not.toContain('Centro');
   });
 
@@ -225,25 +204,21 @@ describe('buildDayGrid — zona', () => {
   // one has no zona at all and must render blank rather than a bare nome.
   test('renders no zona when there is no idZona', () => {
     const soNome = enderecos({ lat: null, lon: null, zona: 'Centro', idZona: null });
-    expect(buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, soNome))
-      .not.toContain('grid-zona');
+    const html = listFor([row()], soNome);
+    expect(html).toContain('<td class="lab-zona"></td>');
+    expect(html).not.toContain('Centro');
   });
 
   test('a row with no matching endereço gets no zona', () => {
-    const g = [{ equipe: 'Equipe A', rows: [row({ domicilio: 'D9' })] }];
-    expect(buildDayGrid(g, false, enderecos())).not.toContain('grid-zona');
-  });
-
-  test('open slots never show a zona', () => {
-    const g = [{ equipe: 'Equipe A', rows: [row({ reservado: false })] }];
-    expect(buildDayGrid(g, false, enderecos())).not.toContain('grid-zona');
+    const html = listFor([row({ domicilio: 'D9' })], enderecos());
+    expect(html).toContain('<td class="lab-zona"></td>');
   });
 
   // Payload goes in idZona, the field actually rendered — putting it in
   // zona would pass vacuously now that the nome is never shown.
   test('escapes the zona', () => {
     const e = enderecos({ lat: null, lon: null, zona: '', idZona: '<script>alert(1)</script>' });
-    const html = buildDayGrid([{ equipe: 'Equipe A', rows: [row()] }], false, e);
+    const html = listFor([row()], e);
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');
   });

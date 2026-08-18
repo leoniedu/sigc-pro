@@ -90,19 +90,10 @@
     return { projected, scaleBarKm, scaleBarPx };
   }
 
-  // Okabe-Ito colorblind-safe 8-color palette (same design system as
-  // KML export's vermillion/sky-blue pair, extended to the full set here
-  // since more than 2 teams need distinguishing on the combined map).
-  const TEAM_COLORS = [
-    '#E69F00', '#56B4E9', '#009E73', '#F0E442',
-    '#0072B2', '#D55E00', '#CC79A7', '#000000',
-  ];
-
-  // equipeIndex: 0-based position of a team within groupByEquipe's
-  // already-name-sorted output. Cycles past 8 teams.
-  function teamColor(equipeIndex) {
-    return TEAM_COLORS[equipeIndex % TEAM_COLORS.length];
-  }
+  // One color for every stop: routes are composed by the logistics
+  // manager across teams, so a per-team palette drew a distinction the
+  // route deliberately ignores. Matches the guide's badge/link blue.
+  const STOP_COLOR = '#005a9c';
 
   // Name-or-controle fallback for a row's display label, used in the
   // coordinate-less note below the map.
@@ -110,19 +101,23 @@
     return r.nome || r.controle || '';
   }
 
-  // enderecoKey -> sequence number (1-based, time order) for a row set's
-  // PLOTTABLE reserved visits — the exact same numbering buildRouteMapSvg
-  // assigns that set on the map, so a card's badge always matches its
-  // dot. A coordinate-less reserved visit gets no entry (it has no dot).
-  function stopSequenceMap(rows, enderecos) {
+  // enderecoKey -> the household's single number for the whole day:
+  // 1-based over the day's RESERVED rows in the order given (readAgendaSlots
+  // already sorts the day by time), never restarting, coordinate-less rows
+  // included — this is the number a logistics manager reads out loud, so
+  // it must exist on every list entry, not only on plottable dots. A
+  // household cannot hold two agendamentos in one day, but the key is
+  // still first-occurrence-wins so a duplicate row could never fork the
+  // numbering.
+  function dayNumberMap(rows) {
     const map = new Map();
-    let seq = 0;
+    let num = 0;
     rows.forEach((r) => {
-      const info = slotInfo(r, enderecos);
-      if (info && info.lat != null) {
-        seq += 1;
-        map.set(enderecoKey(r), seq);
-      }
+      if (!r.reservado) return;
+      const k = enderecoKey(r);
+      if (map.has(k)) return;
+      num += 1;
+      map.set(k, num);
     });
     return map;
   }
@@ -134,10 +129,10 @@
   // buildRouteMapSvg: both must walk identically-shaped rowSets in the
   // same order for the two to agree, so callers always pass the SAME
   // rowSets array (or an array built the same way) to both this function
-  // and buildRouteMapSvg. Unlike stopSequenceMap (which restarts at 1 per
-  // call, matching each dot's VISIBLE number), this index is never shown
-  // to the user — it exists only for the inline script to match a
-  // checkbox to its dot.
+  // and buildRouteMapSvg. Unlike dayNumberMap (the VISIBLE number, which
+  // covers coordinate-less rows too), this index is never shown to the
+  // user — it exists only for the inline script to match a checkbox to
+  // its dot.
   function routeIdxMap(rowSets, enderecos) {
     const map = new Map();
     let idx = 0;
@@ -153,14 +148,15 @@
     return map;
   }
 
-  // rowSets: Array<{ rows: Array<row>, color: string }>, each already this
-  // team's reserved rows in time order. Builds one shared projection across
-  // ALL plottable points from every set (so a combined map's teams share
-  // one coordinate frame), then draws each set's dots/line in its color,
-  // each set numbered independently starting at 1. Rows whose slotInfo has
-  // no usable lat/lon are excluded from plotting and listed in a single
-  // combined coordinate-less note below the map (never silently dropped).
-  function buildRouteMapSvg(rowSets, enderecos, width, height, groupId) {
+  // rowSets: Array<{ rows: Array<row>, color: string }>, each already
+  // reserved rows in time order. Builds one shared projection across
+  // ALL plottable points from every set, then draws each set's dots/line
+  // in its color; every dot is labeled with the household's DAY number
+  // (dayNums, from dayNumberMap), the same number its card and list
+  // entries carry on every tab. Rows whose slotInfo has no usable
+  // lat/lon are excluded from plotting and listed in a single combined
+  // coordinate-less note below the map (never silently dropped).
+  function buildRouteMapSvg(rowSets, enderecos, width, height, groupId, dayNums) {
     const PADDING = 28;
     const idxMap = routeIdxMap(rowSets, enderecos);
     const plottableSets = rowSets.map((set) => {
@@ -169,7 +165,11 @@
       set.rows.forEach((r) => {
         const info = slotInfo(r, enderecos);
         if (info && info.lat != null) {
-          plottable.push({ lat: info.lat, lon: info.lon, hora: r.horaInicio, idx: idxMap.get(enderecoKey(r)) });
+          plottable.push({
+            lat: info.lat, lon: info.lon, hora: r.horaInicio,
+            idx: idxMap.get(enderecoKey(r)),
+            num: dayNums ? dayNums.get(enderecoKey(r)) : null,
+          });
         } else {
           missing.push(r);
         }
@@ -203,12 +203,12 @@
         allProjectedInOrder.push(p);
         const hora = set.plottable[i].hora;
         const idx = set.plottable[i].idx;
-        const seq = i + 1;
+        const num = set.plottable[i].num;
         svgParts.push(
           `<g data-idx="${idx}" data-x="${p.x.toFixed(1)}" data-y="${p.y.toFixed(1)}">` +
           `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="${set.color}" stroke="#fff" stroke-width="1.5"/>` +
           `<text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central" ` +
-            `font-size="9" font-weight="700" fill="#fff">${seq}</text>` +
+            `font-size="9" font-weight="700" fill="#fff">${num != null ? num : ''}</text>` +
           `<text x="${p.x.toFixed(1)}" y="${(p.y + 20).toFixed(1)}" text-anchor="middle" ` +
             `font-size="9" fill="#333">${escapeHtml(hora)}</text>` +
           '</g>'
@@ -254,23 +254,12 @@
     return `<div class="route-map">${svg}${missingNote}</div>`;
   }
 
-  // Small color-key legend for the combined Resumo map: one swatch + name
-  // per team, in groups' existing (name-sorted) order.
-  function buildLegend(groups) {
-    if (groups.length === 0) return '';
-    const items = groups.map((g, i) =>
-      `<span class="route-map-legend-item"><span class="route-map-swatch" style="background:${teamColor(i)}"></span>${escapeHtml(g.equipe)}</span>`
-    ).join('');
-    return `<div class="route-map-legend">${items}</div>`;
-  }
-
   window.__sigcPro.routeMap = {
     projectPoints,
     slotInfo,
-    teamColor,
-    stopSequenceMap,
+    STOP_COLOR,
+    dayNumberMap,
     routeIdxMap,
     buildRouteMapSvg,
-    buildLegend,
   };
 })();

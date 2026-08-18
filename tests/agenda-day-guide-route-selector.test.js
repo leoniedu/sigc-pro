@@ -1,9 +1,11 @@
 import { describe, test, expect } from 'bun:test';
 
 await import('../extension/common/sigc-common.js');
+// municipios.js: buildGuideHtml and buildSummaryPanel(lab=true) render the
+// Lab list, whose Município column needs municipioFromControle.
+await import('../extension/common/municipios.js');
 await import('../extension/features/agenda-day-guide/route-map.js');
 await import('../extension/features/agenda-day-guide/agenda-day-guide.js');
-const { buildRouteSelector } = window.__sigcPro.dayGuide;
 
 function row({ reservado = true, horaInicio = '09:00', nome = 'Fulano', controle = 'C1', domicilio = 'D1' } = {}) {
   return { reservado, horaInicio, horaFim: '09:30', nome, controle, domicilio, equipe: 'A' };
@@ -17,89 +19,6 @@ function enderecosMap(entries) {
   });
   return m;
 }
-
-describe('buildRouteSelector', () => {
-  test('routable reserved rows get an enabled checkbox with data-lat/lon/name', () => {
-    const rows = [row()];
-    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
-    const html = buildRouteSelector(rows, enderecos, 'team-0', true);
-    expect(html).toContain('class="route-chk"');
-    expect(html).toContain('data-group="team-0"');
-    expect(html).toContain('data-lat="-12.900000"');
-    expect(html).toContain('data-lon="-38.500000"');
-    expect(html).toContain('checked');
-    expect(html).not.toContain('disabled');
-  });
-
-  test('non-routable reserved row: disabled, unchecked, "sem coordenadas" note', () => {
-    const rows = [row()];
-    const html = buildRouteSelector(rows, null, 'team-0', true);
-    expect(html).toContain('disabled');
-    expect(html).not.toMatch(/route-chk[^>]*checked/);
-    expect(html).toContain('sem coordenadas');
-  });
-
-  test('open (non-reserved) rows are skipped entirely', () => {
-    const rows = [row({ reservado: false })];
-    const html = buildRouteSelector(rows, null, 'team-0', true);
-    expect(html).not.toContain('route-chk');
-  });
-
-  test('defaultAllChecked=false starts routable rows unchecked', () => {
-    const rows = [row()];
-    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
-    const html = buildRouteSelector(rows, enderecos, 'team-0', false);
-    expect(html).not.toMatch(/route-chk[^>]*checked/);
-  });
-
-  test('always includes a rota-link placeholder namespaced by groupId', () => {
-    const html = buildRouteSelector([row()], null, 'resumo', false);
-    expect(html).toContain('id="rota-link-resumo"');
-  });
-
-  test('escapes stop names', () => {
-    const rows = [row({ nome: '<script>alert(1)</script>' })];
-    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
-    const html = buildRouteSelector(rows, enderecos, 'team-0', true);
-    expect(html).not.toContain('<script>alert(1)</script>');
-    expect(html).toContain('&lt;script&gt;');
-  });
-
-  test('label includes Controle, Dom and Zona alongside time and name', () => {
-    const rows = [row({ horaInicio: '09:00', nome: 'Maria Silva', controle: 'C1', domicilio: 'D1' })];
-    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5, 'Centro', '12']]);
-    const html = buildRouteSelector(rows, enderecos, 'team-0', true);
-    expect(html).toContain(
-      '09:00 Maria Silva — Controle: C1 &nbsp;·&nbsp; Dom: D1 &nbsp;·&nbsp; Zona: 12'
-    );
-  });
-
-  test('label omits Zona segment when zona info is unavailable', () => {
-    const rows = [row({ horaInicio: '09:00', nome: 'Maria Silva', controle: 'C1', domicilio: 'D1' })];
-    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
-    const html = buildRouteSelector(rows, enderecos, 'team-0', true);
-    expect(html).toContain('09:00 Maria Silva — Controle: C1 &nbsp;·&nbsp; Dom: D1');
-    expect(html).not.toContain('Zona:');
-  });
-
-  test('assigns data-idx from a shared cross-team counter (flatMap-style call)', () => {
-    const rows = [
-      row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' }),
-      row({ horaInicio: '10:00', controle: 'C2', domicilio: 'D2' }),
-    ];
-    const enderecos = enderecosMap([
-      ['C1', 'D1', -12.9, -38.5],
-      ['C2', 'D2', -12.8, -38.4],
-    ]);
-    const html = buildRouteSelector(rows, enderecos, 'resumo', false);
-    const idxA = html.indexOf('data-idx="0"');
-    const idxB = html.indexOf('data-idx="1"');
-    expect(idxA).toBeGreaterThan(-1);
-    expect(idxB).toBeGreaterThan(-1);
-    // idx 0 belongs to C1 (first in row order), idx 1 to C2.
-    expect(html.indexOf('data-name="09:00')).toBeLessThan(html.indexOf('data-name="10:00'));
-  });
-});
 
 describe('routeCheckboxInput', () => {
   test('routable row: enabled checkbox with data-lat/lon/name, no label wrapper', () => {
@@ -173,71 +92,12 @@ describe('routeCheckboxInput', () => {
   });
 });
 
-describe('routeCheckboxHtml', () => {
-  test('routable row: enabled checkbox with data-lat/lon/name and detail text', () => {
-    const { routeCheckboxHtml } = window.__sigcPro.dayGuide;
-    const r = row({ horaInicio: '09:00', nome: 'Maria Silva', controle: 'C1', domicilio: 'D1' });
-    const info = { lat: -12.9, lon: -38.5, zona: 'Centro', idZona: '12' };
-    const html = routeCheckboxHtml(r, info, 'team-0', true);
-    expect(html).toContain('class="route-chk"');
-    expect(html).toContain('data-group="team-0"');
-    expect(html).toContain('data-lat="-12.900000"');
-    expect(html).toContain('data-lon="-38.500000"');
-    expect(html).toContain('data-name="09:00 Maria Silva"');
-    expect(html).toContain('checked');
-    expect(html).toContain('Controle: C1 &nbsp;·&nbsp; Dom: D1 &nbsp;·&nbsp; Zona: 12');
-  });
-
-  test('routable row, checked=false: no checked attribute', () => {
-    const { routeCheckboxHtml } = window.__sigcPro.dayGuide;
-    const r = row();
-    const info = { lat: -12.9, lon: -38.5, zona: null, idZona: null };
-    const html = routeCheckboxHtml(r, info, 'team-0', false);
-    expect(html).not.toMatch(/route-chk[^>]*checked/);
-  });
-
-  test('non-routable row (info null): disabled, unchecked, "sem coordenadas" note', () => {
-    const { routeCheckboxHtml } = window.__sigcPro.dayGuide;
-    const r = row();
-    const html = routeCheckboxHtml(r, null, 'team-0', true);
-    expect(html).toContain('disabled');
-    expect(html).not.toMatch(/route-chk[^>]*checked/);
-    expect(html).toContain('sem coordenadas');
-  });
-
-  test('non-routable row (info present but lat null): disabled, unchecked', () => {
-    const { routeCheckboxHtml } = window.__sigcPro.dayGuide;
-    const r = row();
-    const info = { lat: null, lon: null, zona: null, idZona: null };
-    const html = routeCheckboxHtml(r, info, 'team-0', true);
-    expect(html).toContain('disabled');
-    expect(html).toContain('sem coordenadas');
-  });
-
-  test('escapes stop name in both data-name and display text', () => {
-    const { routeCheckboxHtml } = window.__sigcPro.dayGuide;
-    const r = row({ nome: '<script>alert(1)</script>' });
-    const info = { lat: -12.9, lon: -38.5, zona: null, idZona: null };
-    const html = routeCheckboxHtml(r, info, 'team-0', true);
-    expect(html).not.toContain('<script>alert(1)</script>');
-    expect(html).toContain('&lt;script&gt;');
-  });
-
-  test('idx passes through to the wrapped input', () => {
-    const { routeCheckboxHtml } = window.__sigcPro.dayGuide;
-    const r = row({ controle: 'C1', domicilio: 'D1' });
-    const info = { lat: -12.9, lon: -38.5, zona: null, idZona: null };
-    const html = routeCheckboxHtml(r, info, 'team-0', true, 5);
-    expect(html).toContain('data-idx="5"');
-  });
-});
-
 describe('buildSlotCard route checkbox', () => {
   test('routable reserved row: checkbox appears in the .hora line, before the time', () => {
     const { buildSlotCard } = window.__sigcPro.dayGuide;
     const r = row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' });
     const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
-    const html = buildSlotCard(r, enderecos, null, '#005a9c', 'team-0', true);
+    const html = buildSlotCard(r, enderecos, null, 'team-0', true);
     expect(html).toContain('class="route-chk"');
     expect(html).toContain('data-group="team-0"');
     expect(html).toContain('checked');
@@ -252,7 +112,7 @@ describe('buildSlotCard route checkbox', () => {
     const { buildSlotCard } = window.__sigcPro.dayGuide;
     const r = row({ controle: 'C1', domicilio: 'D1' });
     const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
-    const html = buildSlotCard(r, enderecos, null, '#005a9c', 'team-0', false);
+    const html = buildSlotCard(r, enderecos, null, 'team-0', false);
     expect(html).toContain('class="route-chk"');
     expect(html).not.toMatch(/route-chk[^>]*checked/);
   });
@@ -260,7 +120,7 @@ describe('buildSlotCard route checkbox', () => {
   test('non-routable reserved row: disabled unchecked checkbox, no extra note text', () => {
     const { buildSlotCard } = window.__sigcPro.dayGuide;
     const r = row({ controle: 'C1', domicilio: 'D1' });
-    const html = buildSlotCard(r, null, null, '#005a9c', 'team-0', true);
+    const html = buildSlotCard(r, null, null, 'team-0', true);
     expect(html).toContain('type="checkbox" disabled');
     expect(html).not.toContain('sem coordenadas');
   });
@@ -268,7 +128,7 @@ describe('buildSlotCard route checkbox', () => {
   test('LIVRE row: no checkbox at all, unaffected by routeGroupId/checked', () => {
     const { buildSlotCard } = window.__sigcPro.dayGuide;
     const r = row({ reservado: false });
-    const html = buildSlotCard(r, null, null, '#005a9c', 'team-0', true);
+    const html = buildSlotCard(r, null, null, 'team-0', true);
     expect(html).not.toContain('route-chk');
     expect(html).not.toContain('checkbox');
   });
@@ -327,6 +187,8 @@ describe('routeIdxMap', () => {
 });
 
 describe('buildRouteMapSvg data-idx/data-x/data-y and polyline id', () => {
+  const { dayNumberMap } = window.__sigcPro.dayGuide;
+
   test('single rowSet (team panel shape): each dot wrapped in <g data-idx data-x data-y>, matches routeIdxMap', () => {
     const { buildRouteMapSvg, routeIdxMap } = window.__sigcPro.dayGuide;
     const rows = [
@@ -337,9 +199,9 @@ describe('buildRouteMapSvg data-idx/data-x/data-y and polyline id', () => {
       ['C1', 'D1', -12.9, -38.5],
       ['C2', 'D2', -12.8, -38.4],
     ]);
-    const rowSets = [{ rows, color: '#E69F00' }];
+    const rowSets = [{ rows, color: '#005a9c' }];
     const idxMap = routeIdxMap(rowSets, enderecos);
-    const svg = buildRouteMapSvg(rowSets, enderecos, 480, 320, 'team-0');
+    const svg = buildRouteMapSvg(rowSets, enderecos, 480, 320, 'team-0', dayNumberMap(rows));
     expect(svg).toContain(`<g data-idx="${idxMap.get('C1|D1')}"`);
     expect(svg).toContain(`<g data-idx="${idxMap.get('C2|D2')}"`);
     expect(svg).toMatch(/<g data-idx="0" data-x="[\d.]+" data-y="[\d.]+">/);
@@ -355,86 +217,56 @@ describe('buildRouteMapSvg data-idx/data-x/data-y and polyline id', () => {
       ['C1', 'D1', -12.9, -38.5],
       ['C2', 'D2', -12.8, -38.4],
     ]);
-    const svg = buildRouteMapSvg([{ rows, color: '#E69F00' }], enderecos, 480, 320, 'team-0');
+    const svg = buildRouteMapSvg([{ rows, color: '#005a9c' }], enderecos, 480, 320, 'team-0', dayNumberMap(rows));
     expect(svg).toContain('id="route-line-team-0"');
-    expect(svg).toContain('stroke="#E69F00"');
+    expect(svg).toContain('stroke="#005a9c"');
   });
 
-  test('multiple rowSets (Resumo shape): exactly one polyline, neutral color, not per-set', () => {
+  // The visible number on every dot is the household's DAY number, the
+  // same one its card and Lab row carry — never a per-set sequence. A
+  // team map whose households are numbers 3 and 7 of the day shows 3
+  // and 7, so the manager's cross-team route reads the same everywhere.
+  test('dots are labeled with the day number, not a per-set restart', () => {
     const { buildRouteMapSvg } = window.__sigcPro.dayGuide;
-    const rowsA = [row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' })];
-    const rowsB = [row({ horaInicio: '10:00', controle: 'C2', domicilio: 'D2' })];
+    const allRows = [
+      row({ horaInicio: '08:00', controle: 'C1', domicilio: 'D1' }),
+      row({ horaInicio: '09:00', controle: 'C2', domicilio: 'D2' }),
+      row({ horaInicio: '10:00', controle: 'C3', domicilio: 'D3' }),
+    ];
     const enderecos = enderecosMap([
-      ['C1', 'D1', -12.9, -38.5],
       ['C2', 'D2', -12.8, -38.4],
+      ['C3', 'D3', -12.7, -38.3],
     ]);
-    const svg = buildRouteMapSvg(
-      [{ rows: rowsA, color: '#E69F00' }, { rows: rowsB, color: '#56B4E9' }],
-      enderecos, 640, 420, 'resumo'
-    );
-    const polylineCount = (svg.match(/<polyline/g) || []).length;
-    expect(polylineCount).toBe(1);
-    expect(svg).toContain('id="route-line-resumo"');
-    expect(svg).toContain('stroke="#333"');
-    // Dots still keep their own set's color.
-    expect(svg).toContain('fill="#E69F00"');
-    expect(svg).toContain('fill="#56B4E9"');
+    const dayNums = dayNumberMap(allRows); // C1 -> 1, C2 -> 2, C3 -> 3
+    // A "team" holding only the day's 2nd and 3rd households.
+    const teamRows = allRows.slice(1);
+    const svg = buildRouteMapSvg([{ rows: teamRows, color: '#005a9c' }], enderecos, 480, 320, 'team-0', dayNums);
+    expect(svg).toContain('>2</text>');
+    expect(svg).toContain('>3</text>');
+    expect(svg).not.toContain('>1</text>');
   });
 
-  test('multiple rowSets: data-idx is a flat counter, does not reset at the second set', () => {
-    const { buildRouteMapSvg, routeIdxMap } = window.__sigcPro.dayGuide;
-    const rowsA = [row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' })];
-    const rowsB = [row({ horaInicio: '10:00', controle: 'C2', domicilio: 'D2' })];
-    const enderecos = enderecosMap([
-      ['C1', 'D1', -12.9, -38.5],
-      ['C2', 'D2', -12.8, -38.4],
-    ]);
-    const rowSets = [{ rows: rowsA, color: '#E69F00' }, { rows: rowsB, color: '#56B4E9' }];
-    const idxMap = routeIdxMap(rowSets, enderecos);
-    expect(idxMap.get('C1|D1')).toBe(0);
-    expect(idxMap.get('C2|D2')).toBe(1);
-    const svg = buildRouteMapSvg(rowSets, enderecos, 640, 420, 'resumo');
-    expect(svg).toContain('<g data-idx="0"');
-    expect(svg).toContain('<g data-idx="1"');
-  });
-
-  test('visible sequence number is unaffected by data-idx (still restarts at 1 per set)', () => {
-    const { buildRouteMapSvg } = window.__sigcPro.dayGuide;
-    const rowsA = [row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' })];
-    const rowsB = [row({ horaInicio: '10:00', controle: 'C2', domicilio: 'D2' })];
-    const enderecos = enderecosMap([
-      ['C1', 'D1', -12.9, -38.5],
-      ['C2', 'D2', -12.8, -38.4],
-    ]);
-    const svg = buildRouteMapSvg(
-      [{ rows: rowsA, color: '#E69F00' }, { rows: rowsB, color: '#56B4E9' }],
-      enderecos, 640, 420, 'resumo'
-    );
-    // Both sets' first (and only) dot shows visible number "1" — unrelated
-    // to the flat data-idx counter used above (0 and 1 respectively).
-    const oneCount = (svg.match(/>1<\/text>/g) || []).length;
-    expect(oneCount).toBe(2);
-  });
-
-  test('below 2 checked-equivalent plottable points in a set, still draws that single dot with its <g> wrapper (no polyline)', () => {
+  test('below 2 plottable points, still draws that single dot with its <g> wrapper (no polyline)', () => {
     const { buildRouteMapSvg } = window.__sigcPro.dayGuide;
     const rows = [row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' })];
     const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
-    const svg = buildRouteMapSvg([{ rows, color: '#E69F00' }], enderecos, 480, 320, 'team-0');
+    const svg = buildRouteMapSvg([{ rows, color: '#005a9c' }], enderecos, 480, 320, 'team-0', dayNumberMap(rows));
     expect(svg).toContain('<g data-idx="0"');
     expect(svg).not.toContain('<polyline');
   });
 });
 
 describe('buildTeamPanel route selector wiring', () => {
-  test('<=9 routable stops: all checked by default, groupId is team-<colorIndex>', () => {
+  const { dayNumberMap } = window.__sigcPro.dayGuide;
+
+  test('<=9 routable stops: all checked by default, groupId is team-<teamIndex>', () => {
     const { buildTeamPanel } = window.__sigcPro.dayGuide;
     const rows = [row({ horaInicio: '09:00' }), row({ horaInicio: '10:00', controle: 'C2', domicilio: 'D2' })];
     const enderecos = enderecosMap([
       ['C1', 'D1', -12.9, -38.5],
       ['C2', 'D2', -12.8, -38.4],
     ]);
-    const html = buildTeamPanel({ equipe: 'Equipe A', rows }, enderecos, 0);
+    const html = buildTeamPanel({ equipe: 'Equipe A', rows }, enderecos, 0, dayNumberMap(rows));
     expect(html).toContain('data-group="team-0"');
     expect((html.match(/checked/g) || []).length).toBe(2);
     expect(html).not.toContain('class="rota"'); // old auto-route block gone
@@ -459,7 +291,7 @@ describe('buildTeamPanel route selector wiring', () => {
       entries.push([controle, 'D1', -12.9 + i * 0.01, -38.5]);
     }
     const enderecos = enderecosMap(entries);
-    const html = buildTeamPanel({ equipe: 'Equipe A', rows }, enderecos, 0);
+    const html = buildTeamPanel({ equipe: 'Equipe A', rows }, enderecos, 0, dayNumberMap(rows));
     expect(html).not.toContain('checked');
   });
 
@@ -470,7 +302,7 @@ describe('buildTeamPanel route selector wiring', () => {
       ['C1', 'D1', -12.9, -38.5],
       ['C2', 'D2', -12.8, -38.4],
     ]);
-    const html = buildTeamPanel({ equipe: 'Equipe A', rows }, enderecos, 0);
+    const html = buildTeamPanel({ equipe: 'Equipe A', rows }, enderecos, 0, dayNumberMap(rows));
     expect(html).toContain('data-idx="0"');
     expect(html).toContain('data-idx="1"');
     // idx 0 (09:00/C1) appears before idx 1 (10:00/C2) in document order.
@@ -478,44 +310,48 @@ describe('buildTeamPanel route selector wiring', () => {
   });
 });
 
-describe('buildSummaryPanel route selector wiring', () => {
-  test('Resumo combines all teams, always starts unchecked, groupId is resumo', () => {
+describe('buildSummaryPanel route wiring', () => {
+  const { dayNumberMap } = window.__sigcPro.dayGuide;
+
+  test('Resumo lists the whole day in TIME order, always unchecked, groupId is resumo', () => {
     const { buildSummaryPanel } = window.__sigcPro.dayGuide;
-    const groups = [
-      { equipe: 'Equipe A', rows: [row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' })] },
-      { equipe: 'Equipe B', rows: [row({ horaInicio: '08:00', controle: 'C2', domicilio: 'D2' })] },
+    // allRows in day (time) order, teams interleaved — the shape
+    // readAgendaSlots delivers.
+    const allRows = [
+      { ...row({ horaInicio: '08:00', controle: 'C2', domicilio: 'D2' }), equipe: 'Equipe B' },
+      { ...row({ horaInicio: '09:00', controle: 'C1', domicilio: 'D1' }), equipe: 'Equipe A' },
     ];
-    const allRows = groups.flatMap((g) => g.rows);
     const enderecos = enderecosMap([
       ['C1', 'D1', -12.9, -38.5],
       ['C2', 'D2', -12.8, -38.4],
     ]);
-    const html = buildSummaryPanel(groups, allRows, false, enderecos);
+    const html = buildSummaryPanel(allRows, false, enderecos, dayNumberMap(allRows));
     expect(html).toContain('data-group="resumo"');
-    expect(html).not.toContain('checked'); // unconditionally unchecked
+    expect(html).not.toContain(' checked'); // unconditionally unchecked
     expect(html).toContain('Rota do dia');
-    // both teams' stops present, in groups' existing order (A's 09:00 before B's 08:00)
-    const idxA = html.indexOf('data-name="09:00');
+    // Day order: B's 08:00 stop comes before A's 09:00 stop.
     const idxB = html.indexOf('data-name="08:00');
-    expect(idxA).toBeGreaterThan(-1);
-    expect(idxB).toBeGreaterThan(idxA);
+    const idxA = html.indexOf('data-name="09:00');
+    expect(idxB).toBeGreaterThan(-1);
+    expect(idxA).toBeGreaterThan(idxB);
   });
 
   test('Rota do dia section placed before Mapa do dia', () => {
     const { buildSummaryPanel } = window.__sigcPro.dayGuide;
-    const groups = [{ equipe: 'Equipe A', rows: [row({ controle: 'C1', domicilio: 'D1' })] }];
+    const allRows = [row({ controle: 'C1', domicilio: 'D1' })];
     const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
-    const html = buildSummaryPanel(groups, groups[0].rows, false, enderecos);
+    const html = buildSummaryPanel(allRows, false, enderecos, dayNumberMap(allRows));
     expect(html.indexOf('Rota do dia')).toBeLessThan(html.indexOf('Mapa do dia'));
   });
 
-  test('Lab panel gets no route selector', () => {
+  test('Lab panel gets no route checkboxes and no map', () => {
     const { buildSummaryPanel } = window.__sigcPro.dayGuide;
-    const groups = [{ equipe: 'Equipe A', rows: [row({ controle: 'C1', domicilio: 'D1' })] }];
+    const allRows = [row({ controle: 'C1', domicilio: 'D1' })];
     const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
-    const html = buildSummaryPanel(groups, groups[0].rows, true, enderecos);
+    const html = buildSummaryPanel(allRows, true, enderecos, dayNumberMap(allRows));
     expect(html).not.toContain('Rota do dia');
-    expect(html).not.toContain('route-selector');
+    expect(html).not.toContain('route-chk');
+    expect(html).not.toContain('Mapa do dia');
   });
 });
 

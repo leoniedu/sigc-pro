@@ -63,15 +63,17 @@ Working checklist; move items up/down freely. Specs live in
       derived from the Controle's first 7 digits, the IBGE código, via
       the generated `common/municipios.js` table); no Controle, no
       Domicílio, no birth date
-- [x] Lab tab sanctioned fields, decided explicitly: **hora, nome,
+- [x] Lab tab sanctioned fields, decided explicitly: **nº, hora, nome,
       município, zona** — and nothing else. Zona is included because the
       laboratory needs the collection area to plan its routes; it is
       accepted that zona narrows location below município level, so this
-      is a deliberate trade, not an oversight. Adding a fifth field is a
-      privacy decision that must be argued in its own commit — the
-      whitelist test in `tests/agenda-day-guide-lab-grid.test.js` ("Lab
-      cells carry ONLY the sanctioned fields") fails until this list is
-      edited, so the decision cannot be made silently
+      is a deliberate trade, not an oversight. The nº is the household's
+      day-wide number, shared with every other tab, carrying no data of
+      its own. Adding a further field is a privacy decision that must be
+      argued in its own commit — the whitelist test in
+      `tests/agenda-day-guide-lab-list.test.js` ("Lab rows carry ONLY
+      the sanctioned fields") fails until this list is edited, so the
+      decision cannot be made silently
 - [x] Guia + Mapa: reserved slots get their real zona from the fetched
       Lista de Endereços (Nome ZONA column) — the slot text lists every
       zona from slot creation, even though a filled slot belongs to
