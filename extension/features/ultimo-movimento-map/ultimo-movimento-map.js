@@ -82,7 +82,7 @@
   // TipoVisualizacao:'S' filtro). A household absent from enderecosMap
   // (fetch gap, or declined consent upstream) is NOT dropped — it keeps
   // its Último Movimento data with temCoordenadas/temZona both false, so
-  // the Zonas table's "sem coordenadas" count and "Sem zona" bucket stay
+  // the popup's "sem coordenadas" count and the "Sem zona" bucket stay
   // accurate instead of silently undercounting.
   function joinEnderecos(movimentoMap, enderecosMap) {
     const out = [];
@@ -640,7 +640,12 @@
       ? ` — ${esc(z.nomeZona)}` : '';
     return (
       `<b>${esc(z.idZona || grupoDe(m).semGrupoLabel)}</b>${nome}<br>` +
-      `${z.totalDomicilios} domicílio(s)<br><br>` +
+      `${z.totalDomicilios} domicílio(s)` +
+      // The count the tables no longer carry as a column: shown only
+      // when nonzero, since "0 sem coordenadas" is the normal case and
+      // would be noise on every popup.
+      (z.semCoordenadas ? ` (${z.semCoordenadas} sem coordenadas)` : '') +
+      '<br><br>' +
       // Each variant's own counts. Listing the biomarcador ones on
       // Último Movimento printed a header, a blank gap and a slots line
       // that variant never has — every field was undefined there.
@@ -1235,12 +1240,14 @@
     // can never appear in one and not the other — the failure mode that
     // silently shifts every later cell into the wrong column.
     //
-    // The Nome column exists only where the group HAS a name: a Controle
-    // is a bare 15-digit code, so a second column would repeat the first.
+    // The nome rides inside the Zona cell (same markup the Domicílios
+    // tab uses) rather than in its own column, and there is no Sem
+    // coordenadas column — that count is housekeeping about the map,
+    // almost always 0, and lives in the zona/controle popup instead.
     const head =
       '<tr>' +
       `<th class="sigc-pro-zona-pin-col" data-orderable="false" title="${esc(TIP_PIN)}"></th>` +
-      `<th>${esc(g.rotulo)}</th>` + (g.temNome ? '<th>Nome</th>' : '') +
+      `<th>${esc(g.rotulo)}</th>` +
       // Left to right IS the pipeline, with the two dead ends pulled out
       // of it. See classificaDomicilio for the predicates.
       (m.comDemanda
@@ -1256,13 +1263,13 @@
           `<th title="${esc(TIP_INELEGIVEL)}">Inelegível</th>` +
           `<th title="${esc(TIP_SEM_ENTREVISTA)}">Encerrado sem entrevista</th>` +
           `<th title="${esc(TIP_DEFICIT)}">Déficit</th>` +
-          '<th>Total</th><th>Sem coordenadas</th>'
+          '<th>Total</th>'
         : `<th title="${esc(TIP_NAO_DISTRIBUIDA)}">Não distribuída</th>` +
           '<th>Realizada</th>' +
           `<th title="${esc(TIP_NAO_INICIADA)}">Não Iniciada</th>` +
           '<th>Dom. Fechado</th>' +
           `<th title="${esc(TIP_RECUSA)}">Recusa entrev.</th>` +
-          '<th>Outros</th><th>Total</th><th>Sem coordenadas</th>') +
+          '<th>Outros</th><th>Total</th>') +
       (m.comSlots
         ? `<th title="${esc(TIP_TURNO_MANHA)}">Slots manhã</th>` +
           `<th title="${esc(TIP_TURNO_TARDE)}">Slots tarde</th>` +
@@ -1319,8 +1326,12 @@
         (titulo ? ` title="${esc(titulo)}"` : '');
       // Plain text now: with the pin carrying the affordance, a link on
       // the zona code would be a second, competing click target over text
-      // the user most likely wants to select and copy.
-      const zonaLabel = esc(r.idZona || '—');
+      // the user most likely wants to select and copy. Id plus nome in
+      // one cell, exactly as the Domicílios tab renders its Zona column.
+      const nomeDiferente = g.temNome && r.nomeZona && r.nomeZona !== r.idZona;
+      const zonaLabel = nomeDiferente
+        ? `${esc(r.idZona)} <span class="sigc-pro-zona-nome">${esc(r.nomeZona)}</span>`
+        : esc(r.idZona || '—');
       const pinCell = clickable
         ? '<span class="sigc-pro-zona-pin" role="button" tabindex="0" ' +
           `data-id-zona="${esc(zonaKey)}" title="${esc(TIP_PIN)}" ` +
@@ -1340,7 +1351,6 @@
         `<tr${rowAttrs}>` +
         `<td class="sigc-pro-zona-pin-col">${pinCell}</td>` +
         `<td>${zonaLabel}</td>` +
-        (g.temNome ? `<td>${esc(r.nomeZona)}</td>` : '') +
         (m.comDemanda
           ? `<td>${r.aEntrevistar || 0}</td>` +
             `<td>${r.emAndamento || 0}</td>` +
@@ -1360,11 +1370,11 @@
             // beyond what its free slots can absorb.
             `<td class="${deficit > 0 ? 'sigc-pro-devidas' : ''}" data-order="${deficit}">` +
             `${deficit > 0 ? deficit : '—'}</td>` +
-            `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>`
+            `<td>${r.totalDomicilios}</td>`
           : `<td>${r.naoDistribuida || 0}</td>` +
             `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
             `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
-            `<td>${r.totalDomicilios}</td><td>${r.semCoordenadas}</td>`) +
+            `<td>${r.totalDomicilios}</td>`) +
         (m.comSlots
           ? `<td>${turnos.manha || 0}</td><td>${turnos.tarde || 0}</td>` +
             `<td class="sigc-pro-slots-cell" data-order="${slotsCount}">${slotsCell}</td>`
@@ -1595,7 +1605,7 @@
     .sigc-pro-zonas-table th, .sigc-pro-zonas-table td { border: 1px solid #ddd; padding: 4px 8px; text-align: right; }
     /* Pin, Zona and Nome are the text columns; every count stays right-aligned.
        Widened from -n+2 when the pin column was inserted at the front. */
-    .sigc-pro-zonas-table th:nth-child(-n+3), .sigc-pro-zonas-table td:nth-child(-n+3) { text-align: left; }
+    .sigc-pro-zonas-table th:nth-child(-n+2), .sigc-pro-zonas-table td:nth-child(-n+2) { text-align: left; }
     .sigc-pro-zonas-table th { background: #f4f4f4; }
     /* Hover still highlights the whole row — it marks what the pin will act
        on — but the pointer cursor now belongs to the pin alone, since the

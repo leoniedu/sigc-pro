@@ -437,7 +437,10 @@ describe('buildZonasTableHtml', () => {
     ];
     const html = UM.buildZonasTableHtml(rows);
     expect(html).not.toContain('sigc-pro-zona-link');
-    expect(html).toContain('<td>Z1</td>');
+    // Id plus nome in ONE cell, same markup as the Domicílios tab —
+    // there is no separate Nome column.
+    expect(html).toContain('<td>Z1 <span class="sigc-pro-zona-nome">Bairro X</span></td>');
+    expect(html).not.toContain('<th>Nome</th>');
   });
 
   test('a row with zero mapped domicílios (all sem coordenadas) is NOT clickable', () => {
@@ -2120,9 +2123,10 @@ describe('modo (map variants)', () => {
     expect(html).not.toContain('Realizadas sem agend.');
     expect(html).not.toContain('Slots livres');
     expect(html).not.toContain('Manhã');
-    // But the tipo counts and coordinate columns stay.
+    // But the tipo counts stay. Sem coordenadas is no column in either
+    // variant — that count lives in the popup now.
     expect(html).toContain('Recusa entrev.');
-    expect(html).toContain('Sem coordenadas');
+    expect(html).not.toContain('Sem coordenadas');
   });
 
   test('MODO_BIOMARCADORES keeps the slot columns', () => {
@@ -2944,8 +2948,9 @@ describe('CSV buttons in the panel', () => {
       expect(baixados[0].nome).toMatch(/^sigc-pro-biomarcadores-zonas-/);
       // Semicolon-delimited, header first, one row of data.
       const linhas = baixados[0].texto.trim().split('\r\n');
-      expect(linhas[0]).toContain('Zona;Nome');
-      expect(linhas[1]).toContain('Z1;Zona 1');
+      // Zona and nome share one column now, so the CSV cell carries both.
+      expect(linhas[0]).toContain('Zona;A entrevistar');
+      expect(linhas[1]).toContain('Z1 Zona 1;');
       // The pin column is gone from both.
       expect(baixados[0].texto).not.toContain('📍');
     } finally {
@@ -4612,6 +4617,23 @@ describe('popups carry what the reader is standing on', () => {
     expect(html).toContain('70');  // total
     // And the slots it can be booked into.
     expect(html).toContain('08:30');
+  });
+
+  test('sem coordenadas shows in the popup only when nonzero', () => {
+    // The tables no longer carry this as a column; the popup is where
+    // the count lives now — and "0 sem coordenadas" would be noise on
+    // every popup, so zero renders nothing.
+    const zona = (semCoordenadas) => ({
+      idZona: 'Z1', nomeZona: 'Pituba', aEntrevistar: 1, emAndamento: 0,
+      semAgendamento: 0, agendamentoPendente: 0, vencidos: 0, agendadoBio: 0,
+      coletado: 0, recusaBio: 0, inelegivel: 0, semEntrevista: 0,
+      totalDomicilios: 1, semCoordenadas,
+    });
+    expect(UM.buildZonaPopupHtml(zona(2), {}, [])).toContain('(2 sem coordenadas)');
+    expect(UM.buildZonaPopupHtml(zona(0), {}, [])).not.toContain('sem coordenadas');
+    // Both variants: the field is variant-independent.
+    expect(UM.buildZonaPopupHtml(zona(2), {}, [], UM.MODO_MOVIMENTO))
+      .toContain('(2 sem coordenadas)');
   });
 
   test('a zona with no free slots says so rather than showing nothing', () => {
