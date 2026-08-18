@@ -368,15 +368,19 @@ describe('ocultar não selecionadas toggle', () => {
     expect(team).toContain('class="ocultar-chk"');
   });
 
-  test('no cards -> no toggle; the Lab panel never gets one', () => {
+  test('no rows -> no toggle on any tab; the Lab with rows gets one too', () => {
     const openOnly = [row({ reservado: false })];
     expect(buildTeamPanel({ equipe: 'Equipe A', rows: openOnly }, null, 0, dayNumberMap(openOnly)))
       .not.toContain('ocultar-chk');
     expect(buildSummaryPanel(openOnly, false, null, dayNumberMap(openOnly)))
       .not.toContain('ocultar-chk');
+    expect(buildSummaryPanel(openOnly, true, null, dayNumberMap(openOnly)))
+      .not.toContain('ocultar-chk');
+    // The Lab list carries its own tickmarks, so its rows are hideable
+    // like every other tab's cards.
     const reserved = [row({ controle: 'C1', domicilio: 'D1' })];
     expect(buildSummaryPanel(reserved, true, null, dayNumberMap(reserved)))
-      .not.toContain('ocultar-chk');
+      .toContain('ocultar-chk');
   });
 
   test('the document CSS hides unchecked cards when toggled, and hides the toggle in print', () => {

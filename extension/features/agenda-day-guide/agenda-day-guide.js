@@ -3,12 +3,13 @@
 // number for the whole day (dayNumberMap, time order), the same on its
 // Resumo card, its team-tab card, its Lab row and its map dot: the guide
 // exists so a logistics manager can compose a single route mixing teams
-// and hand each team a print-out without ambiguity. Resumo tab: 4 day
-// stats + the full numbered household list (each card with route
-// checkbox) + the day map. One tab per equipe with the same cards. A
-// "Lab" tab lists the day the way the laboratory's own system does: nº,
-// hora, nome, município, zona — no Controle, no Domicílio, no birth
-// date — print it to share. Data comes exclusively from
+// and hand each team a print-out without ambiguity. Resumo tab: the
+// full numbered household list (each card with route checkbox) + the
+// day map. One tab per equipe with the same cards. A "Lab" tab lists
+// the day grouped by equipe, with tickmarks and a hide toggle: nº,
+// hora, first name + birth year, domicílio, município, zona — no
+// Controle, no full nome, no full birth date — print it to share. Data
+// comes exclusively from
 // window.__sigcPro.readAgendaSlots() (already-rendered FullCalendar DOM,
 // no network); the file itself is inline-CSS-only with CSS radio tabs and
 // an inline route-selector script for live Google Maps link updates — no
@@ -34,32 +35,6 @@
       map.get(k).push(r);
     });
     return [...map.keys()].sort().map((equipe) => ({ equipe, rows: map.get(equipe) }));
-  }
-
-  // Stat block for any row set (whole day or one team). Rows arrive
-  // time-sorted, so first/last reserved row = primeiro/último. `zonas`
-  // is the distinct real zonas of the reserved rows — the agenda's own
-  // unit, unlike the controle the stats used to count — and is null
-  // (unknown, not zero) when the endereços lookup never ran: the
-  // declined-consulta guide must say "—", not claim "0 zonas".
-  function computeStats(rows, enderecos) {
-    const reservados = rows.filter((r) => r.reservado);
-    const primeiro = reservados[0] || null;
-    const ultimo = reservados[reservados.length - 1] || null;
-    const zonas = enderecos
-      ? [...new Set(reservados.map((r) => zonaLabel(slotInfo(r, enderecos))).filter(Boolean))]
-      : null;
-    return {
-      reservados: reservados.length,
-      primeiro: primeiro ? { hora: primeiro.horaInicio, equipe: primeiro.equipe } : null,
-      ultimo: ultimo ? { hora: ultimo.horaInicio, equipe: ultimo.equipe } : null,
-      zonas,
-    };
-  }
-
-  // One-decimal pt-BR average ("1,5"), or null when the denominator is 0.
-  function media1(num, den) {
-    return den > 0 ? (num / den).toFixed(1).replace('.', ',') : null;
   }
 
   // --- endereços data: geo links, Google Maps route, real zona -------
@@ -152,6 +127,9 @@
   const TABLE_CSS = `table.stats { border-collapse: collapse; margin: .6rem 0; }
 table.stats th, table.stats td { border: 1px solid #d0d7de; padding: .25rem .6rem; text-align: left; font-size: .92rem; }
 table.lab-list .lab-num { font-weight: 700; text-align: center; }
+table.lab-list .lab-sel { text-align: center; }
+table.lab-list .lab-dom { text-align: center; }
+table.lab-list .lab-equipe { background: #005a9c; color: #fff; font-size: 1rem; }
 table.lab-list .lab-hora { font-weight: 600; }
 table.lab-list .lab-municipio { color: #555; text-transform: uppercase; font-size: .85em; }
 table.lab-list .lab-zona { color: #555; font-size: .85em; }`;
@@ -231,7 +209,9 @@ table.lab-list .lab-zona { color: #555; font-size: .85em; }`;
 
     return [
       '<div class="card">',
-      `<div class="hora">${chk}${numBadge}${hora}${equipeBadge} <span class="badge">RESERVADO</span></div>`,
+      // No RESERVADO badge: every card rendered is a reserved visit
+      // (open slots are not shown at all), so the label said nothing.
+      `<div class="hora">${chk}${numBadge}${hora}${equipeBadge}</div>`,
       r.endereco ? `<div class="endereco">${e(r.endereco)}</div>` : '',
       info && info.lat != null
         // Same Google Maps driving-directions link the Rota row uses
@@ -248,18 +228,6 @@ table.lab-list .lab-zona { color: #555; font-size: .85em; }`;
 
   function buildTeamPanel(group, enderecos, teamIndex, dayNums) {
     const e = escapeHtml;
-    const s = computeStats(group.rows, enderecos);
-    // Same stat set as the Resumo table, per team: primeiro, último,
-    // zonas distintas, média por zona. Zona bits are simply omitted when
-    // the endereços lookup never ran (s.zonas null) — an inline "—"
-    // would read as a value.
-    const mediaZona = s.zonas ? media1(s.reservados, s.zonas.length) : null;
-    const statBits = [
-      s.primeiro ? `primeiro ${e(s.primeiro.hora)}` : null,
-      s.ultimo ? `último ${e(s.ultimo.hora)}` : null,
-      s.zonas && s.zonas.length ? `${s.zonas.length} zona(s) distinta(s)` : null,
-      mediaZona != null ? `${mediaZona} agendamento(s) por zona` : null,
-    ].filter(Boolean).join(' &nbsp;·&nbsp; ');
     // Routable count decides the default: <=9 -> all checked (matches
     // the original auto-route), >9 -> none checked (chunking is gone, the
     // user must pick their own <=9 stops). Non-routable rows never count
@@ -289,7 +257,6 @@ table.lab-list .lab-zona { color: #555; font-size: .85em; }`;
     const rotaLink = `<div class="rota-link" id="rota-link-${e(routeGroupId)}"></div>`;
     return [
       `<h2>${e(group.equipe)}</h2>`,
-      `<div class="teamstats">${statBits}</div>`,
       cards.length ? OCULTAR_TOGGLE : '',
       ...cards,
       rotaLink,
@@ -299,30 +266,20 @@ table.lab-list .lab-zona { color: #555; font-size: .85em; }`;
 
   function buildSummaryPanel(allRows, lab, enderecos, dayNums) {
     const e = escapeHtml;
-    const day = computeStats(allRows, enderecos);
     const titulo = lab
-      ? 'Resumo do dia — Lab (nome e município, sem Controle nem domicílio)'
+      ? 'Coletas do dia — Lab (primeiro nome e ano de nascimento; sem Controle)'
       : 'Resumo do dia';
-    // Four stats only — what the logistics manager acts on. Counts of
-    // equipes/slots/ocupação belonged to a capacity view this guide no
-    // longer is; zonas replace controles because the zona is the
-    // agenda's own unit. "—" for the zona stats means UNKNOWN (endereços
-    // lookup declined/failed), never zero.
-    const linhas = [
-      ['Primeiro agendamento', day.primeiro ? `${day.primeiro.hora} — ${day.primeiro.equipe}` : '—'],
-      ['Último agendamento', day.ultimo ? `${day.ultimo.hora} — ${day.ultimo.equipe}` : '—'],
-      ['Zonas distintas', day.zonas ? String(day.zonas.length) : '—'],
-      ['Média de agendamentos por zona',
-        day.zonas ? (media1(day.reservados, day.zonas.length) ?? '—') : '—'],
-    ].map(([k, v]) => `<tr><th>${e(k)}</th><td>${e(v)}</td></tr>`).join('\n');
     if (lab) {
-      // The shareable, privacy-stripped view: same stats, then the
-      // numbered lab-safe list. Never a map, never route checkboxes —
-      // see spec Placement.
+      // The shareable, privacy-stripped view: the numbered lab list,
+      // with its own tickmarks and the same hide toggle the other tabs
+      // carry, so the shared/printed page can be culled to the actual
+      // collections. Never a map, never route checkboxes — see spec
+      // Placement.
+      const labList = buildLabList(allRows, enderecos, dayNums);
       return [
         `<h2>${e(titulo)}</h2>`,
-        `<table class="stats">\n${linhas}\n</table>`,
-        buildLabList(allRows, enderecos, dayNums),
+        labList ? OCULTAR_TOGGLE : '',
+        labList,
       ].filter(Boolean).join('\n');
     }
     // The day's households, one full card each, in day (time) order
@@ -349,21 +306,40 @@ table.lab-list .lab-zona { color: #555; font-size: .85em; }`;
       : '';
     return [
       `<h2>${e(titulo)}</h2>`,
-      `<table class="stats">\n${linhas}\n</table>`,
       rotaSection,
       routeMap,
     ].filter(Boolean).join('\n');
   }
 
-  // The Lab tab's list: one numbered row per reserved visit, in day
-  // order. SANCTIONED FIELDS — nº, hora, nome, município, zona — and
-  // nothing else; no Controle, no Domicílio, no birth date, no
-  // telefone/endereço/observação. Município comes from the Controle's
-  // first 7 digits (the IBGE código), never from personal data; zona is
-  // here by an explicit decision (the lab needs the area to plan
-  // routes), accepting that it narrows location below município level.
-  // The nº is the household's day number, so the lab and the field talk
-  // about "o 7" and mean the same visit.
+  // First name plus birth year — "Maria (1948)" — for the Lab list. The
+  // full nome and the full birth date deliberately do NOT leave the
+  // institution; first name and year are what the lab needs to confirm
+  // it is handling the right person's samples.
+  function moradorLab(r) {
+    const primeiro = escapeHtml(String(r.nome || '').trim().split(/\s+/)[0] || '');
+    const ano = (/(\d{4})/.exec(String(r.dtNascimento || '')) || [])[1] || '';
+    if (!primeiro && !ano) return '—';
+    return ano ? `${primeiro || '—'} (${ano})` : primeiro;
+  }
+
+  // The Lab tab's list: one numbered row per reserved visit, grouped by
+  // equipe (name-sorted, each team's rows in time order — groupByEquipe's
+  // contract), with the team named on a full-width header row so the lab
+  // reads one team's collections as a block. Each row carries a tickmark
+  // checkbox; the tab's "ocultar" toggle hides unchecked rows (also in
+  // print) so the shared page can be culled to the actual collections.
+  //
+  // SANCTIONED FIELDS — tickmark, nº, hora, primeiro nome + ano de
+  // nascimento, domicílio, município, zona, equipe — and nothing else;
+  // no Controle, no full nome, no full birth date, no telefone/endereço/
+  // observação. Município comes from the Controle's first 7 digits (the
+  // IBGE código); zona is here by an explicit decision (the lab needs
+  // the area to plan routes); equipe is the operational team name — the
+  // lab receives each team's material together; the domicílio number
+  // (without its Controle) is how sample material is labeled, and alone
+  // it locates nothing. The nº is the household's day number, so the lab
+  // and the field talk about "o 7" and mean the same visit — grouped by
+  // team, the numbers are deliberately NOT sequential down the page.
   //
   // This is the artifact designed to LEAVE the institution. Adding a
   // field here is a privacy decision, not a formatting one: argue it in
@@ -372,18 +348,26 @@ table.lab-list .lab-zona { color: #555; font-size: .85em; }`;
   // list is edited. See ROADMAP.md.
   function buildLabList(allRows, enderecos, dayNums) {
     const e = escapeHtml;
-    const reservados = allRows.filter((r) => r.reservado);
-    if (!reservados.length) return '';
-    const head = '<tr><th>Nº</th><th>Hora</th><th>Nome</th><th>Município</th><th>Zona</th></tr>';
-    const body = reservados.map((r) => {
-      const num = dayNums && dayNums.get(enderecoKey(r));
-      const municipio = window.__sigcPro.municipioFromControle(r.controle);
-      const zona = zonaLabel(slotInfo(r, enderecos));
-      return `<tr><td class="lab-num">${num != null ? num : ''}</td>` +
-        `<td class="lab-hora">${e(r.horaInicio)}</td>` +
-        `<td class="lab-nome">${e(r.nome) || '—'}</td>` +
-        `<td class="lab-municipio">${e(municipio)}</td>` +
-        `<td class="lab-zona">${e(zona)}</td></tr>`;
+    const grupos = groupByEquipe(allRows.filter((r) => r.reservado));
+    if (!grupos.length) return '';
+    const COLS = 7;
+    const head = '<tr><th></th><th>Nº</th><th>Hora</th><th>Morador</th>' +
+      '<th>Dom.</th><th>Município</th><th>Zona</th></tr>';
+    const body = grupos.map((g) => {
+      const rows = g.rows.map((r) => {
+        const num = dayNums && dayNums.get(enderecoKey(r));
+        const municipio = window.__sigcPro.municipioFromControle(r.controle);
+        const zona = zonaLabel(slotInfo(r, enderecos));
+        return `<tr><td class="lab-sel"><input type="checkbox" class="lab-chk"></td>` +
+          `<td class="lab-num">${num != null ? num : ''}</td>` +
+          `<td class="lab-hora">${e(r.horaInicio)}</td>` +
+          `<td class="lab-morador">${moradorLab(r)}</td>` +
+          `<td class="lab-dom">${e(r.domicilio)}</td>` +
+          `<td class="lab-municipio">${e(municipio)}</td>` +
+          `<td class="lab-zona">${e(zona)}</td></tr>`;
+      });
+      return [`<tr class="lab-equipe-row"><th class="lab-equipe" colspan="${COLS}">${e(g.equipe)}</th></tr>`,
+        ...rows].join('\n');
     }).join('\n');
     return `<table class="stats lab-list">\n${head}\n${body}\n</table>`;
   }
@@ -450,7 +434,6 @@ h3 { margin: .8rem 0 .2rem; font-size: 1rem; }
 a { color: #005a9c; }
 .geo, .rota { font-size: .92rem; margin-top: .1rem; }
 .rota-link { margin-top: .4rem; font-size: .92rem; }
-.teamstats { color: #333; margin: .2rem 0 .4rem; font-size: .92rem; }
 .route-map { margin: .6rem 0; page-break-inside: avoid; }
 .route-map-missing { color: #666; font-size: .85rem; margin-top: .3rem; }
 .route-stop-dim { opacity: .35; }
@@ -460,6 +443,10 @@ a { color: #005a9c; }
    exactly the checked set, so an unroutable card hides too. Chrome-only
    audience, so :has() (Chrome 105+) is safe here. */
 .panel:has(.ocultar-chk:checked) .card:has(.hora input[type="checkbox"]:not(:checked)) { display: none; }
+/* Same rule for the Lab list's rows: an unchecked tickmark hides its row
+   when the tab's toggle is on. Team header rows carry no checkbox and
+   always stay. */
+.panel:has(.ocultar-chk:checked) tr:has(.lab-chk:not(:checked)) { display: none; }
 ${TABLE_CSS}
 ${tabRules}
 @media print { .tabs { display: none; } .ocultar-toggle { display: none; } }

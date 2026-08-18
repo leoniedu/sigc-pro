@@ -72,12 +72,14 @@ Em Administrar Agenda:
   há capacidade a abrir.
 • Guia do Dia — guia HTML autônomo em que cada domicílio agendado tem
   UM número para o dia inteiro, o mesmo em todas as abas e no mapa —
-  para montar rotas misturando equipes sem confusão. Abas: Resumo
-  (primeiro/último agendamento, zonas distintas, média de agendamentos
-  por zona e a lista completa dos domicílios do dia, numerada e em
-  ordem de horário, com a equipe em destaque em cada cartão), aba Lab
-  compartilhável com o laboratório (nº, hora, nome, município e zona —
-  sem Controle nem domicílio) e, por equipe, os mesmos cartões — pronto
+  para montar rotas misturando equipes sem confusão. Abas: Resumo (a
+  lista completa dos domicílios do dia, numerada e em ordem de horário,
+  com a equipe em destaque em cada cartão), aba Lab compartilhável com
+  o laboratório (agrupada por equipe, com marcador por linha: nº, hora,
+  primeiro nome e ano de nascimento, domicílio, município e zona — sem
+  Controle, sem nome completo, sem data de nascimento completa) e, por
+  equipe, os mesmos cartões — em toda aba, "Ocultar não selecionadas"
+  esconde as linhas desmarcadas, inclusive na impressão — pronto
   para imprimir por aba. Ao clicar, oferece obter do próprio servidor
   do SIGC (mediante confirmação) as coordenadas, a zona real, a agência
   e o entrevistador de cada visita, para incluir também o mapa do dia

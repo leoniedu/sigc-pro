@@ -63,11 +63,18 @@ Working checklist; move items up/down freely. Specs live in
       derived from the Controle's first 7 digits, the IBGE código, via
       the generated `common/municipios.js` table); no Controle, no
       Domicílio, no birth date
-- [x] Lab tab sanctioned fields, decided explicitly: **nº, hora, nome,
-      município, zona** — and nothing else. Zona is included because the
-      laboratory needs the collection area to plan its routes; it is
-      accepted that zona narrows location below município level, so this
-      is a deliberate trade, not an oversight. The nº is the household's
+- [x] Lab tab sanctioned fields, decided explicitly: **tickmark, nº,
+      hora, primeiro nome + ano de nascimento, domicílio, município,
+      zona, equipe** — and nothing else: no Controle, no full nome, no
+      full birth date. Zona is included because the laboratory needs the
+      collection area to plan its routes; it is accepted that zona
+      narrows location below município level, so this is a deliberate
+      trade, not an oversight. Equipe is the operational team name (no
+      personal data): the lab receives each team's material together, so
+      the list groups by it. First name + birth year replace the full
+      nome — enough for the lab to confirm whose samples it handles; the
+      domicílio number (without its Controle) is how material is
+      labeled, and alone it locates nothing. The nº is the household's
       day-wide number, shared with every other tab, carrying no data of
       its own. Adding a further field is a privacy decision that must be
       argued in its own commit — the whitelist test in

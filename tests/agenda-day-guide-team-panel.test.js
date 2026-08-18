@@ -34,7 +34,7 @@ describe('buildTeamPanel — LIVRE cards removed', () => {
     const html = buildTeamPanel(group, null, 0);
     expect(html).not.toContain('LIVRE');
     expect(html).not.toContain('livre-edge');
-    expect(html).toContain('RESERVADO');
+    expect(html).toContain('class="card"'); // the reserved card renders (no RESERVADO badge — all cards are reserved)
     expect(html).toContain('C1');
   });
 
@@ -54,7 +54,7 @@ describe('buildTeamPanel — LIVRE cards removed', () => {
   test('a fully-reserved team still renders its card(s) normally', () => {
     const group = { equipe: 'Equipe A', rows: [row({ reservado: true, controle: 'C1', domicilio: 'D1' })] };
     const html = buildTeamPanel(group, null, 0);
-    expect(html).toContain('RESERVADO');
+    expect(html).toContain('class="card"'); // the reserved card renders (no RESERVADO badge — all cards are reserved)
     expect(html).toContain('C1');
   });
 });

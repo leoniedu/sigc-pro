@@ -72,13 +72,15 @@ Em Administrar Agenda:
     Cada domicílio agendado recebe UM número para o dia inteiro (ordem
     de horário), o mesmo em todas as abas e no mapa — assim uma rota
     montada misturando equipes pode ser conferida e repassada a cada
-    equipe sem confusão. Abas: Resumo (primeiro e último agendamento,
-    zonas distintas e média de agendamentos por zona, mais a lista
-    completa dos domicílios do dia em ordem de horário — cartões
-    numerados com endereço, morador, telefone, Controle/Domicílio e a
-    equipe em destaque), uma aba Lab compartilhável com o laboratório
-    (nº, hora, nome, município e zona — sem Controle, sem domicílio,
-    sem dados pessoais) e, por equipe, os mesmos cartões numerados.
+    equipe sem confusão. Abas: Resumo (a lista completa dos domicílios
+    do dia em ordem de horário — cartões numerados com endereço,
+    morador, telefone, Controle/Domicílio e a equipe em destaque), uma
+    aba Lab compartilhável com o laboratório (agrupada por equipe, com
+    marcador por linha: nº, hora, primeiro nome e ano de nascimento do
+    morador, domicílio, município e zona — sem Controle, sem nome
+    completo, sem data de nascimento completa) e, por equipe, os mesmos
+    cartões numerados. Em toda aba, "Ocultar não selecionadas" esconde
+    as linhas desmarcadas — inclusive na impressão.
     Ctrl+P imprime a aba aberta.
     Ao clicar, o Guia do Dia oferece consultar o próprio servidor do
     SIGC (mediante confirmação) para obter coordenadas, zona real,

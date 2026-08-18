@@ -66,22 +66,32 @@ describe('municipioFromControle', () => {
 });
 
 describe('buildLabList', () => {
-  test('shows nº, hora, nome and município — never the Controle', () => {
+  test('shows nº, hora, first name + birth year, domicílio and município — never the Controle', () => {
     const html = listFor([row()]);
     expect(html).toContain('<td class="lab-num">1</td>');
     expect(html).toContain('09:00');
-    expect(html).toContain('Fulano de Tal');
+    // First name and birth year only — enough for the lab to confirm
+    // whose samples these are, without the full identity.
+    expect(html).toContain('<td class="lab-morador">Fulano (1948)</td>');
+    expect(html).toContain('<td class="lab-dom">D1</td>');
     expect(html).toContain('SALVADOR - BA');
     expect(html).not.toContain('2927408000123');
   });
 
-  test('leaks no Controle, Domicílio or birth date', () => {
+  test('leaks no Controle, no full nome, no full birth date', () => {
     const html = listFor([row()]);
     expect(html).not.toContain('2927408000123');
     // not even the previously truncated 11-digit prefix
     expect(html).not.toContain('29274080001');
-    expect(html).not.toContain('Dom D1');
+    expect(html).not.toContain('Fulano de Tal');
+    expect(html).not.toContain('de Tal');
     expect(html).not.toContain('17/02/1948');
+    expect(html).not.toContain('17/02');
+  });
+
+  test('each row carries a tickmark checkbox', () => {
+    const html = listFor([row()]);
+    expect(html).toContain('<td class="lab-sel"><input type="checkbox" class="lab-chk"></td>');
   });
 
   // WHITELIST, deliberately the inverse of the test above. The Lab tab
@@ -90,12 +100,13 @@ describe('buildLabList', () => {
   // newly added field passes it silently (that is exactly how zona
   // entered the Lab tab in 0c0eb28 without review).
   //
-  // The sanctioned set is {nº, hora, nome, município, zona}. Adding a
-  // sixth field must be a deliberate edit to THIS list, with the privacy
-  // question answered in the commit message — not a silent pass. Zona is
-  // in the set by an explicit decision: the laboratory needs the area to
-  // plan its collection routes. The nº carries no data of its own — it
-  // is the day-wide position, shared with every other tab.
+  // The sanctioned set is {tickmark, nº, hora, primeiro nome + ano,
+  // domicílio, município, zona, equipe}. Adding a further field must be
+  // a deliberate edit to THIS list, with the privacy question answered
+  // in the commit message — not a silent pass. Zona is in the set by an
+  // explicit decision: the laboratory needs the area to plan its
+  // collection routes. The nº carries no data of its own — it is the
+  // day-wide position, shared with every other tab.
   test('Lab rows carry ONLY the sanctioned fields', () => {
     // Deliberately POPULATED with every sensitive field a real reserved
     // slot carries. A sparse fixture would defeat the whole test: a
@@ -114,35 +125,50 @@ describe('buildLabList', () => {
     ]);
     const html = listFor([cheio], enderecos);
 
-    const SANCTIONED = ['lab-num', 'lab-hora', 'lab-nome', 'lab-municipio', 'lab-zona'];
-    const cellClasses = [...html.matchAll(/<td class="(lab-[a-z-]+)"/g)]
+    // Each entry here is an explicit decision — see buildLabList's
+    // comment: equipe (the grouping the lab works in), domicílio (how
+    // sample material is labeled; locates nothing without its Controle),
+    // morador (FIRST name + birth YEAR only), sel (the tickmark, no
+    // data of its own).
+    const SANCTIONED = ['lab-sel', 'lab-num', 'lab-hora', 'lab-morador',
+      'lab-dom', 'lab-municipio', 'lab-zona', 'lab-equipe'];
+    const cellClasses = [...html.matchAll(/<t[dh] class="(lab-[a-z-]+)"/g)]
       .map((m) => m[1]);
     expect(cellClasses.length).toBeGreaterThan(0);
     const unexpected = [...new Set(cellClasses)]
       .filter((c) => !SANCTIONED.includes(c));
     expect(unexpected).toEqual([]);
 
-    // The sanctioned five are present…
+    // The sanctioned fields are present…
     expect(html).toContain('<td class="lab-num">1</td>');
     expect(html).toContain('09:00');
-    expect(html).toContain('Fulano de Tal');
+    expect(html).toContain('<td class="lab-morador">Fulano (1948)</td>');
+    expect(html).toContain('<td class="lab-dom">D1</td>');
     expect(html).toContain('SALVADOR - BA');
     expect(html).toContain('<td class="lab-zona">12</td>');
 
-    // …and no populated non-sanctioned value leaked through.
-    ['71 99999-0000', 'Rua Exemplo, 100', 'observação sensível', '17/02/1948']
+    // …and no populated non-sanctioned value leaked through — including
+    // the full nome and the full birth date, of which only the first
+    // name and the year survive.
+    ['71 99999-0000', 'Rua Exemplo, 100', 'observação sensível',
+      '17/02/1948', 'Fulano de Tal']
       .forEach((v) => expect(html).not.toContain(v));
   });
 
-  test('unknown código: nome still shown, município cell empty', () => {
+  test('unknown código: morador still shown, município cell empty', () => {
     const html = listFor([row({ controle: '9999999000123' })]);
-    expect(html).toContain('Fulano de Tal');
+    expect(html).toContain('Fulano (1948)');
     expect(html).toContain('<td class="lab-municipio"></td>');
   });
 
-  test('reserved row with no nome falls back to em dash', () => {
-    const html = listFor([row({ nome: '' })]);
-    expect(html).toContain('<td class="lab-nome">—</td>');
+  test('missing pieces degrade one by one, never as a fake value', () => {
+    // No nome, only the year; no birth date, only the name; neither.
+    expect(listFor([row({ nome: '' })]))
+      .toContain('<td class="lab-morador">— (1948)</td>');
+    expect(listFor([row({ dtNascimento: '' })]))
+      .toContain('<td class="lab-morador">Fulano</td>');
+    expect(listFor([row({ nome: '', dtNascimento: '' })]))
+      .toContain('<td class="lab-morador">—</td>');
   });
 
   test('escapes nome', () => {
@@ -157,17 +183,29 @@ describe('buildLabList', () => {
     expect((html.match(/<td class="lab-num">/g) || []).length).toBe(1);
   });
 
-  test('rows keep day order and day numbers across teams', () => {
+  test('rows group by team (name order) and keep their day numbers', () => {
     const rows = [
       { ...row({ horaInicio: '08:00', domicilio: 'D1' }), equipe: 'B' },
       { ...row({ horaInicio: '09:00', domicilio: 'D2' }), equipe: 'A' },
       { ...row({ horaInicio: '10:00', domicilio: 'D3' }), equipe: 'B' },
     ];
     const html = listFor(rows);
+    // Each team named prominently on its own header row, A before B.
+    expect(html).toContain('<th class="lab-equipe" colspan="7">A</th>');
+    expect(html).toContain('<th class="lab-equipe" colspan="7">B</th>');
+    expect(html.indexOf('colspan="7">A<')).toBeLessThan(html.indexOf('colspan="7">B<'));
+    // Day numbers are identity, not row order: grouped by team they are
+    // deliberately NOT sequential down the page (A's household is the
+    // day's 2nd), and within a team time order holds (1 before 3).
     const nums = [...html.matchAll(/<td class="lab-num">(\d+)<\/td>/g)].map((m) => m[1]);
-    expect(nums).toEqual(['1', '2', '3']);
-    // Time order preserved, not team order.
-    expect(html.indexOf('08:00')).toBeLessThan(html.indexOf('09:00'));
+    expect(nums).toEqual(['2', '1', '3']);
+  });
+
+  test('escapes the equipe name', () => {
+    const rows = [{ ...row(), equipe: '<script>alert(1)</script>' }];
+    const html = listFor(rows);
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;');
   });
 });
 
