@@ -355,6 +355,45 @@ describe('buildSummaryPanel route wiring', () => {
   });
 });
 
+describe('ocultar não selecionadas toggle', () => {
+  const { dayNumberMap, buildSummaryPanel, buildTeamPanel, buildGuideHtml } =
+    window.__sigcPro.dayGuide;
+
+  test('Resumo and team panels with cards render the toggle', () => {
+    const allRows = [row({ controle: 'C1', domicilio: 'D1' })];
+    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
+    const resumo = buildSummaryPanel(allRows, false, enderecos, dayNumberMap(allRows));
+    expect(resumo).toContain('class="ocultar-chk"');
+    const team = buildTeamPanel({ equipe: 'Equipe A', rows: allRows }, enderecos, 0, dayNumberMap(allRows));
+    expect(team).toContain('class="ocultar-chk"');
+  });
+
+  test('no cards -> no toggle; the Lab panel never gets one', () => {
+    const openOnly = [row({ reservado: false })];
+    expect(buildTeamPanel({ equipe: 'Equipe A', rows: openOnly }, null, 0, dayNumberMap(openOnly)))
+      .not.toContain('ocultar-chk');
+    expect(buildSummaryPanel(openOnly, false, null, dayNumberMap(openOnly)))
+      .not.toContain('ocultar-chk');
+    const reserved = [row({ controle: 'C1', domicilio: 'D1' })];
+    expect(buildSummaryPanel(reserved, true, null, dayNumberMap(reserved)))
+      .not.toContain('ocultar-chk');
+  });
+
+  test('the document CSS hides unchecked cards when toggled, and hides the toggle in print', () => {
+    const groups = [{ equipe: 'Equipe A', rows: [row({ controle: 'C1', domicilio: 'D1' })] }];
+    const enderecos = enderecosMap([['C1', 'D1', -12.9, -38.5]]);
+    const meta = { uf: 'BA', dataBr: '22/07/2026', diaSemana: 'quarta-feira', geradoEm: '22/07/2026 10:00' };
+    const html = buildGuideHtml(meta, groups, groups[0].rows, enderecos);
+    // The hide rule targets the card's OWN checkbox — including the
+    // disabled sem-coordenadas one — scoped to the toggled panel only.
+    expect(html).toContain(
+      '.panel:has(.ocultar-chk:checked) .card:has(.hora input[type="checkbox"]:not(:checked)) { display: none; }');
+    // display:none carries into print by itself; the control must not print.
+    expect(html).toContain(
+      '@media print { .tabs { display: none; } .ocultar-toggle { display: none; } }');
+  });
+});
+
 describe('inline script is present and shaped correctly', () => {
   test('buildGuideHtml embeds exactly one <script> block before </body>', () => {
     const { buildGuideHtml } = window.__sigcPro.dayGuide;

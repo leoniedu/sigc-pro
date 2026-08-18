@@ -156,6 +156,18 @@ table.lab-list .lab-hora { font-weight: 600; }
 table.lab-list .lab-municipio { color: #555; text-transform: uppercase; font-size: .85em; }
 table.lab-list .lab-zona { color: #555; font-size: .85em; }`;
 
+  // The "print exactly the composed route" control. Pure CSS: the
+  // .panel:has(.ocultar-chk:checked) rule in buildGuideHtml hides every
+  // card whose own checkbox is unchecked — including the permanently
+  // disabled sem-coordenadas one, since a printed route should show
+  // exactly the composed stops. display:none applies in print media too,
+  // which is the whole point; the toggle itself is hidden by @media
+  // print. Scoped by the enclosing <section class="panel">, so each
+  // tab's toggle governs only its own cards.
+  const OCULTAR_TOGGLE =
+    '<label class="ocultar-toggle"><input type="checkbox" class="ocultar-chk"> ' +
+    'Ocultar não selecionadas (vale também para a impressão)</label>';
+
   function metaLine(meta) {
     const e = escapeHtml;
     return [e(meta.uf), meta.dataBr ? `${e(meta.dataBr)} (${e(meta.diaSemana)})` : '',
@@ -278,6 +290,7 @@ table.lab-list .lab-zona { color: #555; font-size: .85em; }`;
     return [
       `<h2>${e(group.equipe)}</h2>`,
       `<div class="teamstats">${statBits}</div>`,
+      cards.length ? OCULTAR_TOGGLE : '',
       ...cards,
       rotaLink,
       teamMap,
@@ -325,7 +338,8 @@ table.lab-list .lab-zona { color: #555; font-size: .85em; }`;
     const cards = reservados.map((r) =>
       buildSlotCard(r, enderecos, dayNums, 'resumo', false, idxMap.get(enderecoKey(r))));
     const rotaSection = cards.length
-      ? ['<h3>Rota do dia</h3>', ...cards, '<div class="rota-link" id="rota-link-resumo"></div>'].join('\n')
+      ? ['<h3>Rota do dia</h3>', OCULTAR_TOGGLE, ...cards,
+        '<div class="rota-link" id="rota-link-resumo"></div>'].join('\n')
       : '';
     const routeMap = enderecos
       ? [
@@ -440,9 +454,15 @@ a { color: #005a9c; }
 .route-map { margin: .6rem 0; page-break-inside: avoid; }
 .route-map-missing { color: #666; font-size: .85rem; margin-top: .3rem; }
 .route-stop-dim { opacity: .35; }
+.ocultar-toggle { display: block; margin: .4rem 0; font-size: .9rem; color: #333; }
+/* A card is "não selecionada" when its own checkbox — routable or the
+   disabled sem-coordenadas one — is unchecked. The composed route is
+   exactly the checked set, so an unroutable card hides too. Chrome-only
+   audience, so :has() (Chrome 105+) is safe here. */
+.panel:has(.ocultar-chk:checked) .card:has(.hora input[type="checkbox"]:not(:checked)) { display: none; }
 ${TABLE_CSS}
 ${tabRules}
-@media print { .tabs { display: none; } }
+@media print { .tabs { display: none; } .ocultar-toggle { display: none; } }
 </style>
 </head>
 <body>
