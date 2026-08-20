@@ -24,7 +24,7 @@ Na Lista de Endereços:
 
 No relatório Último Movimento e no Relatório de Acompanhamento de
 Biomarcadores, filtrados por agência, município ou controle:
-• Mapa-pro — abre um painel com quatro abas. Mapa: os domicílios do
+• Mapa-pro — abre um painel com cinco abas. Mapa: os domicílios do
   recorte filtrado, coloridos pela situação de cada um, com marcadores
   que crescem com o zoom, destaque para os que estão perto do prazo e
   camadas por agência que podem ser ligadas e desligadas uma a uma;
@@ -36,7 +36,9 @@ Biomarcadores, filtrados por agência, município ou controle:
   topo. Cada página agrupa pela unidade que sabe responder: o relatório
   de biomarcadores por ZONA, que é a unidade da agenda, e o Último
   Movimento por CONTROLE, a unidade de amostragem — sem consulta à
-  agenda não há capacidade por zona a comparar. Domicílios: a
+  agenda não há capacidade por zona a comparar. Entrevistadores: as
+  mesmas contagens, por entrevistador, com as zonas (ou controles) em
+  que cada um tem domicílios. Domicílios: a
   lista completa, com situação, a ação devida em cada caso e um
   pino que leva ao domicílio no mapa. Cada aba de dados pode ser baixada
   em CSV. E a aba Entenda, que diz de onde vem cada número do painel: o

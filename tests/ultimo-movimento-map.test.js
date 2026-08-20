@@ -68,6 +68,35 @@ describe('joinEnderecos', () => {
     expect(d1).toMatchObject({ lat: -8.5, lon: -63.8, zona: 'ESCOLA POLICIA', idZona: '11.1.01.08', temCoordenadas: true, temZona: true });
   });
 
+  test('incluirSoEnderecos: a selecionado absent from the report joins as Não Distribuido', () => {
+    // The movement report covers everything that left the base, so a
+    // household in the Lista de Endereços but not in the report has not
+    // been distributed. It joins with coordinates (so its controle gets
+    // a real row, a marker and a working pin) and the derived posição.
+    const enderecosMap = new Map([
+      ['C1|1', { lat: -8.5, lon: -63.8, zona: 'A', idZona: 'Z1' }],
+      ['C9|7', { lat: -8.4, lon: -63.7, zona: 'B', idZona: 'Z2' }],
+    ]);
+    const joined = UM.joinEnderecos(movimentoMap, enderecosMap, true);
+    expect(joined).toHaveLength(3);
+    const novo = joined.find((r) => r.controle === 'C9');
+    expect(novo).toMatchObject({
+      domicilio: '7', ultimaPosicao: 'Não Distribuido', tipoEntrevista: '',
+      temCoordenadas: true, idZona: 'Z2',
+    });
+    // It lands in the Não distribuída column and makes its controle real.
+    const agg = UM.aggregateZonas(joined, null, UM.MODO_MOVIMENTO, undefined);
+    const c9 = agg.find((b) => b.idZona === 'C9');
+    expect(c9.naoDistribuida).toBe(1);
+    expect(UM.zonaRowIsClickable(c9)).toBe(true);
+  });
+
+  test('without the flag (biomarcadores path), enderecos-only households stay out', () => {
+    const enderecosMap = new Map([['C9|7', { lat: -8.4, lon: -63.7, zona: 'B', idZona: 'Z2' }]]);
+    expect(UM.joinEnderecos(movimentoMap, enderecosMap)).toHaveLength(2);
+    expect(UM.joinEnderecos(movimentoMap, enderecosMap, false)).toHaveLength(2);
+  });
+
   test('a household missing from enderecosMap gets temCoordenadas/temZona false, not dropped', () => {
     const joined = UM.joinEnderecos(movimentoMap, new Map());
     expect(joined).toHaveLength(2);
@@ -2631,6 +2660,21 @@ describe('prazo in the Domicílios tab', () => {
     expect(html).toMatch(/data-order="-21"/);
   });
 
+  test('every Prazo cell carries a numeric sort key — one text cell broke the whole column', () => {
+    // A dash cell without data-order made DataTables type the column as
+    // text, so "-21" sorted after "5" lexicographically. The dash now
+    // carries 9999 — not 0: a household with no deadline is not "due
+    // today", and ascending (overdue first) must put it last.
+    const html = UM.buildDomiciliosTabHtml(
+      [linha({ dataFinalColeta: '' }), linha({ domicilio: '2' })],
+      UM.MODO_BIOMARCADORES, hoje);
+    expect(html).toContain('data-order="9999">—</td>');
+    const prazoKeys = [...html.matchAll(/<td[^>]*data-order="(-?\d+)">(?:—|<span class="sigc-pro-prazo-num)/g)]
+      .map((m) => m[1]);
+    expect(prazoKeys.length).toBe(2);
+    prazoKeys.forEach((k) => expect(Number.isNaN(Number(k))).toBe(false));
+  });
+
   test('no prazo renders as an em-dash, not as zero', () => {
     const html = UM.buildDomiciliosTabHtml(
       [linha({ status: 'Não iniciado', dataFinalColeta: '' })],
@@ -4008,13 +4052,15 @@ describe('Domicílios tab on the biomarcadores page', () => {
   test('shows the collection people and dates, not the interviewer', () => {
     const h = html([d({
       status: 'Coletado Sangue e Urina', dataVisita: '12/08/2026',
-      siapeColeta: '222', nomeEquipe: 'EQ1', entrevistador: '999',
+      siapeColeta: '222', nomeEquipe: 'EQ1', entrevistador: 'SIAPE-ENTREV',
     })]);
     expect(h).toContain('12/08/2026');
     expect(h).toContain('222');
     expect(h).toContain('EQ1');
-    // Último Movimento's interviewer is not this page's subject.
-    expect(h).not.toContain('999');
+    // Último Movimento's interviewer is not this page's subject. (A
+    // distinctive fixture value: a numeric one collided with the
+    // dash-cell data-order sentinel.)
+    expect(h).not.toContain('SIAPE-ENTREV');
   });
 
   test('sample outcomes are shown when they exist', () => {
@@ -4973,5 +5019,97 @@ describe('the two refusals are counted apart, as the map already draws them', ()
     const ths = (html.match(/<th[ >]/g) || []).length;
     const tds = (html.match(/<td[ >]/g) || []).length;
     expect(tds).toBe(ths);
+  });
+});
+
+describe('the Entrevistadores tab', () => {
+  const linhaMov = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', zona: 'Z1', temZona: true,
+    temCoordenadas: true, tipoEntrevista: 'Não Iniciada',
+    ultimaPosicao: 'Distribuido', agendado: '', entrevistador: 'F1', ...over,
+  });
+
+  test('aggregates by entrevistador with the movimento tipo counts', () => {
+    const rows = [
+      linhaMov({ domicilio: '1', controle: 'C1' }),
+      linhaMov({ domicilio: '2', controle: 'C2', tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado' }),
+      // Blank entrevistador is real (still in distribution) — it must
+      // land in "Sem entrevistador", never vanish.
+      linhaMov({ domicilio: '3', entrevistador: '' }),
+    ];
+    const agg = UM.aggregateZonas(rows, null, UM.MODO_MOVIMENTO, undefined, UM.GRUPO_ENTREVISTADOR);
+    const f1 = agg.find((b) => b.nomeZona === 'F1');
+    expect(f1.naoIniciada).toBe(1);
+    expect(f1.realizada).toBe(1);
+    expect(f1.totalDomicilios).toBe(2);
+    // The areas cell: the same unit the Controles tab uses.
+    expect([...f1.grupos].sort()).toEqual(['C1', 'C2']);
+    const sem = agg.find((b) => b.nomeZona === 'Sem entrevistador');
+    expect(sem.totalDomicilios).toBe(1);
+  });
+
+  test('biomarcadores variant buckets the classification and collects zonas', () => {
+    const linhaBio = (over) => ({
+      controle: 'C1', domicilio: '1', idZona: 'Z1', zona: 'Z1', temZona: true,
+      temCoordenadas: true, tipoEntrevista: 'Realizada', ultimaPosicao: 'Descarregado',
+      status: 'A agendar', agendado: '', dataAgendada: '',
+      dataFinalColeta: '20/08/2026', entrevistador: 'F1', ...over,
+    });
+    const rows = [
+      linhaBio({ domicilio: '1', idZona: 'Z1' }),
+      linhaBio({ domicilio: '2', idZona: 'Z2', status: 'Coletado Sangue e Urina' }),
+    ];
+    const agg = UM.aggregateZonas(rows, null, UM.MODO_BIOMARCADORES, '2026-08-15', UM.GRUPO_ENTREVISTADOR);
+    const f1 = agg.find((b) => b.nomeZona === 'F1');
+    expect(f1.agendamentoPendente).toBe(1);
+    expect(f1.coletado).toBe(1);
+    expect([...f1.grupos].sort()).toEqual(['Z1', 'Z2']);
+  });
+
+  test('the table shows each variant\'s own columns, no pin, areas sortable by count', () => {
+    const rowsMov = UM.aggregateZonas(
+      [linhaMov({}), linhaMov({ domicilio: '2', controle: 'C2' })],
+      null, UM.MODO_MOVIMENTO, undefined, UM.GRUPO_ENTREVISTADOR);
+    const htmlMov = UM.buildEntrevistadoresTableHtml(rowsMov, UM.MODO_MOVIMENTO);
+    expect(htmlMov).toContain('<th>Entrevistador</th>');
+    expect(htmlMov).toContain('Não distribuída');
+    expect(htmlMov).toContain('>Controles</th>');
+    expect(htmlMov).not.toContain('sigc-pro-zona-pin-col');
+    expect(htmlMov).not.toContain('Slots');
+    expect(htmlMov).toContain('data-order="2">C1 C2</td>');
+
+    const htmlBio = UM.buildEntrevistadoresTableHtml([], UM.MODO_BIOMARCADORES);
+    expect(htmlBio).toContain('A entrevistar');
+    expect(htmlBio).toContain('>Zonas</th>');
+    expect(htmlBio).not.toContain('Déficit');
+  });
+
+  test('most-loaded person first; Sem entrevistador always last', () => {
+    const rows = [
+      linhaMov({ domicilio: '1', entrevistador: '' }),
+      linhaMov({ domicilio: '2', entrevistador: 'F2' }),
+      linhaMov({ domicilio: '3', entrevistador: 'F1' }),
+      linhaMov({ domicilio: '4', entrevistador: 'F1', controle: 'C2' }),
+    ];
+    const agg = UM.aggregateZonas(rows, null, UM.MODO_MOVIMENTO, undefined, UM.GRUPO_ENTREVISTADOR);
+    const html = UM.buildEntrevistadoresTableHtml(agg, UM.MODO_MOVIMENTO);
+    const f1 = html.indexOf('<td>F1</td>');
+    const f2 = html.indexOf('<td>F2</td>');
+    const sem = html.indexOf('<td>Sem entrevistador</td>');
+    expect(f1).toBeGreaterThan(-1);
+    expect(f1).toBeLessThan(f2);
+    expect(sem).toBeGreaterThan(f2);
+  });
+
+  test('the panel carries the tab, its panel and its CSV button; filename passes through', () => {
+    const html = UM.buildPanelHtml(
+      [linhaMov({})], [], new Map(), new Map(), UM.MODO_MOVIMENTO, '2026-08-15');
+    expect(html).toContain('data-tab="entrevistadores"');
+    expect(html).toContain('id="sigc-pro-entrevistadores-panel"');
+    expect(html).toContain('data-csv-aba="entrevistadores"');
+    expect(UM.nomeCsvAba('entrevistadores', UM.MODO_MOVIMENTO, '2026-08-19'))
+      .toBe('sigc-pro-ultimo-movimento-entrevistadores-2026-08-19.csv');
+    expect(UM.nomeCsvAba('entrevistadores', UM.MODO_BIOMARCADORES, '2026-08-19'))
+      .toBe('sigc-pro-biomarcadores-entrevistadores-2026-08-19.csv');
   });
 });

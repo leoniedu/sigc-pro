@@ -84,8 +84,41 @@
   // its Último Movimento data with temCoordenadas/temZona both false, so
   // the popup's "sem coordenadas" count and the "Sem zona" bucket stay
   // accurate instead of silently undercounting.
-  function joinEnderecos(movimentoMap, enderecosMap) {
+  // incluirSoEnderecos (MODO_MOVIMENTO only): a selecionado present in
+  // the Lista de Endereços but ABSENT from the movement report has not
+  // been distributed — the report covers everything that left the base,
+  // so absence from it IS the "Não Distribuído" state (which is also why
+  // that posição never appears in the report's own rows). Joining these
+  // households in gives their controles real rows, map markers (grey)
+  // and a working pin, instead of a seeded zero row nothing can click.
+  // NEVER on the biomarcadores variant: there the report is the
+  // SUBSAMPLE, and endereços covers every selecionado — joining the
+  // rest would flood the panel with households the page is not about.
+  function joinEnderecos(movimentoMap, enderecosMap, incluirSoEnderecos) {
     const out = [];
+    if (incluirSoEnderecos) {
+      (enderecosMap || new Map()).forEach((info, key) => {
+        if (movimentoMap.has(key)) return;
+        const [controle, domicilio] = String(key).split('|');
+        if (!controle || !domicilio) return;
+        out.push({
+          controle,
+          domicilio,
+          entrevistador: '',
+          tipoEntrevista: '',
+          // Derived, not read from a report cell — the Entenda tab says
+          // so. Spelled exactly as POSICAO_NAO_DISTRIBUIDO's first form.
+          ultimaPosicao: 'Não Distribuido',
+          data: '',
+          lat: info.lat ?? null,
+          lon: info.lon ?? null,
+          zona: info.zona || '',
+          idZona: info.idZona || '',
+          temCoordenadas: info.lat != null && info.lon != null,
+          temZona: Boolean(info.idZona || info.zona),
+        });
+      });
+    }
     movimentoMap.forEach((row, key) => {
       const info = enderecosMap.get(key) || null;
       const lat = info?.lat ?? null;
@@ -316,6 +349,20 @@
     return GRUPO[(modo || MODO_MOVIMENTO).id] || GRUPO.movimento;
   }
 
+  // Third grouping, shared by BOTH variants: the Entrevistadores tab
+  // buckets by the report's own Entrevistador column (on biomarcadores
+  // it rides the same Último Movimento consulta that fills Última
+  // Posição). Not in GRUPO: that map answers "what does this VARIANT
+  // group its Zonas tab by", while this one is passed explicitly as an
+  // override to aggregateZonas.
+  const GRUPO_ENTREVISTADOR = {
+    campo: 'entrevistador',
+    rotulo: 'Entrevistador',
+    rotuloPlural: 'Entrevistadores',
+    temNome: false,
+    semGrupoLabel: 'Sem entrevistador',
+  };
+
   // The grouping key of a row, and whether it has one at all. A row with
   // no zona is real (households arrive before zona assignment); a row
   // with no controle is not, but the same shape covers both.
@@ -324,15 +371,23 @@
       const c = (r && r.controle) || '';
       return { tem: !!c, id: c || null, nome: c || null };
     }
+    if (g.campo === 'entrevistador') {
+      // Blank is real here: a household still in distribution has no
+      // entrevistador on the report, and on biomarcadores a failed
+      // posições fetch leaves every row blank — both land in the
+      // "Sem entrevistador" bucket rather than vanishing.
+      const s = String((r && r.entrevistador) || '').trim();
+      return { tem: !!s, id: s || null, nome: s || null };
+    }
     return {
       tem: !!(r && r.temZona), id: (r && r.idZona) || null,
       nome: (r && r.zona) || null,
     };
   }
 
-  function aggregateZonas(joined, enderecosMap, modo, hojeIso) {
+  function aggregateZonas(joined, enderecosMap, modo, hojeIso, grupoOverride) {
     const m = modo || MODO_MOVIMENTO;
-    const g = grupoDe(m);
+    const g = grupoOverride || grupoDe(m);
     const byZona = new Map(); // key: group id || special string
     const SEM_ZONA_KEY = '__SEM_ZONA__';
     // idZona/nomeZona keep their names through the whole pipeline even
@@ -355,13 +410,21 @@
       totalDomicilios: 0, semCoordenadas: 0, agendados: 0,
       realizadasSemAgendamento: 0, pendentes: 0,
       aAgendar: 0, jaAgendados: 0,
+      // Only filled when grouping by entrevistador: the distinct
+      // controles (movimento) or zonas (biomarcadores) this person has
+      // households in — the "where does their work sit" cell.
+      grupos: new Set(),
     });
 
     // Seed from the address list so a group with no fieldwork yet still
     // gets a row — a zona (or controle) missing from a MOVEMENT report is
     // precisely the one where nothing has moved, which is the row a
-    // supervisor most needs to see.
-    (enderecosMap || new Map()).forEach((info, chave) => {
+    // supervisor most needs to see. No seeding for the entrevistador
+    // grouping: the address list carries no roster of people without
+    // work, and an entrevistador with zero households is not a row this
+    // table can know about.
+    (enderecosMap && g.campo !== 'entrevistador' ? enderecosMap : new Map())
+      .forEach((info, chave) => {
       if (g.campo === 'controle') {
         // enderecosMap is keyed "controle|domicilio"; the controle is the
         // half before the pipe.
@@ -418,6 +481,13 @@
       bucket.totalDomicilios += 1;
       if (!r.temCoordenadas) bucket.semCoordenadas += 1;
       if (r.agendado) bucket.agendados += 1;
+      // Which areas this entrevistador's households sit in — the unit
+      // each variant's OWN Zonas tab uses (zona on biomarcadores,
+      // controle on movimento), so the two tabs cross-reference.
+      if (g.campo === 'entrevistador') {
+        const area = m.comDemanda ? r.idZona : r.controle;
+        if (area) bucket.grupos.add(area);
+      }
       // On the biomarcadores page the demand is the literal `status`, not
       // the ultimaPosicao proxy — which is empty there anyway, so keeping
       // the proxy rule would silently report zero demand.
@@ -1125,6 +1195,89 @@
     return owed > (t.manha || 0) + (t.tarde || 0);
   }
 
+  // Column tooltips shared by the Zonas/Controles table AND the
+  // Entrevistadores table — the two show the same classification
+  // columns, and a tooltip that drifted between them would explain the
+  // same number two different ways. Zona-only tooltips (déficit, turnos,
+  // pin) stay inside buildZonasTableHtml.
+  const TIP_RECUSA =
+    'Recusa da ENTREVISTA, não do biomarcador — quem recusa o ' +
+    'biomarcador costuma constar aqui como entrevista realizada.';
+  const TIP_NAO_DISTRIBUIDA =
+    'Domicílio selecionado que não aparece no relatório (o Último ' +
+    'Movimento cobre tudo que saiu da base) ou com Última Posição ' +
+    '"Não Distribuído": o questionário ainda não foi distribuído. As ' +
+    'demais colunas seguem o Tipo Entrevista do relatório.';
+  // "Não Iniciada" is SIGC's word for "no outcome transmitted", not a
+  // literal "untouched": measured against biomarcadores in BA, every
+  // blank-outcome household carries it, including partially-unloaded
+  // interviews and a few with a coleta already booked.
+  const TIP_NAO_INICIADA =
+    'Tipo Entrevista "Não Iniciada": nenhum desfecho de entrevista ' +
+    'transmitido — pode não ter começado, estar no meio do caminho ou ' +
+    'ter terminado sem descarregar por completo.';
+  const TIP_A_ENTREVISTAR =
+    'A entrevista ainda não aconteceu (Última Posição "Não Distribuído", ' +
+    '"Distribuido" ou "Enviado para Carga") — não é atraso de coleta.';
+  // NOT "em andamento": the SIGC recorded no tipo at all, so there is
+  // no evidence the interview progressed — only that the household
+  // left distribution. An interview genuinely under way shows a tipo
+  // and lands in one of the columns to the right.
+  const TIP_EM_ANDAMENTO =
+    'Já saiu da distribuição, mas o SIGC não registrou tipo de ' +
+    'entrevista — situação indefinida. Não afirma que a entrevista começou.';
+  const TIP_SEM_AGENDAMENTO =
+    'Entrevista realizada, mas o agendamento do biomarcador nunca foi ' +
+    'aberto (item 25A.01 não respondido). Não há prazo correndo.';
+  const TIP_AGEND_PENDENTE =
+    'Prazo do biomarcador correndo e sem horário marcado — inclui ' +
+    'agendamento vencido. É a fila de trabalho da zona.';
+  const TIP_AGENDADO = 'Biomarcador com data futura marcada.';
+  const TIP_COLETADO = 'Biomarcador coletado (sangue, urina ou ambos).';
+  const TIP_RECUSA_BIO =
+    'Recusou a COLETA de sangue/urina. A entrevista costuma ter sido ' +
+    'realizada. Reverter exige convencer sobre o exame.';
+  const TIP_RECUSA_ENTREV =
+    'Recusou a ENTREVISTA — não se chegou à coleta. Reverter exige ' +
+    'convencer sobre a pesquisa inteira. Quem recusou as duas conta em ' +
+    'Recusa biomarc.';
+  const TIP_INELEGIVEL =
+    'Entrevista concluída e descarregada sem abrir o biomarcador. ' +
+    'Morador selecionado com menos de 35 anos ou outra inelegibilidade ' +
+    '— não haverá coleta.';
+  const TIP_VENCIDOS =
+    'Quantos dos "Agendamento pendente" já passaram do prazo. Contidos ' +
+    'naquela coluna — não somar as duas.';
+  const TIP_SEM_ENTREVISTA =
+    'Sem entrevista aproveitável: domicílio vago, uso ocasional, ' +
+    'demolido, fora de âmbito ou encerrado por outro motivo.';
+
+  // The classification/tipo columns each variant shows, one list per
+  // variant, shared by the Zonas/Controles and Entrevistadores tables so
+  // their headers and cells can never drift apart. [label, tip, campo,
+  // extraTdClass].
+  const COLUNAS_CONTAGEM_BIO = [
+    ['A entrevistar', TIP_A_ENTREVISTAR, 'aEntrevistar', ''],
+    ['Em campo (indefinida)', TIP_EM_ANDAMENTO, 'emAndamento', ''],
+    ['Sem agendamento iniciado', TIP_SEM_AGENDAMENTO, 'semAgendamento', ''],
+    ['Agendamento pendente', TIP_AGEND_PENDENTE, 'agendamentoPendente', 'sigc-pro-devidas'],
+    ['Vencidos', TIP_VENCIDOS, 'vencidos', ''],
+    ['Agendado', TIP_AGENDADO, 'agendadoBio', ''],
+    ['Coletado', TIP_COLETADO, 'coletado', ''],
+    ['Recusa biomarc.', TIP_RECUSA_BIO, 'recusaBiomarcador', ''],
+    ['Recusa entrev.', TIP_RECUSA_ENTREV, 'recusaEntrevista', ''],
+    ['Inelegível', TIP_INELEGIVEL, 'inelegivel', ''],
+    ['Encerrado sem entrevista', TIP_SEM_ENTREVISTA, 'semEntrevista', ''],
+  ];
+  const COLUNAS_CONTAGEM_MOV = [
+    ['Não distribuída', TIP_NAO_DISTRIBUIDA, 'naoDistribuida', ''],
+    ['Realizada', '', 'realizada', ''],
+    ['Não Iniciada', TIP_NAO_INICIADA, 'naoIniciada', ''],
+    ['Dom. Fechado', '', 'domicilioFechado', ''],
+    ['Recusa entrev.', TIP_RECUSA, 'recusa', ''],
+    ['Outros', '', 'outros', ''],
+  ];
+
   // slotsPorZona: Map(idZona -> [{isoDate, horas}]) already grouped by
   // agruparPorDia — see the window today..+2 weeks computation at the
   // onMapaClick call site. Rendered in its own cell via <details>, kept
@@ -1152,9 +1305,6 @@
     // collection refusal appears HERE as a successful interview, because
     // it was one. Naming the column plain "Recusa" invites a reader to
     // take it for the collection refusal it structurally cannot show.
-    const TIP_RECUSA =
-      'Recusa da ENTREVISTA, não do biomarcador — quem recusa o ' +
-      'biomarcador costuma constar aqui como entrevista realizada.';
     // One per turno: the shared text ended with "Manhã antes das 13h",
     // which read as a definition of the column it was hovering over — so
     // "Slots tarde" explained the morning cut-off and said nothing about
@@ -1177,56 +1327,9 @@
     // column indices at all (order: []), so nothing else has to be
     // renumbered when a column is added — which is exactly the trap a
     // positional config would have set here.
-    const TIP_NAO_DISTRIBUIDA =
-      'Última Posição "Não Distribuído": o questionário ainda não foi ' +
-      'distribuído ao entrevistador. As demais colunas seguem o Tipo ' +
-      'Entrevista do relatório.';
-    // "Não Iniciada" is SIGC's word for "no outcome transmitted", not a
-    // literal "untouched": measured against biomarcadores in BA, every
-    // blank-outcome household carries it, including partially-unloaded
-    // interviews and a few with a coleta already booked.
-    const TIP_NAO_INICIADA =
-      'Tipo Entrevista "Não Iniciada": nenhum desfecho de entrevista ' +
-      'transmitido — pode não ter começado, estar no meio do caminho ou ' +
-      'ter terminado sem descarregar por completo.';
-    const TIP_A_ENTREVISTAR =
-      'A entrevista ainda não aconteceu (Última Posição "Não Distribuído", ' +
-      '"Distribuido" ou "Enviado para Carga") — não é atraso de coleta.';
-    // NOT "em andamento": the SIGC recorded no tipo at all, so there is
-    // no evidence the interview progressed — only that the household
-    // left distribution. An interview genuinely under way shows a tipo
-    // and lands in one of the columns to the right.
-    const TIP_EM_ANDAMENTO =
-      'Já saiu da distribuição, mas o SIGC não registrou tipo de ' +
-      'entrevista — situação indefinida. Não afirma que a entrevista começou.';
-    const TIP_SEM_AGENDAMENTO =
-      'Entrevista realizada, mas o agendamento do biomarcador nunca foi ' +
-      'aberto (item 25A.01 não respondido). Não há prazo correndo.';
-    const TIP_AGEND_PENDENTE =
-      'Prazo do biomarcador correndo e sem horário marcado — inclui ' +
-      'agendamento vencido. É a fila de trabalho da zona.';
-    const TIP_AGENDADO = 'Biomarcador com data futura marcada.';
-    const TIP_COLETADO = 'Biomarcador coletado (sangue, urina ou ambos).';
-    const TIP_RECUSA_BIO =
-      'Recusou a COLETA de sangue/urina. A entrevista costuma ter sido ' +
-      'realizada. Reverter exige convencer sobre o exame.';
-    const TIP_RECUSA_ENTREV =
-      'Recusou a ENTREVISTA — não se chegou à coleta. Reverter exige ' +
-      'convencer sobre a pesquisa inteira. Quem recusou as duas conta em ' +
-      'Recusa biomarc.';
-    const TIP_INELEGIVEL =
-      'Entrevista concluída e descarregada sem abrir o biomarcador. ' +
-      'Morador selecionado com menos de 35 anos ou outra inelegibilidade ' +
-      '— não haverá coleta.';
-    const TIP_VENCIDOS =
-      'Quantos dos "Agendamento pendente" já passaram do prazo. Contidos ' +
-      'naquela coluna — não somar as duas.';
     const TIP_DEFICIT =
       'Agendamento pendente menos os slots livres da janela. Positivo: a ' +
       'zona deve mais coletas do que consegue marcar.';
-    const TIP_SEM_ENTREVISTA =
-      'Sem entrevista aproveitável: domicílio vago, uso ocasional, ' +
-      'demolido, fora de âmbito ou encerrado por outro motivo.';
     const TIP_A_AGENDAR =
       'Entrevista realizada, biomarcador em aberto e sem horário marcado — ' +
       'inclui agendamento vencido sem coleta. Só entra quem dá para agendar ' +
@@ -1244,32 +1347,18 @@
     // tab uses) rather than in its own column, and there is no Sem
     // coordenadas column — that count is housekeeping about the map,
     // almost always 0, and lives in the zona/controle popup instead.
+    // Left to right IS the pipeline, with the two dead ends pulled out
+    // of it (see classificaDomicilio) — the order is the descriptors'.
+    const colunas = m.comDemanda ? COLUNAS_CONTAGEM_BIO : COLUNAS_CONTAGEM_MOV;
+    const contagemHead = colunas.map(([label, tip]) =>
+      `<th${tip ? ` title="${esc(tip)}"` : ''}>${esc(label)}</th>`).join('');
     const head =
       '<tr>' +
       `<th class="sigc-pro-zona-pin-col" data-orderable="false" title="${esc(TIP_PIN)}"></th>` +
       `<th>${esc(g.rotulo)}</th>` +
-      // Left to right IS the pipeline, with the two dead ends pulled out
-      // of it. See classificaDomicilio for the predicates.
-      (m.comDemanda
-        ? `<th title="${esc(TIP_A_ENTREVISTAR)}">A entrevistar</th>` +
-          `<th title="${esc(TIP_EM_ANDAMENTO)}">Em campo (indefinida)</th>` +
-          `<th title="${esc(TIP_SEM_AGENDAMENTO)}">Sem agendamento iniciado</th>` +
-          `<th title="${esc(TIP_AGEND_PENDENTE)}">Agendamento pendente</th>` +
-          `<th title="${esc(TIP_VENCIDOS)}">Vencidos</th>` +
-          `<th title="${esc(TIP_AGENDADO)}">Agendado</th>` +
-          `<th title="${esc(TIP_COLETADO)}">Coletado</th>` +
-          `<th title="${esc(TIP_RECUSA_BIO)}">Recusa biomarc.</th>` +
-          `<th title="${esc(TIP_RECUSA_ENTREV)}">Recusa entrev.</th>` +
-          `<th title="${esc(TIP_INELEGIVEL)}">Inelegível</th>` +
-          `<th title="${esc(TIP_SEM_ENTREVISTA)}">Encerrado sem entrevista</th>` +
-          `<th title="${esc(TIP_DEFICIT)}">Déficit</th>` +
-          '<th>Total</th>'
-        : `<th title="${esc(TIP_NAO_DISTRIBUIDA)}">Não distribuída</th>` +
-          '<th>Realizada</th>' +
-          `<th title="${esc(TIP_NAO_INICIADA)}">Não Iniciada</th>` +
-          '<th>Dom. Fechado</th>' +
-          `<th title="${esc(TIP_RECUSA)}">Recusa entrev.</th>` +
-          '<th>Outros</th><th>Total</th>') +
+      contagemHead +
+      (m.comDemanda ? `<th title="${esc(TIP_DEFICIT)}">Déficit</th>` : '') +
+      '<th>Total</th>' +
       (m.comSlots
         ? `<th title="${esc(TIP_TURNO_MANHA)}">Slots manhã</th>` +
           `<th title="${esc(TIP_TURNO_TARDE)}">Slots tarde</th>` +
@@ -1347,34 +1436,25 @@
       // useful order is "which zona has the most capacity left", so the
       // sort key is the total number of open slots.
       const slotsCount = grupos.reduce((n, g) => n + ((g.horas && g.horas.length) || 0), 0);
+      // The count cells come from the same descriptors as the header —
+      // a column can never appear in one and not the other. The
+      // 'sigc-pro-devidas' class bolds the actionable queue: the one
+      // number in the row that says "book something this week".
+      const contagemCells = colunas.map(([, , campo, cls]) =>
+        `<td${cls ? ` class="${cls}"` : ''}>${r[campo] || 0}</td>`).join('');
       return (
         `<tr${rowAttrs}>` +
         `<td class="sigc-pro-zona-pin-col">${pinCell}</td>` +
         `<td>${zonaLabel}</td>` +
+        contagemCells +
         (m.comDemanda
-          ? `<td>${r.aEntrevistar || 0}</td>` +
-            `<td>${r.emAndamento || 0}</td>` +
-            `<td>${r.semAgendamento || 0}</td>` +
-            // The actionable queue, bolded: it is the one number in the
-            // row that says "book something this week".
-            `<td class="sigc-pro-devidas">${r.agendamentoPendente || 0}</td>` +
-            `<td>${r.vencidos || 0}</td>` +
-            `<td>${r.agendadoBio || 0}</td>` +
-            `<td>${r.coletado || 0}</td>` +
-            `<td>${r.recusaBiomarcador || 0}</td>` +
-            `<td>${r.recusaEntrevista || 0}</td>` +
-            `<td>${r.inelegivel || 0}</td>` +
-            `<td>${r.semEntrevista || 0}</td>` +
-            // The manager's actual question, as a sortable number rather
-            // than a hover title: how many bookings does this zona owe
-            // beyond what its free slots can absorb.
-            `<td class="${deficit > 0 ? 'sigc-pro-devidas' : ''}" data-order="${deficit}">` +
-            `${deficit > 0 ? deficit : '—'}</td>` +
-            `<td>${r.totalDomicilios}</td>`
-          : `<td>${r.naoDistribuida || 0}</td>` +
-            `<td>${r.realizada}</td><td>${r.naoIniciada}</td>` +
-            `<td>${r.domicilioFechado}</td><td>${r.recusa}</td><td>${r.outros}</td>` +
-            `<td>${r.totalDomicilios}</td>`) +
+          // The manager's actual question, as a sortable number rather
+          // than a hover title: how many bookings does this zona owe
+          // beyond what its free slots can absorb.
+          ? `<td class="${deficit > 0 ? 'sigc-pro-devidas' : ''}" data-order="${deficit}">` +
+            `${deficit > 0 ? deficit : '—'}</td>`
+          : '') +
+        `<td>${r.totalDomicilios}</td>` +
         (m.comSlots
           ? `<td>${turnos.manha || 0}</td><td>${turnos.tarde || 0}</td>` +
             `<td class="sigc-pro-slots-cell" data-order="${slotsCount}">${slotsCell}</td>`
@@ -1383,6 +1463,49 @@
       );
     }).join('');
     return `<table class="sigc-pro-zonas-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  }
+
+  // The Entrevistadores tab: the same classification counts the
+  // Zonas/Controles tab shows (same descriptors, so the two can never
+  // disagree on labels or tooltips), bucketed by the report's own
+  // Entrevistador column, plus the areas each person has households in.
+  // Leaner on purpose: no pin (an entrevistador has no hull to jump to),
+  // no slots/déficit/capacidade (capacity belongs to a zona, not a
+  // person). Rows sorted by Total desc — the most-loaded person first —
+  // with "Sem entrevistador" always last.
+  const TIP_AREAS =
+    'Onde estão os domicílios deste entrevistador — a mesma unidade da ' +
+    'outra aba. Ordena pela quantidade de áreas.';
+  function buildEntrevistadoresTableHtml(rows, modo) {
+    const m = modo || MODO_BIOMARCADORES;
+    const esc = window.__sigcPro.escapeHtml;
+    const colunas = m.comDemanda ? COLUNAS_CONTAGEM_BIO : COLUNAS_CONTAGEM_MOV;
+    const areaLabel = m.comDemanda ? 'Zonas' : 'Controles';
+    const head = '<tr><th>Entrevistador</th>' +
+      colunas.map(([label, tip]) =>
+        `<th${tip ? ` title="${esc(tip)}"` : ''}>${esc(label)}</th>`).join('') +
+      '<th>Total</th>' +
+      `<th title="${esc(TIP_AREAS)}">${areaLabel}</th></tr>`;
+    const semGrupo = GRUPO_ENTREVISTADOR.semGrupoLabel;
+    const ordenadas = [...(rows || [])].sort((a, b) => {
+      const aSem = a.nomeZona === semGrupo, bSem = b.nomeZona === semGrupo;
+      if (aSem !== bSem) return aSem ? 1 : -1;
+      return (b.totalDomicilios || 0) - (a.totalDomicilios || 0) ||
+        String(a.nomeZona || '').localeCompare(String(b.nomeZona || ''));
+    });
+    const body = ordenadas.map((r) => {
+      const areas = [...(r.grupos || [])].sort();
+      const cells = colunas.map(([, , campo, cls]) =>
+        `<td${cls ? ` class="${cls}"` : ''}>${r[campo] || 0}</td>`).join('');
+      return '<tr>' +
+        `<td>${esc(r.nomeZona || r.idZona || semGrupo)}</td>` +
+        cells +
+        `<td>${r.totalDomicilios}</td>` +
+        `<td class="sigc-pro-areas-cell" data-order="${areas.length}">${esc(areas.join(' '))}</td>` +
+        '</tr>';
+    }).join('');
+    return `<table class="sigc-pro-zonas-table sigc-pro-entrevistadores-table">` +
+      `<thead>${head}</thead><tbody>${body}</tbody></table>`;
   }
 
   // Household row columns: Controle+Domicílio, Agendado, Situação
@@ -1478,8 +1601,14 @@
       // sigc-pro-prazo-cell marks this cell as "export the sort key, not
       // the text" — see celulaParaTexto, which needs the bare number so a
       // spreadsheet can still sort the overdue rows.
+      //
+      // The dash cell carries a numeric key too: ONE keyless cell made
+      // DataTables type the whole column as text, so "-21" sorted after
+      // "5" lexicographically. 9999 rather than 0 — a household with no
+      // deadline is not "due today"; ascending (the useful direction:
+      // overdue first) puts it after every real deadline.
       const prazoCell = dias === null
-        ? '<td>—</td>'
+        ? '<td data-order="9999">—</td>'
         : `<td class="sigc-pro-prazo-cell${alerta ? ' sigc-pro-prazo-alerta' : ''}"` +
           ` data-order="${dias}">` +
           // The number rides INSIDE the cell, hidden. DataTables hands
@@ -1606,6 +1735,10 @@
     /* Pin, Zona and Nome are the text columns; every count stays right-aligned.
        Widened from -n+2 when the pin column was inserted at the front. */
     .sigc-pro-zonas-table th:nth-child(-n+2), .sigc-pro-zonas-table td:nth-child(-n+2) { text-align: left; }
+    /* The Entrevistadores table has no pin column, so only its first
+       column is textual; the areas cell is a list, back to the left. */
+    .sigc-pro-entrevistadores-table th:nth-child(2), .sigc-pro-entrevistadores-table td:nth-child(2) { text-align: right; }
+    .sigc-pro-entrevistadores-table td.sigc-pro-areas-cell { text-align: left; font-size: 11px; min-width: 18rem; max-width: 28rem; }
     .sigc-pro-zonas-table th { background: #f4f4f4; }
     /* Hover still highlights the whole row — it marks what the pin will act
        on — but the pointer cursor now belongs to the pin alone, since the
@@ -1825,10 +1958,12 @@
     const m = modo || MODO_BIOMARCADORES;
     if (!m.comDemanda) {
       return [
-        ['Não distribuída', PROV_RELATO,
-          'Última Posição é "Não Distribuído": o questionário ainda não ' +
-          'foi distribuído ao entrevistador. Todas as outras colunas ' +
-          'seguem o Tipo Entrevista informado pelo relatório.'],
+        ['Não distribuída', PROV_DERIVADO,
+          'Domicílio selecionado na Lista de Endereços que não aparece ' +
+          'no relatório — o Último Movimento cobre tudo que saiu da ' +
+          'base, então a ausência significa "ainda não distribuído" — ' +
+          'ou cuja Última Posição é "Não Distribuído". Todas as outras ' +
+          'colunas seguem o Tipo Entrevista informado pelo relatório.'],
         ['Realizada', PROV_RELATO,
           'Tipo Entrevista = "Realizada". Diz que a ENTREVISTA terminou, e ' +
           'nada sobre o biomarcador.'],
@@ -1962,6 +2097,19 @@
             'página não consulta a agenda, então não há slots nem ' +
             'capacidade a comparar por zona; cada contorno no mapa é um ' +
             'controle, com sua etiqueta no centro.')}</p>`,
+      // The third grouping, stated with its provenance: on Último
+      // Movimento the Entrevistador is the report's own column; on
+      // biomarcadores it rides the same Último Movimento consulta that
+      // fills a Última Posição — a household that consulta misses conta
+      // em "Sem entrevistador", nunca some.
+      '<p class="sigc-pro-entenda-fonte"><b>Entrevistadores:</b> ' +
+        esc('a aba usa a coluna Entrevistador do Último Movimento' +
+          (m.comDemanda
+            ? ', obtida pela mesma consulta que preenche a Última ' +
+              'Posição. Domicílio sem correspondência nessa consulta ' +
+              'conta em "Sem entrevistador".'
+            : '. Domicílio ainda sem entrevistador atribuído conta em ' +
+              '"Sem entrevistador".')) + '</p>',
       '<h4>De onde vem cada número</h4>',
       '<p class="sigc-pro-entenda-legenda-prov">' +
         `${grau(PROV_RELATO)} o relatório afirma; aqui só se contou. ` +
@@ -1985,6 +2133,11 @@
     const hoje = hojeIso || new Date().toISOString().slice(0, 10);
     const zonasTable = buildZonasTableHtml(zonaRows, slotsPorZona, turnosPorZona, m);
     const domiciliosTable = buildDomiciliosTabHtml(joined, m, hoje, slotsPorZona);
+    // Same counting pipeline as zonaRows, re-bucketed by the report's
+    // own Entrevistador. No enderecosMap: there is no roster to seed
+    // people-with-no-work rows from.
+    const entrevistadorRows = aggregateZonas(joined, null, m, hoje, GRUPO_ENTREVISTADOR);
+    const entrevistadoresTable = buildEntrevistadoresTableHtml(entrevistadorRows, m);
     // Surfaced on the tab itself: an alert buried in a table of hundreds
     // that nobody scrolls to is not an alert. Sorting by Prazo then puts
     // them on top (overdue first, since the recomputed count goes
@@ -2040,6 +2193,7 @@
       `      <span class="sigc-pro-panel-fonte" title="${esc(FONTE_TIP[m.id])}">${esc(FONTE_LABEL[m.id])}</span>`,
       '      <button type="button" class="sigc-pro-tab-btn sigc-pro-tab-active" data-tab="mapa">Mapa</button>',
       `      <button type="button" class="sigc-pro-tab-btn" data-tab="zonas">${esc(gPainel.rotuloPlural)} (${zonaRows.length})</button>`,
+      `      <button type="button" class="sigc-pro-tab-btn" data-tab="entrevistadores">Entrevistadores (${entrevistadorRows.length})</button>`,
       `      <button type="button" class="sigc-pro-tab-btn" data-tab="domicilios">Domicílios (${joined.length})${alertaLabel}</button>`,
       // Last, and visually set apart: it is documentation, not a fourth
       // view of the data. Reachable from every tab because the question
@@ -2059,6 +2213,10 @@
         '<span class="sigc-pro-slots-stamp"></span></div>',
       `      ${zonasHint}`,
       `      ${zonasTable}`,
+      '    </div>',
+      '    <div id="sigc-pro-entrevistadores-panel" class="sigc-pro-tab-panel">',
+      `      <div class="sigc-pro-tab-toolbar">${csvBtn('entrevistadores', 'Entrevistadores')}</div>`,
+      `      ${entrevistadoresTable}`,
       '    </div>',
       '    <div id="sigc-pro-domicilios-panel" class="sigc-pro-tab-panel">',
       `      <div class="sigc-pro-tab-toolbar">${csvBtn('domicilios', 'Domicílios')}</div>`,
@@ -3282,8 +3440,12 @@
               const p = posicoes.get(key);
               if (!p) return;
               r.ultimaPosicao = p.ultimaPosicao;
-              // Only the posição. tipoEntrevista is deliberately NOT
-              // copied: where the biomarcadores report leaves it blank,
+              // The Entrevistadores tab buckets by this; same fetch,
+              // one more column.
+              r.entrevistador = p.entrevistador;
+              // Only posição and entrevistador. tipoEntrevista is
+              // deliberately NOT copied: where the biomarcadores report
+              // leaves it blank,
               // Último Movimento says "Não Iniciada" for every one of
               // them (verified, BA: 1.416/1.416), so the fallback can
               // never promote a household into a real outcome — it only
@@ -3296,7 +3458,7 @@
           console.warn(`${TAG} Último Movimento (posições) fetch failed:`, err);
         }
       }
-      const joined = joinEnderecos(movimentoMap, enderecosMap);
+      const joined = joinEnderecos(movimentoMap, enderecosMap, !modo.comDemanda);
 
       // The agenda is an enrichment, not the feature's core (that's the
       // coordinate join above) — a rejected agenda fetch must never cost
@@ -3620,6 +3782,8 @@
     renderLeafletMap,
     legendEntries,
     buildZonasTableHtml,
+    buildEntrevistadoresTableHtml,
+    GRUPO_ENTREVISTADOR,
     buildDomiciliosTabHtml,
     buildPopupHtml,
     buildZonaPopupHtml,
