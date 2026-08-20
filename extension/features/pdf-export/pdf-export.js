@@ -99,7 +99,7 @@
           {
             text: present(val(r, cols.nDomicilio)) ? val(r, cols.nDomicilio) : '',
             rowSpan: 2,
-            fontSize: 18.5,
+            fontSize: 24,
             bold: true,
             alignment: 'center',
             margin: [0, 2, 0, 0],
@@ -168,19 +168,19 @@
       ];
     }
     doc.styles = {
-      hdr: { fontSize: 15 },
-      section: { fontSize: 14, bold: true, margin: [0, 0, 0, 4] },
-      th: { fontSize: 12, bold: true },
-      td: { fontSize: 12 },
-      td2: { fontSize: 10.5, color: '#444444' },
+      hdr: { fontSize: 19.5 },
+      section: { fontSize: 18, bold: true, margin: [0, 0, 0, 4] },
+      th: { fontSize: 15.5, bold: true },
+      td: { fontSize: 15.5 },
+      td2: { fontSize: 13.5, color: '#444444' },
     };
-    doc.defaultStyle = { fontSize: 12 };
+    doc.defaultStyle = { fontSize: 15.5 };
 
     const gerado = new Date().toLocaleString('pt-BR');
     doc.footer = (page, total) => ({
       columns: [
-        { text: `Pág. ${page} de ${total}`, fontSize: 10.5 },
-        { text: `Gerado em ${gerado}`, fontSize: 10.5, alignment: 'right' },
+        { text: `Pág. ${page} de ${total}`, fontSize: 13.5 },
+        { text: `Gerado em ${gerado}`, fontSize: 13.5, alignment: 'right' },
       ],
       margin: [24, 8, 24, 0],
     });
