@@ -5113,3 +5113,53 @@ describe('the Entrevistadores tab', () => {
       .toBe('sigc-pro-biomarcadores-entrevistadores-2026-08-19.csv');
   });
 });
+
+describe('allocation and staleness signals', () => {
+  const linha = (over) => ({
+    controle: 'C1', domicilio: '1', idZona: 'Z1', zona: 'Z1', temZona: true,
+    temCoordenadas: true, tipoEntrevista: 'Não Iniciada',
+    ultimaPosicao: 'Distribuido', agendado: '', entrevistador: 'F1',
+    data: '', ...over,
+  });
+
+  test('a controle bucket collects its distinct entrevistadores', () => {
+    const rows = [
+      linha({ domicilio: '1', entrevistador: 'F2' }),
+      linha({ domicilio: '2', entrevistador: 'F1' }),
+      linha({ domicilio: '3', entrevistador: 'F1' }),
+      linha({ domicilio: '4', entrevistador: '' }), // unassigned: never listed
+    ];
+    const agg = UM.aggregateZonas(rows, null, UM.MODO_MOVIMENTO);
+    const c1 = agg.find((b) => b.idZona === 'C1');
+    expect([...c1.entrevistadores].sort()).toEqual(['F1', 'F2']);
+  });
+
+  test('the Controles tab shows Entrevistador(es); the biomarcadores Zonas tab does not', () => {
+    const rows = [linha({}), linha({ domicilio: '2', entrevistador: 'F2' })];
+    const agg = UM.aggregateZonas(rows, null, UM.MODO_MOVIMENTO);
+    const html = UM.buildZonasTableHtml(agg, new Map(), new Map(), UM.MODO_MOVIMENTO);
+    expect(html).toContain('Entrevistador(es)');
+    expect(html).toContain('data-order="2">F1 F2</td>');
+    const bio = UM.buildZonasTableHtml([], new Map(), new Map(), UM.MODO_BIOMARCADORES);
+    expect(bio).not.toContain('Entrevistador(es)');
+  });
+
+  test('Última transmissão is the NEWEST Data, sortable as ISO, dash when never transmitted', () => {
+    const rows = [
+      linha({ domicilio: '1', data: '05/01/2026 08:00:00' }),
+      // Later date, earlier day-of-month: lexicographic dd/mm would pick
+      // the wrong one — the ISO key must decide.
+      linha({ domicilio: '2', data: '03/08/2026 17:30:00' }),
+      linha({ domicilio: '3', entrevistador: 'F9' }), // F9: no data at all
+    ];
+    const agg = UM.aggregateZonas(rows, null, UM.MODO_MOVIMENTO, undefined, UM.GRUPO_ENTREVISTADOR);
+    const f1 = agg.find((b) => b.nomeZona === 'F1');
+    expect(f1.ultimaTransmissao).toBe('03/08/2026 17:30:00');
+    expect(f1.ultimaTransmissaoOrd).toBe('2026-08-03 17:30:00');
+    const html = UM.buildEntrevistadoresTableHtml(agg, UM.MODO_MOVIMENTO);
+    expect(html).toContain('Última transmissão');
+    expect(html).toContain('data-order="2026-08-03 17:30:00">03/08/2026 17:30:00</td>');
+    // F9 never transmitted: an em-dash with an empty key, not a fake date.
+    expect(html).toContain('data-order="">—</td>');
+  });
+});

@@ -414,6 +414,14 @@
       // controles (movimento) or zonas (biomarcadores) this person has
       // households in — the "where does their work sit" cell.
       grupos: new Set(),
+      // The inverse mapping, filled for the zona/controle groupings:
+      // which entrevistadores hold this group's households — the
+      // allocation question ("is C-042 assigned, and to whom?").
+      entrevistadores: new Set(),
+      // Newest transmission (Data column) among the bucket's rows: the
+      // staleness signal. Ord is the ISO sort key, the display keeps
+      // the report's own dd/mm/yyyy HH:MM:SS.
+      ultimaTransmissao: '', ultimaTransmissaoOrd: '',
     });
 
     // Seed from the address list so a group with no fieldwork yet still
@@ -487,6 +495,15 @@
       if (g.campo === 'entrevistador') {
         const area = m.comDemanda ? r.idZona : r.controle;
         if (area) bucket.grupos.add(area);
+      } else if (String(r.entrevistador || '').trim()) {
+        bucket.entrevistadores.add(String(r.entrevistador).trim());
+      }
+      // Newest transmission wins; a blank Data (never transmitted, or a
+      // household joined from the address list alone) never competes.
+      const ordData = chaveOrdenavelDataBr(r.data);
+      if (ordData && ordData > bucket.ultimaTransmissaoOrd) {
+        bucket.ultimaTransmissaoOrd = ordData;
+        bucket.ultimaTransmissao = r.data;
       }
       // On the biomarcadores page the demand is the literal `status`, not
       // the ultimaPosicao proxy — which is empty there anyway, so keeping
@@ -1352,6 +1369,13 @@
     const colunas = m.comDemanda ? COLUNAS_CONTAGEM_BIO : COLUNAS_CONTAGEM_MOV;
     const contagemHead = colunas.map(([label, tip]) =>
       `<th${tip ? ` title="${esc(tip)}"` : ''}>${esc(label)}</th>`).join('');
+    // Movimento only: the allocation question is controle -> person, so
+    // the Controles tab carries the inverse of the Entrevistadores tab's
+    // areas cell. Not on the biomarcadores Zonas table — allocation is
+    // done in controles, and that table was just slimmed on purpose.
+    const TIP_ENTREV_COL =
+      'Quem tem domicílios neste controle, pelo Último Movimento. Vazio: ' +
+      'nenhum domicílio distribuído. Ordena pela quantidade de pessoas.';
     const head =
       '<tr>' +
       `<th class="sigc-pro-zona-pin-col" data-orderable="false" title="${esc(TIP_PIN)}"></th>` +
@@ -1359,6 +1383,7 @@
       contagemHead +
       (m.comDemanda ? `<th title="${esc(TIP_DEFICIT)}">Déficit</th>` : '') +
       '<th>Total</th>' +
+      (!m.comDemanda ? `<th title="${esc(TIP_ENTREV_COL)}">Entrevistador(es)</th>` : '') +
       (m.comSlots
         ? `<th title="${esc(TIP_TURNO_MANHA)}">Slots manhã</th>` +
           `<th title="${esc(TIP_TURNO_TARDE)}">Slots tarde</th>` +
@@ -1455,6 +1480,10 @@
             `${deficit > 0 ? deficit : '—'}</td>`
           : '') +
         `<td>${r.totalDomicilios}</td>` +
+        (!m.comDemanda
+          ? `<td class="sigc-pro-areas-cell" data-order="${(r.entrevistadores || new Set()).size}">` +
+            `${esc([...(r.entrevistadores || new Set())].sort().join(' '))}</td>`
+          : '') +
         (m.comSlots
           ? `<td>${turnos.manha || 0}</td><td>${turnos.tarde || 0}</td>` +
             `<td class="sigc-pro-slots-cell" data-order="${slotsCount}">${slotsCell}</td>`
@@ -1476,6 +1505,10 @@
   const TIP_AREAS =
     'Onde estão os domicílios deste entrevistador — a mesma unidade da ' +
     'outra aba. Ordena pela quantidade de áreas.';
+  const TIP_ULTIMA_TRANSMISSAO =
+    'A transmissão mais recente (coluna Data do Último Movimento) entre ' +
+    'os domicílios deste entrevistador. Uma data antiga com trabalho ' +
+    'pendente é o sinal de campo parado.';
   function buildEntrevistadoresTableHtml(rows, modo) {
     const m = modo || MODO_BIOMARCADORES;
     const esc = window.__sigcPro.escapeHtml;
@@ -1485,6 +1518,7 @@
       colunas.map(([label, tip]) =>
         `<th${tip ? ` title="${esc(tip)}"` : ''}>${esc(label)}</th>`).join('') +
       '<th>Total</th>' +
+      `<th title="${esc(TIP_ULTIMA_TRANSMISSAO)}">Última transmissão</th>` +
       `<th title="${esc(TIP_AREAS)}">${areaLabel}</th></tr>`;
     const semGrupo = GRUPO_ENTREVISTADOR.semGrupoLabel;
     const ordenadas = [...(rows || [])].sort((a, b) => {
@@ -1501,6 +1535,7 @@
         `<td>${esc(r.nomeZona || r.idZona || semGrupo)}</td>` +
         cells +
         `<td>${r.totalDomicilios}</td>` +
+        `<td data-order="${esc(r.ultimaTransmissaoOrd || '')}">${esc(r.ultimaTransmissao || '—')}</td>` +
         `<td class="sigc-pro-areas-cell" data-order="${areas.length}">${esc(areas.join(' '))}</td>` +
         '</tr>';
     }).join('');
@@ -3440,9 +3475,12 @@
               const p = posicoes.get(key);
               if (!p) return;
               r.ultimaPosicao = p.ultimaPosicao;
-              // The Entrevistadores tab buckets by this; same fetch,
-              // one more column.
+              // The Entrevistadores tab buckets by this and reads the
+              // transmission date for its "Última transmissão" — same
+              // fetch, two more columns. The biomarcadores row has no
+              // `data` field of its own, so nothing is overwritten.
               r.entrevistador = p.entrevistador;
+              r.data = p.data;
               // Only posição and entrevistador. tipoEntrevista is
               // deliberately NOT copied: where the biomarcadores report
               // leaves it blank,

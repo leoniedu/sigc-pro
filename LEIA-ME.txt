@@ -31,8 +31,10 @@ um deles basta (rode o Filtrar):
     agenda; o Último Movimento por CONTROLE, a unidade de amostragem,
     já que sem agenda não há capacidade por zona a comparar. Os
     contornos no mapa seguem o mesmo agrupamento. Entrevistadores: as
-    mesmas contagens, por entrevistador, com as zonas (ou controles) em
-    que cada um tem domicílios. Domicílios: a lista
+    mesmas contagens, por entrevistador, com a transmissão mais recente
+    de cada um e as zonas (ou controles) em que tem domicílios; no
+    Último Movimento, a aba de Controles também diz quem tem domicílios
+    em cada controle. Domicílios: a lista
     completa, ordenável, com situação, a ação devida em cada caso e um
     pino que leva ao domicílio no mapa. Cada aba baixa em CSV.
     A última aba, "❓ Entenda", explica de onde vem cada número: o que o

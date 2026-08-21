@@ -37,8 +37,10 @@ Biomarcadores, filtrados por agência, município ou controle:
   de biomarcadores por ZONA, que é a unidade da agenda, e o Último
   Movimento por CONTROLE, a unidade de amostragem — sem consulta à
   agenda não há capacidade por zona a comparar. Entrevistadores: as
-  mesmas contagens, por entrevistador, com as zonas (ou controles) em
-  que cada um tem domicílios. Domicílios: a
+  mesmas contagens, por entrevistador, com a transmissão mais recente
+  de cada um e as zonas (ou controles) em que tem domicílios; no
+  Último Movimento, a aba de Controles também diz quem tem domicílios
+  em cada controle. Domicílios: a
   lista completa, com situação, a ação devida em cada caso e um
   pino que leva ao domicílio no mapa. Cada aba de dados pode ser baixada
   em CSV. E a aba Entenda, que diz de onde vem cada número do painel: o

@@ -829,6 +829,7 @@
     ultimaPosicao: 'Última Posição',
     tipoEntrevista: 'Tipo Entrevista',
     entrevistador: 'Entrevistador',
+    data: 'Data',
   };
 
   function tableToPosicoesMap(headers, rows) {
@@ -843,6 +844,7 @@
         ultimaPosicao: String(cells[idx.ultimaPosicao] || '').trim(),
         tipoEntrevista: String(cells[idx.tipoEntrevista] || '').trim(),
         entrevistador: String(cells[idx.entrevistador] || '').trim(),
+        data: String(cells[idx.data] || '').trim(),
       });
     });
     return map;
