@@ -66,8 +66,7 @@ Biomarcadores, filtrados por agência, município ou controle:
 
 Em qualquer relatório com tabela:
 • CSV-pro — exporta a tabela como CSV (todas as páginas, pronto para o
-  Excel brasileiro), contornando um problema conhecido do portal que
-  impede o download pelos botões nativos de CSV/Excel fora da rede VPN.
+  Excel brasileiro).
 
 No relatório Último Movimento:
 • CSV TODAS — exporta o relatório de todas as agências da UF atual

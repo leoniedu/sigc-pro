@@ -7,7 +7,8 @@
 # empty permissions list in manifest.json and code review of extension/.
 
 # Blanket ban. Sanctioned exceptions, each narrow and audited:
-#   - extension/common/                    : fetch() only, same-origin only
+#   - extension/common/                    : fetch() only, same-origin only;
+#     absolute URLs only from COMMON_URL_ALLOWLIST (below)
 #     (hosts fetchViaGateway, the shared F5-gateway request helper used by
 #     agenda-lookups and ultimo-movimento-export; see
 #     docs/archive/specs/2026-08-06-guia-do-dia-agencia-entrevistador-zona-nome-design.md)
@@ -58,8 +59,8 @@
 # extension/features/usuario-lookup: the Carta de notificação's agent
 # lookup — two same-origin requests through the page's F5 gateway to the
 # SIGC usuário module: POST /usuario/Grid (siape -> id) and GET
-# /usuario/EditarUsuario (id -> cadastro). The module's backend hex
-# prefix is a constant in extension/common (no URL literal here).
+# /usuario/EditarUsuario (id -> cadastro). The module's backend host is
+# the one allowlisted URL in extension/common (COMMON_URL_ALLOWLIST).
 FETCH_DIRS='extension/common extension/features/agenda-lookups extension/features/ultimo-movimento-export extension/features/usuario-lookup'
 # Storage APIs are banned EVERYWHERE in extension/ except this directory:
 # the GEREN-PRO history (2026-10-15, the first thing this extension stores).
@@ -132,6 +133,26 @@ URL_PATTERN='https?://'
 # of its line): a line is only exempted when it contains this exact
 # tile-host template somewhere in it.
 LOCAL_RESOURCE_URL_ALLOWLIST='https://\{s\}\.tile\.openstreetmap\.org/\{z\}/\{x\}/\{y\}\.png'
+
+# extension/common is fetch-sanctioned like the feature directories, but
+# may name exactly these absolute URLs: the usuário module's backend host
+# (hex-encoded at runtime into the F5 gateway prefix; the request goes to
+# location.origin) and the two Google Maps link builders (links the user
+# clicks, never fetched). Every other fetch-sanctioned directory must be
+# URL-free. Filters stdin.
+COMMON_URL_ALLOWLIST="'https://w3servicosigc\.ibge\.gov\.br'|'https://www\.google\.com/maps/(dir|search)/\?api=1"
+fetch_url_filter() {
+  if [ "$1" = "extension/common" ]; then
+    grep -vE "$COMMON_URL_ALLOWLIST"
+  else
+    cat
+  fi
+}
+
+# URLs hidden from URL_PATTERN by encoding: hex or base64 of "http".
+# Checked across extension/ except vendored code (whose embedded PNGs
+# are base64 and may contain any substring).
+ENCODED_URL_PATTERN='68747470|aHR0c'
 
 # The tile-host allowlist belongs to the map directory alone: any other
 # local-resource directory (carta-notificacao) has no business with
@@ -218,6 +239,7 @@ local_resource_bad_src_file() {
 }
 
 if [ "$1" = "--staged" ]; then
+  ENCODED_URLS=$(eval git grep --cached -nE "\"$ENCODED_URL_PATTERN\"" -- extension/ $(for d in $VENDOR_DIRS; do printf "':!%s' " "$d"; done) 2>/dev/null)
   EXCLUDES=""
   for d in $FETCH_DIRS $STORAGE_DIRS $VENDOR_DIRS $LOCAL_RESOURCE_DIRS; do EXCLUDES="$EXCLUDES ':!$d'"; done
   MATCHES=$(eval git grep --cached -nE "\"$PATTERN\"" -- extension/ $EXCLUDES 2>/dev/null)
@@ -226,12 +248,8 @@ if [ "$1" = "--staged" ]; then
   for d in $FETCH_DIRS; do
     FETCH_MATCHES="$FETCH_MATCHES
 $(git grep --cached -nE "$PATTERN_NOFETCH" -- "$d" 2>/dev/null)"
-    # extension/common can contain URLs (gmapsDestinoUrl), which aren't
-    # fetch calls — sigc-common is a shared utility file, not a feature.
-    if [ "$d" != "extension/common" ]; then
-      FETCH_URLS="$FETCH_URLS
-$(git grep --cached -nE "$URL_PATTERN" -- "$d" 2>/dev/null)"
-    fi
+    FETCH_URLS="$FETCH_URLS
+$(git grep --cached -nE "$URL_PATTERN" -- "$d" 2>/dev/null | fetch_url_filter "$d")"
   done
   STORAGE_MATCHES=""
   for d in $STORAGE_DIRS; do
@@ -250,6 +268,7 @@ $(local_resource_bad_src "$d" staged)"
 $(git grep --cached -nE "$URL_PATTERN" -- "$d" 2>/dev/null | local_resource_url_filter "$d")"
   done
 else
+  ENCODED_URLS=$(grep -rnE "$ENCODED_URL_PATTERN" extension/ 2>/dev/null | grep -vE "^($(echo $VENDOR_DIRS | tr ' ' '|'))/")
   EXCLUDE_GREP=""
   for d in $FETCH_DIRS $STORAGE_DIRS $VENDOR_DIRS $LOCAL_RESOURCE_DIRS; do EXCLUDE_GREP="$EXCLUDE_GREP -e ^$d/"; done
   MATCHES=$(grep -rnE "$PATTERN" extension/ 2>/dev/null | grep -vE "$(echo $EXCLUDE_GREP | sed 's/-e //g' | tr ' ' '|')")
@@ -258,12 +277,8 @@ else
   for d in $FETCH_DIRS; do
     FETCH_MATCHES="$FETCH_MATCHES
 $(grep -rnE "$PATTERN_NOFETCH" "$d/" 2>/dev/null)"
-    # extension/common can contain URLs (gmapsDestinoUrl), which aren't
-    # fetch calls — sigc-common is a shared utility file, not a feature.
-    if [ "$d" != "extension/common" ]; then
-      FETCH_URLS="$FETCH_URLS
-$(grep -rnE "$URL_PATTERN" "$d/" 2>/dev/null)"
-    fi
+    FETCH_URLS="$FETCH_URLS
+$(grep -rnE "$URL_PATTERN" "$d/" 2>/dev/null | fetch_url_filter "$d")"
   done
   STORAGE_MATCHES=""
   for d in $STORAGE_DIRS; do
@@ -293,8 +308,13 @@ if [ -n "$(echo "$FETCH_MATCHES" | tr -d '[:space:]')" ]; then
   echo "$FETCH_MATCHES" >&2
   exit 1
 fi
+if [ -n "$ENCODED_URLS" ]; then
+  echo "PRIVACY GATE FAILED — hex/base64-encoded URL found (write URLs in plain text so the gate can see them):" >&2
+  echo "$ENCODED_URLS" >&2
+  exit 1
+fi
 if [ -n "$(echo "$FETCH_URLS" | tr -d '[:space:]')" ]; then
-  echo "PRIVACY GATE FAILED — absolute URL in a fetch-sanctioned directory (must use location.origin only):" >&2
+  echo "PRIVACY GATE FAILED — absolute URL in a fetch-sanctioned directory (must use location.origin only; extension/common may name only COMMON_URL_ALLOWLIST):" >&2
   echo "$FETCH_URLS" >&2
   exit 1
 fi

@@ -16,8 +16,8 @@ Na Lista de Endereços (PNS 2026):
     camadas: Selecionado = Sim (vermelho, numerado) e Não (azul, menor).
 
 Em qualquer relatório do SIGC com tabela:
-  * CSV-pro — exporta a tabela como CSV, contornando um bug do portalweb
-    que quebra os botões nativos de CSV/Excel fora da VPN.
+  * CSV-pro — exporta a tabela como CSV (separado por ";", pronto para o
+    Excel brasileiro).
 
 No relatório Último Movimento e no Relatório de Acompanhamento de
 Biomarcadores, filtrados por agência, município ou controle — qualquer
@@ -122,8 +122,7 @@ Em Administrar Agenda:
     Nada vai a terceiros.
 
 Os botões nativos do SIGC não são alterados — os novos botões apenas se
-somam a eles. O PDF nativo funciona normalmente; CSV e Excel nativos têm
-um bug conhecido do portalweb fora da VPN (veja Problemas abaixo).
+somam a eles.
 
 AVISO: projeto independente, sem vínculo com o IBGE. Protótipo para
 demonstração à equipe oficial do SIGC. Use por sua conta e risco.
@@ -168,9 +167,6 @@ Problemas?
   recarregar (↻) do SIGC-PRO e recarregue a página do SIGC.
 * Mensagem "o layout da tabela não corresponde ao esperado" (PDF-pro ou
   KML-pro): o SIGC mudou as colunas do relatório; reporte ao mantenedor.
-* CSV/Excel nativos não baixam nada fora da VPN: bug conhecido do
-  portalweb (proteção anti-bot quebra os botões nativos); o CSV-pro traz
-  uma alternativa.
 
 Privacidade
 -----------
@@ -181,7 +177,8 @@ As consultas de dados são quatro, todas opcionais e todas ao próprio
 servidor do SIGC — o "Guia do Dia", o "MAPA-PRO", a exportação Último
 Movimento multi-agência e a "Carta" do MAPA-PRO (o cadastro do agente,
 pela matrícula) — somente quando você clica, dentro da sessão já
-autenticada.
+autenticada. Toda requisição leva o cabeçalho X-SIGC-PRO com a versão
+da extensão, para que o SIGC possa distingui-la das suas ações.
 
 O único recurso externo é o fundo do mapa do MAPA-PRO: as imagens de
 mapa (tiles) do OpenStreetMap, buscadas apenas depois de uma

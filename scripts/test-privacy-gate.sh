@@ -40,7 +40,11 @@ PLANT_GH_FETCH="extension/features/gerenciamento-historico/__privacy_tripwire_fe
 PLANT_GH_CHROME="extension/features/gerenciamento-historico/__privacy_tripwire_chrome__.js"
 PLANT_GH_LOCAL="extension/features/gerenciamento-historico/__privacy_tripwire_local__.js"
 PLANT_GR_IDB="extension/features/gerenciamento-coleta/__privacy_tripwire_idb__.js"
-cleanup() { rm -f "$PLANT_GH_IDB_OK" "$PLANT_GH_FETCH" "$PLANT_GH_CHROME" "$PLANT_GH_LOCAL" "$PLANT_GR_IDB"; rm -f "$PLANT_CN_TILE_BAD" "$PLANT_UL_URL" "$PLANT_UL_SRC" "$PLANT_CN_FETCH" "$PLANT_CN_SRC_OK" "$PLANT_CN_SRC_BAD" "$PLANT_CN_URL_BAD"; rm -f "$PLANT_OUT" "$PLANT_MAP_XHR" "$PLANT_MAP_URL" "$PLANT_SETTINGS_FETCH" "$PLANT_UME_XHR" "$PLANT_UME_URL" "$PLANT_UME_STORAGE" "$PLANT_VENDOR_OK" "$PLANT_VENDOR_LOOKALIKE" "$PLANT_UMM_XHR" "$PLANT_UMM_SRC_BAD" "$PLANT_UMM_SRC_VAR_BAD" "$PLANT_UMM_SRC_OK" "$PLANT_UMM_SRC_VAR_OK" "$PLANT_UMM_SCOPE_DEF" "$PLANT_UMM_SCOPE_LEAK" "$PLANT_UMM_REASSIGN" "$PLANT_UMM_EVENT_OK" "$PLANT_UMM_EVENT_REASSIGN_OK" "$PLANT_UMM_TILE_URL_OK" "$PLANT_UMM_URL_BAD"; rmdir extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map 2>/dev/null || true; }
+PLANT_COMMON_URL_OK="extension/common/__privacy_tripwire_url_ok__.js"
+PLANT_COMMON_URL_BAD="extension/common/__privacy_tripwire_url_bad__.js"
+PLANT_HEX_URL="extension/features/csv-export/__privacy_tripwire_hex__.js"
+PLANT_B64_URL="extension/features/csv-export/__privacy_tripwire_b64__.js"
+cleanup() { rm -f "$PLANT_COMMON_URL_OK" "$PLANT_COMMON_URL_BAD" "$PLANT_HEX_URL" "$PLANT_B64_URL"; rm -f "$PLANT_GH_IDB_OK" "$PLANT_GH_FETCH" "$PLANT_GH_CHROME" "$PLANT_GH_LOCAL" "$PLANT_GR_IDB"; rm -f "$PLANT_CN_TILE_BAD" "$PLANT_UL_URL" "$PLANT_UL_SRC" "$PLANT_CN_FETCH" "$PLANT_CN_SRC_OK" "$PLANT_CN_SRC_BAD" "$PLANT_CN_URL_BAD"; rm -f "$PLANT_OUT" "$PLANT_MAP_XHR" "$PLANT_MAP_URL" "$PLANT_SETTINGS_FETCH" "$PLANT_UME_XHR" "$PLANT_UME_URL" "$PLANT_UME_STORAGE" "$PLANT_VENDOR_OK" "$PLANT_VENDOR_LOOKALIKE" "$PLANT_UMM_XHR" "$PLANT_UMM_SRC_BAD" "$PLANT_UMM_SRC_VAR_BAD" "$PLANT_UMM_SRC_OK" "$PLANT_UMM_SRC_VAR_OK" "$PLANT_UMM_SCOPE_DEF" "$PLANT_UMM_SCOPE_LEAK" "$PLANT_UMM_REASSIGN" "$PLANT_UMM_EVENT_OK" "$PLANT_UMM_EVENT_REASSIGN_OK" "$PLANT_UMM_TILE_URL_OK" "$PLANT_UMM_URL_BAD"; rmdir extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 mkdir -p extension/features/agenda-date-picker extension/features/ultimo-movimento-export extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map extension/features/usuario-lookup extension/features/carta-notificacao extension/features/gerenciamento-historico extension/features/gerenciamento-coleta
 
@@ -386,5 +390,30 @@ if scripts/check-privacy.sh >/dev/null 2>&1; then
   fail "gate missed localStorage inside gerenciamento-historico/"
 fi
 rm -f "$PLANT_GH_LOCAL"
+
+# 31. extension/common may name its allowlisted URLs...
+echo "const o = 'https://w3servicosigc.ibge.gov.br';" > "$PLANT_COMMON_URL_OK"
+scripts/check-privacy.sh >/dev/null 2>&1 \
+  || fail "gate rejected an allowlisted URL inside extension/common"
+rm -f "$PLANT_COMMON_URL_OK"
+
+# 32. ...but no other absolute URL.
+echo "const o = 'https://example.com';" > "$PLANT_COMMON_URL_BAD"
+if scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate missed a non-allowlisted URL inside extension/common"
+fi
+rm -f "$PLANT_COMMON_URL_BAD"
+
+# 33. A URL hidden as hex or base64 must fail anywhere outside vendor/.
+echo "const o = '68747470733a2f2f6578616d706c652e636f6d';" > "$PLANT_HEX_URL"
+if scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate missed a hex-encoded URL"
+fi
+rm -f "$PLANT_HEX_URL"
+echo "const o = atob('aHR0cHM6Ly9leGFtcGxlLmNvbQ==');" > "$PLANT_B64_URL"
+if scripts/check-privacy.sh >/dev/null 2>&1; then
+  fail "gate missed a base64-encoded URL"
+fi
+rm -f "$PLANT_B64_URL"
 
 echo "privacy gate self-test: PASS"

@@ -152,6 +152,7 @@ describe('lookupUsuario (network + cache)', () => {
       expect(editar.init.method).toBe('GET');
       expect(editar.init.referrer).toBe(grid.init.referrer);
       for (const c of calls) expect(c.url.startsWith(location.origin)).toBe(true);
+      for (const c of calls) expect(c.init.headers['X-SIGC-PRO']).toBeDefined();
       expect(rec).toEqual({
         id: '98765',
         nome: 'ALEXANDRE SILVA DE SANTANA',

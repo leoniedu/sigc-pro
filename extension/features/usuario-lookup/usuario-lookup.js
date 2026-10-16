@@ -246,6 +246,7 @@
       referrer: referrerUrl(),
       redirect: 'manual',
       ...init,
+      headers: P().proHeaders(init && init.headers),
     });
     if (res.type === 'opaqueredirect' || res.status === 0) throw new ErroAutenticacao();
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

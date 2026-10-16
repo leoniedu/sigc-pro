@@ -364,14 +364,14 @@
   // DIFFERENT backend host from the reports, so behind the F5 gateway
   // its prefix is /f5-w-<hex>$$ built from THAT origin's hex — the same
   // encoding f5Prefix decodes for the page's own host (the hex is the
-  // origin string, byte by byte, lowercase). Precomputed and kept here,
-  // not in the feature that uses it: check-privacy.sh forbids an
-  // https:// literal inside a fetch-sanctioned directory, and this file
-  // is exempt from that check (it is a shared utility, not a feature).
-  // Decodes to https://w3servicosigc.ibge.gov.br — asserted by a test.
-  // The request itself still goes to location.origin (the gateway
-  // host); nothing here names a third-party URL.
-  const USUARIO_ORIGIN_HEX = '68747470733a2f2f77337365727669636f736967632e696267652e676f762e6272';
+  // origin string, byte by byte, lowercase). The host is named in plain
+  // text and is the one absolute URL check-privacy.sh allowlists for
+  // extension/common; the request itself still goes to location.origin
+  // (the gateway host).
+  const USUARIO_ORIGIN = 'https://w3servicosigc.ibge.gov.br';
+  const hexOf = (s) => [...new TextEncoder().encode(s)]
+    .map((b) => b.toString(16).padStart(2, '0')).join('');
+  const USUARIO_ORIGIN_HEX = hexOf(USUARIO_ORIGIN);
   // The usuário module's own survey code — PNS2025, verified live
   // 2026-10-09; it is NOT the report pages' PNS2026, and must not be
   // derived from PESQUISAS.
@@ -388,6 +388,14 @@
     return `${origin}/f5-w-${USUARIO_ORIGIN_HEX}$$${path}`;
   }
 
+  // Every request the extension makes carries X-SIGC-PRO: <version>, so
+  // SIGC's logs can tell extension traffic from the user's own clicks.
+  // The version comes from the ISOLATED-world relay (MAIN world has no
+  // chrome.runtime); '?' if it hasn't run.
+  function proHeaders(headers) {
+    return { ...(headers || {}), 'X-SIGC-PRO': document.documentElement.dataset.sigcProVersion || '?' };
+  }
+
   // Tries the simple prefixed URL first, then the full captured F5 form —
   // which form the live gateway actually needs isn't knowable in advance.
   async function fetchViaGateway(path, options) {
@@ -398,7 +406,7 @@
     let lastErr = new Error('sem resposta');
     for (const url of urls) {
       try {
-        const res = await fetch(url, options);
+        const res = await fetch(url, { ...options, headers: proHeaders(options && options.headers) });
         if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
         return res;
       } catch (err) {
@@ -460,7 +468,7 @@
         const res = await fetch(url, {
           method: 'POST',
           credentials: 'same-origin',
-          headers: FORM_POST_HEADERS,
+          headers: proHeaders(FORM_POST_HEADERS),
           referrer: refererDoSlug(slug),
           body,
         });
@@ -480,9 +488,8 @@
   // and goes nowhere.
   //
   // Lives here rather than in the feature that uses it because
-  // check-privacy.sh forbids an https:// literal inside a
-  // fetch-sanctioned directory: a module allowed to make requests must
-  // not name a third-party host. This file is not such a directory.
+  // check-privacy.sh forbids absolute URLs in fetch-sanctioned feature
+  // directories; in extension/common only allowlisted ones may appear.
   function gmapsDestinoUrl(lat, lon) {
     if (lat == null || lon == null) return '';
     return 'https://www.google.com/maps/dir/?api=1&travelmode=driving' +
@@ -984,9 +991,11 @@
     gatewayUrl,
     fetchViaGateway,
     FORM_POST_HEADERS,
+    proHeaders,
     relatorioFiltrarUrl,
     refererDoSlug,
     postRelatorio,
+    USUARIO_ORIGIN,
     USUARIO_ORIGIN_HEX,
     USUARIO_CODIGO_PESQUISA,
     usuarioGatewayUrl,

@@ -207,12 +207,12 @@
     if (pdfMake.__sigcProPdfTweak) return;
 
     const originalCreatePdf = pdfMake.createPdf;
-    pdfMake.createPdf = function (doc) {
+    pdfMake.createPdf = function (doc, ...rest) {
       // The listagem rebuild applies ONLY to exports triggered by the
       // PDF-pro button (which sets rebuildOnNext). The native PDF button
       // stays completely original.
       if (!rebuildOnNext) {
-        return originalCreatePdf.call(this, doc);
+        return originalCreatePdf.call(this, doc, ...rest);
       }
       rebuildOnNext = false;
 
@@ -242,12 +242,12 @@
         }
       }
 
-      const pdf = originalCreatePdf.call(this, doc);
+      const pdf = originalCreatePdf.call(this, doc, ...rest);
       if (body) {
         try {
           const base = window.__sigcPro.exportFileBase(pesquisa, body);
           const originalDownload = pdf.download.bind(pdf);
-          pdf.download = (name, cb, opts) => originalDownload(`${base}.pdf`, cb, opts);
+          pdf.download = (name, ...args) => originalDownload(`${base}.pdf`, ...args);
         } catch (e) {
           console.error(`${TAG} Could not set PDF filename:`, e);
         }

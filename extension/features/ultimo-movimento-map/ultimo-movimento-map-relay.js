@@ -28,4 +28,7 @@
   // letterhead images script. Read on first click, never at load.
   document.documentElement.dataset.sigcProPdfLibJsUrl = chrome.runtime.getURL('vendor/pdf-lib/pdf-lib.min.js');
   document.documentElement.dataset.sigcProCartaAssetsJsUrl = chrome.runtime.getURL('vendor/carta-assets/carta-assets.js');
+  // The extension version, for the X-SIGC-PRO request header
+  // (sigc-common's proHeaders).
+  document.documentElement.dataset.sigcProVersion = chrome.runtime.getManifest().version;
 })();

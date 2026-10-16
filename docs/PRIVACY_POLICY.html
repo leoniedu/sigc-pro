@@ -96,7 +96,10 @@
   funcionalidades opcionais, o código não contém chamadas de rede — uma
   verificação automática do repositório (scripts/check-privacy.sh) confere,
   a cada alteração, que requisições só existem nesses quatro módulos e só
-  para a própria origem, complementando a auditoria do código aberto.</p>
+  para a própria origem, complementando a auditoria do código aberto.
+  Toda requisição da extensão leva o cabeçalho <code>X-SIGC-PRO</code> com a
+  versão instalada, para que o SIGC possa distingui-la das ações do próprio
+  usuário.</p>
 
   <p>Há um único recurso externo em toda a extensão: as imagens de mapa
   (tiles) do OpenStreetMap, usadas como fundo cartográfico do "Mapa-pro".

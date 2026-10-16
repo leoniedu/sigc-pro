@@ -59,7 +59,7 @@ describe('postRelatorio', () => {
     expect(calls[0].url).toBe(relatorioFiltrarUrl(ORIGIN, F5_PATHNAME, SLUG, true));
     expect(calls[0].opts.method).toBe('POST');
     expect(calls[0].opts.credentials).toBe('same-origin');
-    expect(calls[0].opts.headers).toEqual(FORM_POST_HEADERS);
+    expect(calls[0].opts.headers).toEqual({ ...FORM_POST_HEADERS, 'X-SIGC-PRO': '?' });
     expect(calls[0].opts.referrer).toBe(`${ORIGIN}/f5-w-${F5_HEX}$$/relatorio/${SLUG}`);
     expect(calls[0].opts.body).toBe('filtro=x');
   });
@@ -91,5 +91,23 @@ describe('refererDoSlug', () => {
   test('prefixes the F5 gateway', () => {
     window.happyDOM.setURL(`${ORIGIN}${F5_PATHNAME}`);
     expect(refererDoSlug(SLUG)).toBe(`${ORIGIN}/f5-w-${F5_HEX}$$/relatorio/${SLUG}`);
+  });
+});
+
+describe('proHeaders', () => {
+  const { proHeaders } = window.__sigcPro;
+
+  test('adds X-SIGC-PRO with the version the relay wrote, keeping the given headers', () => {
+    document.documentElement.dataset.sigcProVersion = '9.9.9';
+    try {
+      expect(proHeaders({ 'X-Requested-With': 'XMLHttpRequest' }))
+        .toEqual({ 'X-Requested-With': 'XMLHttpRequest', 'X-SIGC-PRO': '9.9.9' });
+    } finally {
+      delete document.documentElement.dataset.sigcProVersion;
+    }
+  });
+
+  test('falls back to "?" without the relay, and accepts no headers', () => {
+    expect(proHeaders()).toEqual({ 'X-SIGC-PRO': '?' });
   });
 });

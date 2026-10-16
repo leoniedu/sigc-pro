@@ -28,10 +28,7 @@ Na **Lista de Endereços** (PNS 2026):
 Em **qualquer relatório do SIGC** com tabela (DataTables):
 
 - **CSV-pro** — exporta a tabela como CSV (`;`-separado, compatível com
-  Excel pt-BR), contornando um bug do portalweb: os botões nativos de CSV e
-  Excel lançam um erro (`MouseEvent`) da proteção anti-bot F5 do portal fora
-  da VPN — o CSV-pro lê os dados diretamente via API do DataTables, sem
-  depender desses botões.
+  Excel pt-BR), lendo os dados diretamente via API do DataTables.
 
 No relatório **Último Movimento**, filtrado por **agência, município ou
 controle** (qualquer um deles basta):
@@ -156,17 +153,16 @@ Em **Administrar Agenda** (qualquer UF/pesquisa cuja URL termine em
   ganha um mapa-esquema em SVG da rota do dia — sem imagens externas,
   visitas numeradas na ordem de horário, uma cor por equipe.
 
-Os botões nativos de PDF/CSV/Excel do SIGC continuam intocados e visíveis —
-o PDF nativo funciona normalmente; CSV/Excel nativos funcionam pela VPN e
-podem voltar a funcionar fora dela quando o IBGE corrigir o bug.
+Os botões nativos de PDF/CSV/Excel do SIGC continuam intocados e visíveis.
 
 PDF-pro e KML-pro só agem na Lista de Endereços (detectada pelo cabeçalho
 `SIGC - PNS2026` + título da página) e validam o layout da tabela antes de
 qualquer leitura — em qualquer outra página do SIGC eles permanecem
-inativos. A extensão só injeta seus scripts nos domínios do SIGC
-(`portalweb.ibge.gov.br`, `portalweb2.ibge.gov.br` e
-`w3sigcpns2025.ibge.gov.br`), nunca em outras
-páginas do IBGE. CSV-pro (relatórios) não depende do layout de nenhuma
+inativos. A extensão só injeta seus scripts em três hosts:
+`w3sigcpns2025.ibge.gov.br` e o portal de acesso (`portalweb.ibge.gov.br`
+e `portalweb2.ibge.gov.br`), que também serve outros sistemas do IBGE.
+Nesses hosts os scripts carregam em qualquer página, mas cada botão só
+aparece onde reconhece a página do SIGC a que se destina. CSV-pro (relatórios) não depende do layout de nenhuma
 pesquisa específica e ativa em qualquer relatório com tabela. O CSV-PRO da
 Agenda ativa em qualquer página cuja URL termine em `/AdministracaoAgenda`,
 também sem depender de pesquisa específica.
@@ -216,7 +212,9 @@ e a "Carta" do MAPA-PRO (o cadastro do agente — função, telefone, e-mail,
 agência — pela matrícula, no módulo de usuários do SIGC, uma por clique,
 sem confirmação porque não há consulta em massa). Fora esses quatro casos a extensão não tem
 código remoto — o arquivo KML, por exemplo, é gerado em memória e salvo
-localmente.
+localmente. Toda requisição da extensão leva o cabeçalho `X-SIGC-PRO` com
+a versão instalada, para que o SIGC possa distingui-la das ações do
+próprio usuário.
 
 **O que a extensão guarda.** Uma única coisa, no próprio navegador: o
 histórico do GEREN-PRO. A cada consulta ela grava uma foto por UF por dia
@@ -236,9 +234,11 @@ extensão (`extension/vendor/`), não carregado de um CDN. Detalhes em
 Essa garantia é verificada por um *gate* automático
 (`scripts/check-privacy.sh`): um hook de pre-commit bloqueia qualquer commit
 que introduza APIs de rede ou armazenamento em `extension/` fora de
-exceções únicas e auditadas: `fetch` (sem URLs absolutas) em
-`common/`, `features/agenda-lookups/`,
-`features/ultimo-movimento-export/` e `features/usuario-lookup/`;
+exceções únicas e auditadas: `fetch` em `common/`,
+`features/agenda-lookups/`, `features/ultimo-movimento-export/` e
+`features/usuario-lookup/`, sem URLs absolutas — exceto, em `common/`,
+uma lista fechada: o host do módulo de usuários do SIGC e os links do
+Google Maps; URLs codificadas (hex ou base64) reprovam em qualquer lugar;
 `chrome.storage` em lugar nenhum (banido globalmente) e `IndexedDB` somente
 em `features/gerenciamento-historico/` (sem rede nenhuma); carregamento de
 scripts da própria extensão (Leaflet, pdf-lib, imagens da carta) só em
