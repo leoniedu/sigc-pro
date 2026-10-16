@@ -179,7 +179,7 @@ describe('the Histórico tab', () => {
   test('one column per week WITH a run, the header carrying the date and the jump over missing weeks', async () => {
     await seed(['2026-10-06', '2026-10-20']);
     const p = await abrirHistorico();
-    expect(ths(p)).toEqual(['Agência', '2026-W41 (06/10)', '2026-W43 (20/10) · +2 sem']);
+    expect(ths(p)).toEqual(['Agência', '06/10', '20/10']);
     const linhas = [...p.querySelectorAll('#sigc-gc-tab-historico tbody tr')];
     expect(linhas.map((l) => l.firstChild.textContent)).toEqual(['CACHOEIRA', 'SALVADOR 1']);
     const celulas = [...linhas[0].querySelectorAll('td')].map((td) => td.textContent);
@@ -328,7 +328,7 @@ describe('the Histórico tab', () => {
     p.querySelector('[data-gc="csv"]').click();
     expect(downloads).toHaveLength(1);
     const linhas = downloads[0].texto.replace(/^﻿/, '').trim().split(/\r?\n/);
-    expect(linhas[0]).toBe('Agência;2026-W43 (20/10)');
+    expect(linhas[0]).toBe('Agência;20/10');
     expect(linhas[1].split(';')[1]).toMatch(/^\d+$/);
   });
 
@@ -364,18 +364,18 @@ describe('the Histórico tab', () => {
     p.querySelector('[data-gc="atualizar"]').click();
     await tick(); await tick(); await tick(); await tick();
     expect(n).toBe(1);
-    expect(ths(p)).toEqual(['Agência', '2026-W43 (20/10)']);
+    expect(ths(p)).toEqual(['Agência', '20/10']);
   });
 
   test('the runs are re-read every time the tab is shown', async () => {
     await seed(['2026-10-06']);
     const p = await abrirHistorico();
-    expect(ths(p)).toEqual(['Agência', '2026-W41 (06/10)']);
+    expect(ths(p)).toEqual(['Agência', '06/10']);
     await seed(['2026-10-13']);                                   // saved from elsewhere
     p.querySelector('.sigc-gc-aba-btn[data-aba="municipio"]').click();
     p.querySelector('.sigc-gc-aba-btn[data-aba="historico"]').click();
     await tick(); await tick(); await tick();
-    expect(ths(p)).toEqual(['Agência', '2026-W41 (06/10)', '2026-W42 (13/10)']);
+    expect(ths(p)).toEqual(['Agência', '06/10', '13/10']);
   });
 
   test('the agência list covers every agência in the history', async () => {

@@ -137,30 +137,24 @@ describe('colunasSemanas', () => {
   });
   test('this morning against yesterday: two runs in one week are two columns', () => {
     const cols = A.colunasSemanas([exec('2026-10-14'), exec('2026-10-15')]);
-    expect(cols.map((c) => c.rotulo)).toEqual(['2026-W42 (14/10)', '2026-W42 (15/10)']);
+    expect(cols.map((c) => c.rotulo)).toEqual(['14/10', '15/10']);
   });
   test('a single run is a single column', () => {
-    expect(A.colunasSemanas([exec('2026-10-15')]).map((c) => c.rotulo)).toEqual(['2026-W42 (15/10)']);
+    expect(A.colunasSemanas([exec('2026-10-15')]).map((c) => c.rotulo)).toEqual(['15/10']);
   });
-  test('headers carry the date behind them', () => {
+  test('headers are just the date behind them', () => {
     const cols = A.colunasSemanas([exec('2026-10-13'), exec('2026-10-16'), exec('2026-10-20')]);
-    expect(cols[0].rotulo).toBe('2026-W42 (13/10)');
+    expect(cols[0].rotulo).toBe('13/10');
   });
-  test('a week with no run gets NO column; the header after it says how far back the previous one is', () => {
+  test('a week with no run gets NO column, and no gap marker', () => {
     const cols = A.colunasSemanas([exec('2026-10-05'), exec('2026-10-21')]);
     expect(cols.map((c) => c.id)).toEqual(['2026-W41', '2026-W43']);
-    expect(cols[1].rotulo).toBe('2026-W43 (21/10) · +2 sem');
-    expect(cols[0].rotulo).toBe('2026-W41 (05/10)');
-    expect(cols.length).toBe(2);
-  });
-  test('consecutive weeks carry no gap marker', () => {
-    const cols = A.colunasSemanas([exec('2026-10-05'), exec('2026-10-14')]);
-    expect(cols[1].rotulo).toBe('2026-W42 (14/10)');
+    expect(cols.map((c) => c.rotulo)).toEqual(['05/10', '21/10']);
   });
   test('weeks across a year boundary', () => {
     const cols = A.colunasSemanas([exec('2026-12-28'), exec('2027-01-12')]);
     expect(cols.map((c) => c.id)).toEqual(['2026-W53', '2027-W02']);
-    expect(cols[1].rotulo).toContain('+2 sem');
+    expect(cols.map((c) => c.rotulo)).toEqual(['28/12', '12/01']);
   });
 });
 

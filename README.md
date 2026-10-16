@@ -107,8 +107,8 @@ No relatório **Gerenciamento da Coleta**:
   A aba **Histórico** mostra a evolução por agência: a cada consulta a
   extensão guarda, no seu navegador, uma foto por UF por dia com as
   contagens por agência (nunca dados de domicílio); as colunas são as
-  semanas ISO com consulta (as duas consultas mais recentes dia a dia e, antes, a última de cada semana; um salto aparece
-  no cabeçalho, "+3 sem") e a tabela traz uma métrica por vez — ou uma
+  datas das consultas (as duas mais recentes dia a dia e, antes, a última
+  de cada semana com consulta) e a tabela traz uma métrica por vez — ou uma
   agência com todas as métricas, entre elas "Sem entrevista — ainda a
   trabalhar" × "encerrado" e "Ciclo encerrado" × "Bio a coletar". Há
   "Exportar histórico" (CSV diário) e "Limpar histórico".

@@ -61,9 +61,9 @@
   // one by one (this morning against yesterday), and before them the last run
   // of each ISO week, all of them (no window: the table scrolls sideways). A week nobody
   // consulted gets no column: runs are saved when someone opens the panel,
-  // not on a schedule, so a blank week says nothing about the agências. Where
-  // weeks were skipped the header says how far back the previous column is
-  // ("· +3 sem"), so a gap is not read as one week of change.
+  // not on a schedule, so a blank week says nothing about the agências. The
+  // header is just the run's date (dd/mm), so a skipped week shows as a gap
+  // between dates.
   function colunasSemanas(execs) {
     if (!execs.length) return [];
     const ordenadas = [...execs].sort((a, b) => a.dia.localeCompare(b.dia));
@@ -74,12 +74,7 @@
       .forEach((e) => porSemana.set(semanaIso(e.dia).id, e));          // last wins
     const todas = [...porSemana.values(), ...recentes].map((exec) => {
       const s = semanaIso(exec.dia);
-      return { id: s.id, segunda: s.segunda, exec, rotulo: `${s.id} (${dm(exec.dia)})` };
-    });
-    todas.forEach((c, i) => {
-      if (i === 0) return;
-      const semanas = Math.round((utc(c.segunda) - utc(todas[i - 1].segunda)) / (7 * 86400000));
-      if (semanas > 1) c.rotulo += ` · +${semanas} sem`;
+      return { id: s.id, segunda: s.segunda, exec, rotulo: dm(exec.dia) };
     });
     return todas;
   }

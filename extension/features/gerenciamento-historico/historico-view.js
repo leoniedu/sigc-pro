@@ -65,7 +65,7 @@
 
   const NOTA = 'O histórico fica guardado neste navegador (uma foto por dia por UF: só contagens por agência, ' +
     'nenhum dado de domicílio). As duas consultas mais recentes aparecem dia a dia; antes delas, cada coluna é a última consulta de uma semana, ' +
-    'e semanas sem consulta não têm coluna ("+3 sem" no cabeçalho indica o salto). Com Amostra Bio = Todas, domicílios com e sem biomarcadores têm ' +
+    'e semanas sem consulta não têm coluna. O cabeçalho é a data da consulta. Com Amostra Bio = Todas, domicílios com e sem biomarcadores têm ' +
     'desfechos diferentes: use o filtro para compará-los. Limpar os dados da extensão ou removê-la apaga o histórico; ' +
     '"Exportar histórico" gera uma cópia diária em CSV.';
 
