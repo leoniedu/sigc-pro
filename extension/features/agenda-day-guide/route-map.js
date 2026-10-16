@@ -13,7 +13,7 @@
 // Populates window.__sigcPro.routeMap, consumed by agenda-day-guide.js;
 // it must therefore load BEFORE agenda-day-guide.js in the manifest
 // (see tests/manifest-load-order.test.js).
-// Spec: docs/superpowers/specs/2026-07-18-agenda-day-route-map-design.md
+// Spec: docs/archive/specs/2026-07-18-agenda-day-route-map-design.md
 (function () {
   'use strict';
 

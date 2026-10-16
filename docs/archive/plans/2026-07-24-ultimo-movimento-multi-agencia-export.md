@@ -158,10 +158,10 @@ Edit `scripts/check-privacy.sh`. Replace the whole file with:
 # Blanket ban. Sanctioned exceptions, each narrow and audited:
 #   - extension/features/agenda-map/       : fetch() only, same-origin only
 #     (queries SIGC's own server; see
-#     docs/superpowers/specs/2026-07-16-agenda-map-design.md)
+#     docs/archive/specs/2026-07-16-agenda-map-design.md)
 #   - extension/features/ultimo-movimento-export/ : fetch() only, same-origin
 #     only (same rationale, see
-#     docs/superpowers/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md)
+#     docs/archive/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md)
 #   - extension/features/settings/         : chrome.storage only, no fetch
 #     (persists the advanced-flags toggle; same spec as above)
 # Every other API stays banned everywhere, including inside these
@@ -525,7 +525,7 @@ Create `extension/features/settings/settings.js`:
 // rest of the extension's read-only DOM access (e.g. ultimo-movimento-export's
 // multi-agência fetch loop) — off by default, so the feature is invisible
 // until a user deliberately opts in.
-// Spec: docs/superpowers/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md
+// Spec: docs/archive/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md
 (function () {
   'use strict';
 
@@ -621,7 +621,7 @@ Create `extension/features/settings/settings-relay.js`:
 // scripts/check-privacy.sh). Never touches window.__sigcPro (that object
 // lives in MAIN world's separate `window`); communicates with
 // settings.js purely via CustomEvents on the shared DOM window.
-// Spec: docs/superpowers/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md
+// Spec: docs/archive/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md
 (function () {
   'use strict';
 
@@ -853,7 +853,7 @@ Create `extension/features/ultimo-movimento-export/ultimo-movimento-export.js`:
 // agência in the current UF, fetching /UltimoMovimento/Filtrar per
 // agência (same payload shape as the standalone ultimo_movimento.py
 // script this feature replaces), and downloads one combined CSV.
-// Spec: docs/superpowers/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md
+// Spec: docs/archive/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md
 (function () {
   'use strict';
 

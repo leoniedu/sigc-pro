@@ -8,7 +8,7 @@
 
 **Tech Stack:** Vanilla JS content scripts (Manifest V3, MAIN world). Tests: `bun test` (bun 1.3.x built-in) + `@happy-dom/global-registrator` for DOM/MutationObserver. **No node on this machine — bun only.** Syntax checks via `bun build --no-bundle <file>`.
 
-**Spec:** `docs/superpowers/specs/2026-07-19-shared-button-layer-design.md`
+**Spec:** `docs/archive/specs/2026-07-19-shared-button-layer-design.md`
 
 ## Global Constraints
 
@@ -1032,7 +1032,7 @@ git commit -m "refactor: migrate day-guide and agenda-map buttons to mountWidget
 
 **Files:**
 - Modify: `ROADMAP.md:81-87` (the "Shared button layer" pending item)
-- Modify: `docs/superpowers/specs/2026-07-19-shared-button-layer-design.md:4` (`**Status:** approved` → `**Status:** implemented`)
+- Modify: `docs/archive/specs/2026-07-19-shared-button-layer-design.md:4` (`**Status:** approved` → `**Status:** implemented`)
 
 **Interfaces:** none.
 
@@ -1044,7 +1044,7 @@ git commit -m "refactor: migrate day-guide and agenda-map buttons to mountWidget
       MutationObserver on document.body dispatches to all registered
       mounts (was 7+ observers). All 8 features migrated; bun test suite
       (tests/) pins mount lifecycle, factories, and pure helpers. See
-      docs/superpowers/specs/2026-07-19-shared-button-layer-design.md.
+      docs/archive/specs/2026-07-19-shared-button-layer-design.md.
 ```
 
 - [ ] **Step 2: Update the spec status line** from `**Status:** approved` to `**Status:** implemented`.
@@ -1052,7 +1052,7 @@ git commit -m "refactor: migrate day-guide and agenda-map buttons to mountWidget
 - [ ] **Step 3: Commit**
 
 ```bash
-git add ROADMAP.md docs/superpowers/specs/2026-07-19-shared-button-layer-design.md
+git add ROADMAP.md docs/archive/specs/2026-07-19-shared-button-layer-design.md
 git commit -m "docs: mark shared button layer done in ROADMAP"
 ```
 

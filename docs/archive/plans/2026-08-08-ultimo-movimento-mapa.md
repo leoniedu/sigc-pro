@@ -184,7 +184,7 @@ Expected: FAIL — module doesn't exist yet.
 // SIGC-PRO feature: "Mapa" on Último Movimento — see agenda-map.js for
 // the sibling feature this reuses the join pattern from (opt-in
 // same-origin fetch of Lista de Endereços, controle|domicilio keying).
-// Spec: docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md
+// Spec: docs/archive/specs/2026-08-08-ultimo-movimento-mapa-design.md
 (function () {
   'use strict';
 

@@ -24,7 +24,7 @@
 // first click asks for confirmation before any request. Results are
 // cached in memory per Controle for the page's lifetime (never
 // persisted) so repeat clicks in one session don't re-fetch.
-// Spec: docs/superpowers/specs/2026-07-16-agenda-map-design.md
+// Spec: docs/archive/specs/2026-07-16-agenda-map-design.md
 (function () {
   'use strict';
 

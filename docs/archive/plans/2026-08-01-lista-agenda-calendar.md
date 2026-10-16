@@ -10,7 +10,7 @@
 
 **Tech Stack:** Vanilla JS (IIFE modules, no build step), `bun test` + happy-dom, Chrome MV3 content scripts.
 
-**Spec:** `docs/superpowers/specs/2026-08-01-lista-agenda-calendar-design.md`
+**Spec:** `docs/archive/specs/2026-08-01-lista-agenda-calendar-design.md`
 
 ## Global Constraints
 

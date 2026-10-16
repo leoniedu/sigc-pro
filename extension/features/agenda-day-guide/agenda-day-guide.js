@@ -17,7 +17,7 @@
 // prints that team's guide. Dia view only: the button is
 // inserted/removed by the shared mountWidget observer (sigc-common.js) as
 // the active view toggles.
-// Spec: docs/superpowers/specs/2026-07-16-agenda-day-guide-design.md
+// Spec: docs/archive/specs/2026-07-16-agenda-day-guide-design.md
 (function () {
   'use strict';
 

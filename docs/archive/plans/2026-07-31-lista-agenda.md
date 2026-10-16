@@ -8,7 +8,7 @@
 
 **Tech Stack:** Vanilla JS (IIFE modules, no build step), `bun test` + happy-dom, Chrome MV3 content scripts.
 
-**Spec:** `docs/superpowers/specs/2026-07-31-lista-agenda-design.md`
+**Spec:** `docs/archive/specs/2026-07-31-lista-agenda-design.md`
 
 ## Global Constraints
 
@@ -135,7 +135,7 @@ const {
 
 // A reserved slot's title carries every field; an open slot's title is
 // ONLY "Zonas: …" — confirmed live in
-// docs/superpowers/specs/2026-07-16-agenda-csv-export-design.md (addendum).
+// docs/archive/specs/2026-07-16-agenda-csv-export-design.md (addendum).
 const tituloReservado = [
   'Zonas: 29JDM8 - 29.2.01.02 29_Linus_Lauro',
   'Controle: 292740805060337',
@@ -330,7 +330,7 @@ Create `extension/features/lista-agenda/lista-agenda.js`:
 // independent (either may fail without costing the other's columns) and
 // every decision worth testing lives in a pure function.
 //
-// Spec: docs/superpowers/specs/2026-07-31-lista-agenda-design.md
+// Spec: docs/archive/specs/2026-07-31-lista-agenda-design.md
 (function () {
   'use strict';
 
@@ -832,7 +832,7 @@ In `scripts/check-privacy.sh`, extend the header comment (after the `ultimo-movi
 #   - extension/features/lista-agenda/     : fetch() only, same-origin
 #     (agenda slots + último movimento for the Lista de Endereços;
 #     click+confirm, see
-#     docs/superpowers/specs/2026-07-31-lista-agenda-design.md)
+#     docs/archive/specs/2026-07-31-lista-agenda-design.md)
 ```
 
 And line 26:

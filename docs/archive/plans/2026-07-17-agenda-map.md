@@ -6,7 +6,7 @@
 
 **Architecture:** All network code is quarantined in a new `extension/features/agenda-map/agenda-map.js`; the privacy gate is reworked to prove `fetch(` exists nowhere else and that agenda-map contains no absolute URL (requests can only go to `location.origin`). `agenda-day-guide.js` gains coords-aware builders and exposes `window.__sigcPro.dayGuide.{generate, diaViewActive}` so agenda-map reuses the whole guide pipeline. Policy texts are updated in the same release.
 
-**Tech Stack:** Vanilla ES2020, Chrome MV3 MAIN-world content scripts. `bun` for everything (node absent): syntax via `bun build --no-bundle`, throwaway mirror tests in /tmp. Spec: `docs/superpowers/specs/2026-07-16-agenda-map-design.md`.
+**Tech Stack:** Vanilla ES2020, Chrome MV3 MAIN-world content scripts. `bun` for everything (node absent): syntax via `bun build --no-bundle`, throwaway mirror tests in /tmp. Spec: `docs/archive/specs/2026-07-16-agenda-map-design.md`.
 
 ## Global Constraints
 
@@ -35,7 +35,7 @@ In `scripts/check-privacy.sh`, replace the block from `PATTERN='fetch\(...'` thr
 # Blanket ban. extension/features/agenda-map/ is the single sanctioned
 # exception, and only for fetch(): it queries SIGC's own server (same
 # origin, opt-in, click-triggered — see
-# docs/superpowers/specs/2026-07-16-agenda-map-design.md). Every other
+# docs/archive/specs/2026-07-16-agenda-map-design.md). Every other
 # API stays banned there too, and agenda-map may not contain absolute
 # URLs, so its requests physically cannot leave location.origin.
 PATTERN='fetch\(|["'\''"]fetch["'\''"]|import\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src\s*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
@@ -420,7 +420,7 @@ Create `extension/features/agenda-map/agenda-map.js`:
 // /relatorio/filtrar, an HTML fragment), extracts coordinates, and
 // hands them to window.__sigcPro.dayGuide.generate(coords) — the same
 // day-guide pipeline, now with geo links, GPX, and route links.
-// Spec: docs/superpowers/specs/2026-07-16-agenda-map-design.md
+// Spec: docs/archive/specs/2026-07-16-agenda-map-design.md
 (function () {
   'use strict';
 

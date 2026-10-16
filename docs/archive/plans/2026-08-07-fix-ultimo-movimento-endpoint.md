@@ -23,7 +23,7 @@ shape, deliberately not shared — see spec) plus the corrected
 
 ## Global Constraints
 
-- Spec: `docs/superpowers/specs/2026-08-07-fix-ultimo-movimento-endpoint-design.md`.
+- Spec: `docs/archive/specs/2026-08-07-fix-ultimo-movimento-endpoint-design.md`.
 - Live-verified new URL (per-agência shape, captured 2026-08-07):
   `POST /relatorio/filtrar?slug=relatorio-ultimo-movimento`, F5-gateway
   fallback shape `/relatorio/f5-h-$$/relatorio/filtrar?slug=relatorio-ultimo-movimento;F5_origin=<hex>&F5CH=I`.

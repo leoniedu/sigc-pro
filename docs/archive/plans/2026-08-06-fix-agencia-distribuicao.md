@@ -22,7 +22,7 @@ in turn with the same fail-open error handling already in place.
 
 ## Global Constraints
 
-- Spec: `docs/superpowers/specs/2026-08-06-fix-agencia-distribuicao-design.md`.
+- Spec: `docs/archive/specs/2026-08-06-fix-agencia-distribuicao-design.md`.
 - Live-verified Último Movimento headers: `Controle`, `Domicilio`, `Entrevistador`, `Tipo de Entrevista`, `Última Posição`, `Data`, `Observação` — no `Agência`.
 - Live-verified Distribuição headers: `Controle`, `Município`, `Agência Sugerida`, `Agência Distribuida`, `Data Distribuição`, `Usuário da Distribuição`. Table id: `tb_distribuir`. **"Distribuida" has no accent** — match verbatim.
 - Only `Agência Distribuida` is parsed — never `Agência Sugerida`, a distinct column with different meaning.

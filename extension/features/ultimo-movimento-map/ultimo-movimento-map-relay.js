@@ -17,7 +17,7 @@
 // no such race: whichever script runs second simply reads what the first
 // already wrote, and document.documentElement exists before either
 // script's own body starts running.
-// Spec: docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md
+// Spec: docs/archive/specs/2026-08-08-ultimo-movimento-mapa-design.md
 (function () {
   'use strict';
 

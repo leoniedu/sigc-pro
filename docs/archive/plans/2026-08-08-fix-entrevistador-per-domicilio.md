@@ -21,7 +21,7 @@ genuinely Controle-scoped.
 
 ## Global Constraints
 
-- Spec: `docs/superpowers/specs/2026-08-08-fix-entrevistador-per-domicilio-design.md`.
+- Spec: `docs/archive/specs/2026-08-08-fix-entrevistador-per-domicilio-design.md`.
 - Live header column order (confirmed 2026-08-07/08): `Controle`, `Domicilio`, `Entrevistador`, `Tipo Entrevista`, `Última Posição`, `Data`, `Observação` — the new `domicilio` label to match is `'Domicilio'` (unaccented, matching the live header exactly; `normalizeLabel` handles case, `stripHeaderMarker` handles the leading `#!`/`!`).
 - `parseDistribuicaoTable`/`mergeDistribuicao`/`DISTRIBUICAO_LABELS` (agenda-map.js lines ~160-191, 214-225) are OUT OF SCOPE — do not touch them, Relatório Distribuição stays per-Controle.
 - `controleFromKey` (agenda-map.js:197-199) stays defined — still used by `mergeDistribuicao` — but `mergeUltimoMovimento` no longer calls it.

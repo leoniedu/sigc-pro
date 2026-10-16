@@ -6,11 +6,11 @@
 
 **Architecture:** All new code lives in the existing `extension/features/agenda-day-guide/agenda-day-guide.js` (no new file — this is the file that already owns `enderecos`-aware rendering). Four pure-function layers, each consumed by the next: (1) bounding-box + equirectangular projection, (2) an 8-color Okabe-Ito palette with per-equipe assignment, (3) an SVG string builder (dots, sequence numbers, time labels, route line, scale bar, north arrow, coordinate-less note) consuming 1+2, (4) two call sites wiring the SVG into `buildSummaryPanel` (combined) and `buildTeamPanel` (per-team), plus new CSS. Every new function is a no-op / renders nothing when there's nothing to plot, so the plain (no `enderecos`) guide stays byte-identical — the same guarantee every other `enderecos`-optional piece of this file already has.
 
-**Tech Stack:** Vanilla ES2020, Chrome MV3 MAIN-world content scripts. `bun` for everything (node absent from PATH): syntax via `bun build --no-bundle`, throwaway mirror tests in `/tmp` (byte-identical copies of the pure helpers, `bun /tmp/<name>.js`, must print `ALL PASS` before the helpers are pasted verbatim into the real file). Spec: `docs/superpowers/specs/2026-07-18-agenda-day-route-map-design.md`.
+**Tech Stack:** Vanilla ES2020, Chrome MV3 MAIN-world content scripts. `bun` for everything (node absent from PATH): syntax via `bun build --no-bundle`, throwaway mirror tests in `/tmp` (byte-identical copies of the pure helpers, `bun /tmp/<name>.js`, must print `ALL PASS` before the helpers are pasted verbatim into the real file). Spec: `docs/archive/specs/2026-07-18-agenda-day-route-map-design.md`.
 
 ## Global Constraints
 
-- No new `<script>`, no external refs, no network calls — the guide stays a fully self-contained, printable HTML file (`docs/superpowers/specs/2026-07-16-agenda-day-guide-design.md`).
+- No new `<script>`, no external refs, no network calls — the guide stays a fully self-contained, printable HTML file (`docs/archive/specs/2026-07-16-agenda-day-guide-design.md`).
 - Every new builder is a no-op (renders `''`) when there is nothing to plot; the plain Guia do Dia (no `enderecos`) output must stay byte-identical to today.
 - Projection: equirectangular with longitude corrected by `cos(meanLat)` — `x = lon * cos(meanLat)`, `y = lat` (spec, Rendering).
 - Team colors: fixed 8-color Okabe-Ito palette `#E69F00, #56B4E9, #009E73, #F0E442, #0072B2, #D55E00, #CC79A7, #000000`; teams sorted by name (same order `groupByEquipe` already produces) map to palette indices `0, 1, 2, …`, cycling with `% 8` past eight teams (spec, Team colors).
@@ -202,7 +202,7 @@ In `extension/features/agenda-day-guide/agenda-day-guide.js`, insert the functio
 
 ```js
   // --- SVG day-route map ----------------------------------------------
-  // Spec: docs/superpowers/specs/2026-07-18-agenda-day-route-map-design.md
+  // Spec: docs/archive/specs/2026-07-18-agenda-day-route-map-design.md
 
 ```
 
@@ -817,7 +817,7 @@ git commit -m "feat: wire day-route SVG map into Resumo and team tabs"
 ### Task 5: Documentation
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-07-18-agenda-day-route-map-design.md`
+- Modify: `docs/archive/specs/2026-07-18-agenda-day-route-map-design.md`
 - Modify: `docs/index.html`
 - Modify: `LEIA-ME.txt`
 - Modify: `ROADMAP.md`
@@ -828,7 +828,7 @@ git commit -m "feat: wire day-route SVG map into Resumo and team tabs"
 
 - [ ] **Step 1: Mark the spec as implemented**
 
-In `docs/superpowers/specs/2026-07-18-agenda-day-route-map-design.md`, change the status line (line 3) from:
+In `docs/archive/specs/2026-07-18-agenda-day-route-map-design.md`, change the status line (line 3) from:
 
 ```
 2026-07-18. Status: approved direction, pre-implementation.
@@ -889,13 +889,13 @@ In `ROADMAP.md`, find the existing "Guia + Mapa" done item (the one referencing 
 
 - [ ] **Step 5: Verify no stale references**
 
-Run: `grep -rn "Inline SVG route sketch" docs/superpowers/specs/2026-07-16-agenda-map-design.md`
+Run: `grep -rn "Inline SVG route sketch" docs/archive/specs/2026-07-16-agenda-map-design.md`
 Expected: one match, in the "Out of scope" section — leave it as historical record (the new spec's header already says "Supersedes that spec's ... item", so no edit needed there).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add docs/superpowers/specs/2026-07-18-agenda-day-route-map-design.md docs/index.html LEIA-ME.txt ROADMAP.md
+git add docs/archive/specs/2026-07-18-agenda-day-route-map-design.md docs/index.html LEIA-ME.txt ROADMAP.md
 git commit -m "docs: document the day-route SVG map feature"
 ```
 

@@ -23,7 +23,7 @@ renders the two new fields in the confirmed position.
 
 ## Global Constraints
 
-- Spec: `docs/superpowers/specs/2026-08-06-guia-do-dia-agencia-entrevistador-zona-nome-design.md`.
+- Spec: `docs/archive/specs/2026-08-06-guia-do-dia-agencia-entrevistador-zona-nome-design.md`.
 - Card field order (confirmed): `Tel · Agência · Controle · Dom · Zona · Entrevistador`.
 - Zona nome shown on card + team `Zonas:` line + route-selector stop detail only — grid cells (`buildDayGrid`) stay ID-only, unchanged.
 - No new consent dialog: both fetches ride the existing `CONSENT_MSG` confirm in `agenda-map.js`'s `exportGuideMap`.

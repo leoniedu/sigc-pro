@@ -8,9 +8,9 @@ that household, prefilled from live SIGC data, with every variable part left
 as an **editable AcroForm text field**.
 
 Read first: `README.md`, `ROADMAP.md`, `scripts/check-privacy.sh`,
-`docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md` (the
+`docs/archive/specs/2026-08-08-ultimo-movimento-mapa-design.md` (the
 vendored-library relay pattern) and
-`docs/superpowers/specs/2026-08-08-fix-entrevistador-per-domicilio-design.md`
+`docs/archive/specs/2026-08-08-fix-entrevistador-per-domicilio-design.md`
 (who holds a household) and `extension/features/agenda-lookups/agenda-lookups.js`
 (`postRelatorio`: the gateway fetch shape, including `referrer`). Follow the house conventions: MAIN-world feature
 scripts, no permissions, no storage, no network beyond same-origin SIGC

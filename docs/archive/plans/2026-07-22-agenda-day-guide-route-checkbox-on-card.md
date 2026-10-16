@@ -6,7 +6,7 @@
 
 **Architecture:** All changes live in `extension/features/agenda-day-guide/agenda-day-guide.js`. A new shared helper `routeCheckboxHtml(r, info, groupId, checked)` extracts the per-row checkbox-`<label>`-building logic already inside `buildRouteSelector`; both `buildRouteSelector` (used only by Resumo from here on) and `buildSlotCard` (team panels) call it, so the `data-*` attribute shape, escaping, and disabled/non-routable handling exist in exactly one place. `buildSlotCard` gains two parameters and renders the checkbox inline in its `.hora` line. `buildTeamPanel` stops building a checkbox list and instead threads per-row checked state into each card, moving the `rota-link` placeholder to just before the team's SVG map.
 
-**Tech Stack:** Vanilla ES2020, Chrome MV3 MAIN-world content script, no bundler. `bun:test` + `happy-dom` (`tests/agenda-day-guide-route-selector.test.js`, already exists — extended, not replaced); `bun build --no-bundle <file> --outfile=/dev/null` for syntax checks (node is absent from PATH). Spec: `docs/superpowers/specs/2026-07-22-agenda-day-guide-route-checkbox-on-card-design.md`. Amends: `docs/superpowers/specs/2026-07-22-agenda-day-guide-dynamic-route-design.md` (already shipped).
+**Tech Stack:** Vanilla ES2020, Chrome MV3 MAIN-world content script, no bundler. `bun:test` + `happy-dom` (`tests/agenda-day-guide-route-selector.test.js`, already exists — extended, not replaced); `bun build --no-bundle <file> --outfile=/dev/null` for syntax checks (node is absent from PATH). Spec: `docs/archive/specs/2026-07-22-agenda-day-guide-route-checkbox-on-card-design.md`. Amends: `docs/archive/specs/2026-07-22-agenda-day-guide-dynamic-route-design.md` (already shipped).
 
 ## Global Constraints
 
@@ -762,5 +762,5 @@ git commit -m "style: scope checkbox spacing to card .hora line"
 
 ## Post-plan cleanup
 
-- Update `docs/superpowers/specs/2026-07-22-agenda-day-guide-dynamic-route-design.md`'s "Layout placement" section to note it's superseded for team panels by
-  `docs/superpowers/specs/2026-07-22-agenda-day-guide-route-checkbox-on-card-design.md` — mirroring how earlier specs in this project cross-reference their amendments.
+- Update `docs/archive/specs/2026-07-22-agenda-day-guide-dynamic-route-design.md`'s "Layout placement" section to note it's superseded for team panels by
+  `docs/archive/specs/2026-07-22-agenda-day-guide-route-checkbox-on-card-design.md` — mirroring how earlier specs in this project cross-reference their amendments.

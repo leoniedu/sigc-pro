@@ -5,7 +5,7 @@
 // ultimo-movimento per agência (same report SIGC's own UI hits; the
 // standalone ultimo_movimento.py script this feature replaces predates
 // this endpoint's 2026-08-07 migration), and downloads one combined CSV.
-// Spec: docs/superpowers/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md
+// Spec: docs/archive/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md
 (function () {
   'use strict';
 

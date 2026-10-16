@@ -1,9 +1,10 @@
 # SIGC-PRO — Roadmap
 
-Working checklist; move items up/down freely. Specs live in
-`docs/superpowers/specs/`.
+Working checklist; move items up/down freely. Active specs live in
+`docs/superpowers/specs/`; shipped specs, all plans and the dormant video
+script (`roteiro-video.md`) in `docs/archive/`.
 
-## Done (v0.1.x)
+## Done
 
 - [x] MV3 extension, MAIN-world scripts, pesquisa gate + layout validation
 - [x] PDF+KML button: tweaked PDF (trim/título/subtítulo) + KML with
@@ -240,8 +241,6 @@ Working checklist; move items up/down freely. Specs live in
       o gate libera `indexedDB` só em `features/gerenciamento-historico/`
       (`2026-10-15-gerenciamento-historico-design.md`)
 
-## Next
-
 - [x] **Mapa-pro scope gate**: the button gated on exactly one agência,
       read off `#IdAgencia` — but most profiles have no agência selector
       at all, so that select never held a single value for them and the
@@ -263,7 +262,7 @@ Working checklist; move items up/down freely. Specs live in
       MutationObserver on document.body dispatches to all registered
       mounts (was 7+ observers). All 8 features migrated; bun test suite
       (tests/) pins mount lifecycle, factories, and pure helpers. See
-      docs/superpowers/specs/2026-07-19-shared-button-layer-design.md.
+      docs/archive/specs/2026-07-19-shared-button-layer-design.md.
 
 - [x] **Mapa-pro on the Relatório de Acompanhamento de Biomarcadores**, as a
       second variant of the same panel rather than a migration
@@ -277,53 +276,61 @@ Working checklist; move items up/down freely. Specs live in
       colouring, spiderfied co-located households, per-agência layers, a CSV
       per tab, and a pin per Domicílios row. Shipped across v0.2.179–0.2.216
 
+## Next
+
+- [ ] **Verify GEREN-PRO and Histórico in Chrome** before the next store
+      upload: % column sorting, the Histórico tab after a few days of runs,
+      the Fechar restyle, and the carta's usuário lookup (SSO handshake
+      still unverified live). The store listing and privacy policy must
+      describe the IndexedDB history — the first thing SIGC-PRO stores
+- [ ] **Data-file guard in the pre-commit hook.** The privacy gate checks
+      code, not stray files. Reject new
+      `.html`/`.csv`/`.json` outside `tests/fixtures/`, and anything that
+      looks like a name next to coordinates or a phone number
+- [ ] GEREN-PRO Histórico: Bio coverage % row (pending decision on the
+      denominator)
+
 - [ ] **Déficit and free-slot columns count a shared slot whole in every
-      zona.** `indexZonaLivres` (`agenda-lookups.js:369-377`) already computes
+      zona.** `indexZonaLivres` (`agenda-lookups.js:373-395`) already computes
       `peso` (1/n per zona) and a `compartilhado` flag beside the whole
       counts, but the map panel reads only `manha`/`tarde`
-      (`ultimo-movimento-map.js:1029`, `:1197`, `:1215`, `:1280`). One free
+      (`ultimo-movimento-map.js:1249`, `:1437`, `:1462`, `:1525`). One free
       slot listing three zonas therefore reads as capacity 1 in each: the
       summed capacity overstates what is bookable, and both Déficit and
       `zonaSemCapacidade` under-flag exactly the zonas a manager is looking
-      for. Slots Abertos hit this same trap and solved it — it prints the
-      weighted share in grey next to the whole count and names the rule in
-      its legend ("Um slot que lista várias zonas conta inteiro em cada uma
-      delas", `agenda-slots-abertos.js:202-208`, `:237-242`). Port that
-      treatment; the data is already on the object, so this is presentation,
-      not new plumbing. The two features currently disagree about a trap one
-      of them documents
+      for. The Entenda tab now warns about it (`:2146-2148`, `:2174-2177`),
+      but the numbers are unchanged. Slots Abertos solved this — it prints
+      the weighted share in grey next to the whole count
+      (`agenda-slots-abertos.js:237`). Port that treatment; the data is
+      already on the object, so this is presentation, not new plumbing
 
 - [ ] **"Inelegível" states as fact an inference measured in one UF.**
-      `classificaDomicilio` (`ultimo-movimento-map.js:482-484`) files
+      `classificaDomicilio` (`ultimo-movimento-map.js:649`) files
       `Realizada + Descarregado + Não iniciado + sem prazo` as Inelegível — 74
       households in BA, of which 69 have a selected resident under 35, the
       floor ever collected. The remaining ~5 are unexplained, and
       `docs/prompt-pns-zonas.md` still asks the R side to confirm the age-35
       rule against PE/MA/RJ, so the rule is measured, not established.
-      `CLASSE_ACAO.inelegivel` is the empty string (`:528`), which makes the
+      `CLASSE_ACAO.inelegivel` is the empty string (`:731`), which makes the
       classification terminal in practice: nothing ever asks about these
-      households again. The tooltip hedges with "Em geral" but ends "não
-      haverá coleta", which reads as settled. Either soften the label and
-      tooltip to name it as an inference, or give the class an action so the
-      residue stays reachable — the current pairing of a confident label with
-      no action is what turns an inference into a silent write-off
+      households again, and `TIP_INELEGIVEL` (`:1298-1301`) ends "não haverá
+      coleta", which reads as settled. Either soften the label and tooltip
+      to name it as an inference, or give the class an action so the
+      residue stays reachable
 
 - [ ] **The Último Movimento map paints a collection refusal green.** In
       MODO_MOVIMENTO the colour comes from `tipoEntrevista`, so a household
       that completed its interview and then refused the blood draw is
       `Realizada` — indistinguishable from one already collected (~50 such
-      households in BA; `statusColor` comment, `:713-717`). The panel is
-      honest in text (it captions itself "sem demanda estimada" and renders
-      no demand column) but the map is the part people read at a glance, and
+      households in BA; `statusColor`, `:929`). The Entenda tab's limits now
+      say so in words, but the map is the part people read at a glance, and
       that variant is the tempting one: one request, no agenda consent. Worth
       either a visual mark for households the variant cannot speak about, or
-      a caption on the map itself rather than only on the panel
+      a caption on the map itself
 
-- [ ] Dead code: `TIP_REALIZADAS` and `TIP_PENDENTES`
-      (`ultimo-movimento-map.js:1055-1063`) are assigned per variant and
-      never rendered — leftovers from when Último Movimento had demand
-      columns. Harmless, but they read as live documentation of a proxy rule
-      that no longer reaches the UI
+- [ ] **Split `ultimo-movimento-map.js`** (3.8k lines, more than twice any
+      other module) into classification, panel and map files. Structural —
+      plan it before starting
 
 - [ ] **PDF customization** (see `2026-07-14-pdf-customization-design.md`):
   - [ ] per-column styles (`fontSize`, `bold`, …) via pesquisa config
@@ -343,11 +350,6 @@ Working checklist; move items up/down freely. Specs live in
       pulled once a zona flags. Raised in the manager-perspective review
       (2026-08-15) as the highest-value thing neither raw SIGC nor this
       extension answers
-- [ ] Trend over time: every panel is a snapshot, so a zona at Déficit 5 and
-      improving looks identical to one deteriorating. Nothing is stored by
-      design, so this would mean dated CSV exports and tooling outside the
-      extension rather than state inside it — noting it so the constraint is
-      a decision on record, not an oversight
 - [ ] Field-test checklist on more report variations (other UFs, empty
       coordinates, filtered exports)
 - [ ] Field-test Agenda CSV-PRO on more UFs/pesquisas/Dia view; consider

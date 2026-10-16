@@ -17,7 +17,7 @@ reserved-only before deciding whether to render content or `sem-slot`.
 
 ## Global Constraints
 
-- Spec: `docs/superpowers/specs/2026-08-06-guide-hide-livre-zonas-design.md`.
+- Spec: `docs/archive/specs/2026-08-06-guide-hide-livre-zonas-design.md`.
 - `buildSlotCard` itself is UNCHANGED — its `!r.reservado` LIVRE-rendering branch stays; only callers stop feeding it non-reserved rows via `buildTeamPanel`.
 - Numeric stats untouched: `computeStats`'s `livres` count, the team-panel "N livre(s)" stat text, the summary table's "Slots livres" row, the grid's `Livres`/`Ocupação` footer rows all stay exactly as-is.
 - `zonaLabel`/`zonaFullLabel` (per-visit zona on a card's `ids` line, per-cell `Zona:` in the grid) are untouched — only the per-team *summary* "Zonas: A, B, C" line is removed.

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Vanilla JS (ES2020+), Chrome ≥111 (MV3 `world: "MAIN"`), the page's own pdfmake/DataTables/jQuery. No dependencies, no permissions beyond content-script matches.
 
-**Spec:** `docs/superpowers/specs/2026-07-14-sigc-pro-extension-design.md`
+**Spec:** `docs/archive/specs/2026-07-14-sigc-pro-extension-design.md`
 
 ## Global Constraints
 

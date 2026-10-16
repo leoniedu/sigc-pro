@@ -6,7 +6,7 @@
 
 **Architecture:** New MAIN-world content script `agenda-day-guide.js` consuming `window.__sigcPro.readAgendaSlots()` (no new DOM scraping, no network). Pure helpers (grouping, stats, HTML builders) live at the top of the feature IIFE; wiring (button visibility tied to Dia view, download) at the bottom. Two tiny shared helpers (`slug`, `WEEKDAYS_PT`) move into `sigc-common.js` because a second feature now needs them.
 
-**Tech Stack:** Vanilla ES2020 in a Chrome MV3 content script (MAIN world). `bun build --no-bundle` for syntax checks, `bun <file>` for mirror tests (node is NOT on PATH — always use bun). Spec: `docs/superpowers/specs/2026-07-16-agenda-day-guide-design.md`.
+**Tech Stack:** Vanilla ES2020 in a Chrome MV3 content script (MAIN world). `bun build --no-bundle` for syntax checks, `bun <file>` for mirror tests (node is NOT on PATH — always use bun). Spec: `docs/archive/specs/2026-07-16-agenda-day-guide-design.md`.
 
 ## Global Constraints
 
@@ -253,7 +253,7 @@ Create `extension/features/agenda-day-guide/agenda-day-guide.js`:
 // no <script>, no external refs — so it opens anywhere from file:// and
 // Ctrl+P on a tab prints that team's guide. Dia view only: the button is
 // inserted/removed by the MutationObserver as the active view toggles.
-// Spec: docs/superpowers/specs/2026-07-16-agenda-day-guide-design.md
+// Spec: docs/archive/specs/2026-07-16-agenda-day-guide-design.md
 (function () {
   'use strict';
 

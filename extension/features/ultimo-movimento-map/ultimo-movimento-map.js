@@ -19,7 +19,7 @@
 // tipo-de-acompanhamento filters ride along fine inside a scope — they
 // just narrow the rows further, and the join drops the surplus — but
 // alone they mean the whole state, hence blocked. See motivoBloqueio.
-// Spec: docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md
+// Spec: docs/archive/specs/2026-08-08-ultimo-movimento-mapa-design.md
 (function () {
   'use strict';
 

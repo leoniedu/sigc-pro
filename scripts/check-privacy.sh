@@ -10,13 +10,13 @@
 #   - extension/common/                    : fetch() only, same-origin only
 #     (hosts fetchViaGateway, the shared F5-gateway request helper used by
 #     agenda-lookups and ultimo-movimento-export; see
-#     docs/superpowers/specs/2026-08-06-guia-do-dia-agencia-entrevistador-zona-nome-design.md)
+#     docs/archive/specs/2026-08-06-guia-do-dia-agencia-entrevistador-zona-nome-design.md)
 #   - extension/features/agenda-lookups/       : fetch() only, same-origin only
 #     (queries SIGC's own server; see
-#     docs/superpowers/specs/2026-07-16-agenda-map-design.md)
+#     docs/archive/specs/2026-07-16-agenda-map-design.md)
 #   - extension/features/ultimo-movimento-export/ : fetch() only, same-origin
 #     only (same rationale, see
-#     docs/superpowers/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md)
+#     docs/archive/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md)
 #   - extension/features/gerenciamento-historico/ : IndexedDB only (the GEREN-PRO
 #     history by agência: per-UF, per-day counts, never a household), and NO
 #     network at all — fetch() is banned there like everywhere but FETCH_DIRS.
@@ -27,7 +27,7 @@
 #     unmodified from upstream — not swept by this heuristic (which targets
 #     sigc-pro's own code), audited once at vendor time instead of per-commit.
 #     First vendored library: Leaflet (see
-#     docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md).
+#     docs/archive/specs/2026-08-08-ultimo-movimento-mapa-design.md).
 #   - extension/features/ultimo-movimento-map/ : .src=/.href= only, and only
 #     when the value is chrome.runtime.getURL('vendor/...') — loads the
 #     vendored Leaflet bundle from the extension's own package, no network
@@ -46,7 +46,7 @@
 #     contain zero absolute URLs), it legitimately needs exactly one — the
 #     OpenStreetMap tile-host template Leaflet's L.tileLayer() uses — so
 #     any OTHER absolute URL found there still fails the gate. See
-#     docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md.
+#     docs/archive/specs/2026-08-08-ultimo-movimento-mapa-design.md.
 # Every other API stays banned everywhere, including inside these
 # directories except for the one API each is sanctioned for. Fetch-sanctioned
 # directories may not contain absolute URLs, so their requests physically
@@ -122,7 +122,7 @@ URL_PATTERN='https?://'
 # (which must contain zero absolute URLs): it legitimately loads OSM map
 # tiles via Leaflet's L.tileLayer(), which needs one hardcoded tile-host
 # URL template (see ultimo-movimento-map.js's renderLeafletMap and
-# docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md). So
+# docs/archive/specs/2026-08-08-ultimo-movimento-mapa-design.md). So
 # this is an ALLOWLIST, not a ban: any https?:// URL in this directory
 # must match the exact tile-host template below, or the gate fails —
 # catching a future unauthorized second external URL while still
