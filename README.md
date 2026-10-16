@@ -30,20 +30,29 @@ Em **qualquer relatório do SIGC** com tabela (DataTables):
 - **CSV-pro** — exporta a tabela como CSV (`;`-separado, compatível com
   Excel pt-BR), lendo os dados diretamente via API do DataTables.
 
-No relatório **Último Movimento**, filtrado por **agência, município ou
-controle** (qualquer um deles basta):
+No relatório **Último Movimento** e no **Relatório de Acompanhamento de
+Biomarcadores**, filtrados por **agência, município ou controle**
+(qualquer um deles basta):
 
-- **MAPA-PRO** — abre um painel com três abas:
-  - **Mapa** — os domicílios do recorte filtrado plotados e coloridos por
-    zona (cascos convexos por zona, cores seguras para daltonismo), com a
-    situação de coleta por marcador e, no popup de cada domicílio, a
-    entrevista agendada quando existe. O fundo cartográfico
-    (OpenStreetMap) só é carregado após uma confirmação própria.
-  - **Zonas** — uma linha por zona do recorte, **inclusive as que ainda
-    não tiveram coleta** (semeadas a partir da Lista de Endereços, não do
-    relatório): situação de coleta, quantos domicílios estão agendados e
-    quantos não, e os horários ainda livres listados dia a dia. Clicar no
-    nome da zona a enquadra no mapa.
+- **MAPA-PRO** — abre um painel com cinco abas. Cada página agrupa pela
+  unidade que sabe responder: o relatório de biomarcadores por **zona**
+  (a unidade da agenda) e o Último Movimento por **controle** (a unidade
+  de amostragem — sem agenda não há capacidade por zona a comparar).
+  - **Mapa** — os domicílios do recorte filtrado, coloridos pela situação
+    de cada um (cores seguras para daltonismo), com destaque para os que
+    estão perto do prazo, contornos por zona (ou controle) e camadas por
+    agência que se ligam e desligam uma a uma; domicílios no mesmo
+    endereço abrem em leque. O fundo cartográfico (OpenStreetMap) só é
+    carregado após uma confirmação própria.
+  - **Zonas** (ou **Controles**) — uma linha por grupo do recorte,
+    **inclusive os que ainda não tiveram coleta** (semeados a partir da
+    Lista de Endereços, não do relatório): andamento, o que falta
+    agendar, o que já venceu e os horários ainda livres dia a dia, com
+    os casos mais problemáticos no topo. Clicar no nome enquadra o grupo
+    no mapa.
+  - **Entrevistadores** — as mesmas contagens por entrevistador, com a
+    transmissão mais recente de cada um e as zonas (ou controles) em que
+    tem domicílios.
   - **Domicílios** — a lista completa, ordenável por qualquer coluna, com
     zona, entrevista agendada, situação, tipo e entrevistador — e, em
     cada linha, o botão **Carta**: baixa a **carta de notificação** do
@@ -67,6 +76,16 @@ controle** (qualquer um deles basta):
     subamostra de biomarcadores, e a superintendência é a da UF do
     controle. Sem assinatura: três linhas em branco e duas linhas
     editáveis (nome de quem assina e a unidade) para quem a entrega.
+  - **❓ Entenda** — de onde vem cada número do painel: o que o relatório
+    afirma, o que foi calculado e o que é apenas provável.
+
+  Em todas as abas há busca geral e um filtro por coluna, e cada aba de
+  dados baixa em CSV com os filtros aplicados. As duas páginas dão
+  painéis diferentes: o relatório de biomarcadores informa a situação da
+  coleta, então ali as colunas de demanda são fatos; o Último Movimento
+  não enxerga o biomarcador (quem recusou a coleta aparece como
+  entrevista realizada), e o painel omite essas colunas em vez de
+  estimá-las.
 
   As coordenadas (Lista de Endereços do mesmo recorte) e a agenda da UF
   são obtidas do próprio servidor do SIGC mediante clique e confirmação,
@@ -129,20 +148,24 @@ Em **Administrar Agenda** (qualquer UF/pesquisa cuja URL termine em
   sexta-feira) e zonas cujo nome não corresponde à equipe da coluna
   (padrão `UF_Equipe_Local`). Não altera nada, não bloqueia o CSV-PRO —
   é só um alerta sob demanda, na visualização atual.
+- **Slots Abertos** — na visualização Semana, um painel zona × turno
+  (Manhã/Tarde) com os slots ainda abertos sobre o total de cada zona,
+  contando só os abertos a partir do prazo mínimo — para decidir onde há
+  capacidade a abrir.
 - **Seletor de data** (🗓️) — ao lado do título do período no topo do
   calendário, abre o seletor de data nativo do navegador e pula
   diretamente para o dia escolhido, sem precisar navegar semana a semana.
 - **Guia do Dia** (só na visualização Dia) — baixa um guia HTML autônomo
   e sem dependências (abre de `file://`, sem rede): uma aba Resumo com
   estatísticas do dia e uma grade horário × equipe dos slots, uma aba
-  **Lab** compartilhável com o laboratório, na forma como o próprio
-  sistema do laboratório lista as coletas (nome e município por slot, sem
-  Controle, sem Domicílio e sem data de nascimento) e uma aba por equipe
+  **Lab** compartilhável com o laboratório, agrupada por equipe (primeiro
+  nome e ano de nascimento, domicílio, município e zona por slot — sem
+  Controle, sem nome completo, sem data de nascimento completa) e uma aba por equipe
   com um cartão por visita (endereço, morador, telefone, Controle/
   Domicílio, observações) e os horários livres. Ctrl+P na aba imprime só
   aquela página.
-- **Guia + Mapa** (opcional) — o mesmo guia, enriquecido: mediante clique
-  e confirmação, consulta o próprio servidor do SIGC para obter a zona
+  No mesmo clique, mediante confirmação (recusar ainda gera o guia, sem
+  estes extras), a extensão consulta o próprio servidor do SIGC para obter a zona
   real de cada visita e as coordenadas; cada cartão de visita ganha um
   link para o Google Maps (rota até o endereço) e um checkbox próprio
   para incluí-la na rota da equipe — a equipe ganha um link de rota
@@ -179,7 +202,7 @@ também sem depender de pesquisa específica.
 5. Abra a Lista de Endereços (ou outro relatório, ou a Agenda) no SIGC e
    clique no botão **PRO** que precisar: **PDF-pro**, **KML-pro**,
    **CSV-pro**, ou, na Agenda, **CSV-PRO**, **Verificar Slots**, o
-   seletor de data (🗓️), **Guia do Dia** ou **Guia + Mapa**.
+   **Slots Abertos**, o seletor de data (🗓️) ou **Guia do Dia**.
 
 Requer Chrome 111 ou superior.
 
@@ -203,14 +226,15 @@ Rscript scripts/gen-municipios.R
 
 **Nenhum dado do SIGC sai do seu computador.** A extensão solicita
 **nenhuma permissão** do navegador — a lista `permissions` do manifesto
-está vazia — e não faz chamadas de rede, exceto quatro recursos opcionais, todos mediante clique,
-todos apenas ao próprio servidor do SIGC: "Guia + Mapa"
-(coordenadas de endereços), "MAPA-PRO" (Lista de Endereços do recorte
+está vazia — e não faz chamadas de rede, exceto cinco recursos opcionais, todos mediante clique,
+todos apenas ao próprio servidor do SIGC: o "Guia do Dia"
+(coordenadas de endereços), o GEREN-PRO (o relatório Gerenciamento da
+Coleta da UF, uma requisição, mantida em memória por 5 minutos), "MAPA-PRO" (Lista de Endereços do recorte
 filtrado + agenda da UF), a exportação Último Movimento
 multi-agência (que confirma, nomeando quantas agências serão consultadas)
 e a "Carta" do MAPA-PRO (o cadastro do agente — função, telefone, e-mail,
 agência — pela matrícula, no módulo de usuários do SIGC, uma por clique,
-sem confirmação porque não há consulta em massa). Fora esses quatro casos a extensão não tem
+sem confirmação porque não há consulta em massa). Fora esses cinco casos a extensão não tem
 código remoto — o arquivo KML, por exemplo, é gerado em memória e salvo
 localmente. Toda requisição da extensão leva o cabeçalho `X-SIGC-PRO` com
 a versão instalada, para que o SIGC possa distingui-la das ações do

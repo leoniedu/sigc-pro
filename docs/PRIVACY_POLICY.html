@@ -55,7 +55,7 @@
   visita, veja item 2).</p>
 
   <h2>2. Coleta e transmissão de dados</h2>
-  <p>Quase nenhuma. Quatro recursos opcionais fazem requisições ao próprio
+  <p>Quase nenhuma. Cinco recursos opcionais fazem requisições ao próprio
   servidor do SIGC (mesma origem da página), sempre dentro da sessão já
   autenticada do usuário: o "Guia do Dia", que consulta as coordenadas, a
   zona, a agência e o entrevistador dos endereços do dia mediante clique
@@ -92,10 +92,13 @@
   envia credenciais nem formulários de autenticação, e um redirecionamento
   de autenticação nunca é seguido pelo código; nada é armazenado
   (o resultado fica em memória por 60 segundos, para um segundo clique
-  no mesmo agente não repetir a consulta). Fora essas quatro
+  no mesmo agente não repetir a consulta); e o "GEREN-PRO" do relatório
+  Gerenciamento da Coleta, que, ao clicar, faz uma única requisição do
+  relatório da UF inteira, mantida só em memória por 5 minutos (o
+  histórico guarda apenas contagens por agência, veja item 3). Fora essas cinco
   funcionalidades opcionais, o código não contém chamadas de rede — uma
   verificação automática do repositório (scripts/check-privacy.sh) confere,
-  a cada alteração, que requisições só existem nesses quatro módulos e só
+  a cada alteração, que requisições só existem nesses módulos e só
   para a própria origem, complementando a auditoria do código aberto.
   Toda requisição da extensão leva o cabeçalho <code>X-SIGC-PRO</code> com a
   versão instalada, para que o SIGC possa distingui-la das ações do próprio

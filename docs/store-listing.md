@@ -189,7 +189,7 @@ machine**. Reading data already on the page, showing it, and saving a file
 locally are not collection — and neither is keeping data in the browser's own
 IndexedDB (0.2.248, the GEREN-PRO history of per-agência counts, no household
 data, never transmitted). Every answer below is No, and none of them has
-changed through 0.2.248.
+changed through 0.2.257.
 
 | Data type | Answer | Why |
 |---|---|---|
@@ -349,6 +349,17 @@ entries.
   still bans `chrome.storage`, `localStorage`, `sessionStorage` and cookies
   everywhere; its self-test plants each of those to prove it fails.
 
+- **0.2.255** — every same-origin request the extension makes now carries
+  an `X-SIGC-PRO: <version>` header, so the SIGC server can tell extension
+  traffic from the user's own clicks. No new request, host or permission.
+  The privacy gate also got stricter: the user module's host is written in
+  plain text in `extension/common/` (the one allowlisted URL there besides
+  the Google Maps link builders), and any hex- or base64-encoded URL fails
+  the gate anywhere outside `vendor/`.
+
+- **0.2.257** — the Histórico tab's column headers show only the date of
+  each run. Display change only.
+
 ### If a reviewer asks about network activity
 
 These are the only outbound requests. The first two were already present in
@@ -360,7 +371,8 @@ on the same hosts:
    to the IBGE server the user is already on, inside their authenticated
    session, each behind a click (and, for the three bulk ones, a
    confirmation). These fetch *from* the origin; nothing is sent to anyone
-   else.
+   else. Each carries an `X-SIGC-PRO: <version>` header identifying the
+   extension (0.2.255).
 2. **OpenStreetMap tiles** (`https://{s}.tile.openstreetmap.org/...`) — the map
    background in Mapa-pro. It is an image request behind its own separate
    confirmation. No user or SIGC data is attached: the URL carries only

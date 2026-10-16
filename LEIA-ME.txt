@@ -173,10 +173,11 @@ Privacidade
 Nenhum dado do SIGC sai do seu computador para o desenvolvedor ou para
 terceiros. A extensão não pede NENHUMA permissão do navegador; os
 arquivos são gerados localmente.
-As consultas de dados são quatro, todas opcionais e todas ao próprio
+As consultas de dados são cinco, todas opcionais e todas ao próprio
 servidor do SIGC — o "Guia do Dia", o "MAPA-PRO", a exportação Último
-Movimento multi-agência e a "Carta" do MAPA-PRO (o cadastro do agente,
-pela matrícula) — somente quando você clica, dentro da sessão já
+Movimento multi-agência, a "Carta" do MAPA-PRO (o cadastro do agente,
+pela matrícula) e o GEREN-PRO (o relatório da UF, só em memória) —
+somente quando você clica, dentro da sessão já
 autenticada. Toda requisição leva o cabeçalho X-SIGC-PRO com a versão
 da extensão, para que o SIGC possa distingui-la das suas ações.
 
