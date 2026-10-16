@@ -1,0 +1,193 @@
+SIGC-PRO — melhorias não oficiais para o SIGC (IBGE)
+=====================================================
+
+O que é
+-------
+Extensão do Chrome que adiciona botões azuis aos relatórios e à Agenda do
+SIGC:
+
+Na Lista de Endereços (PNS 2026):
+  * PDF-pro — reexporta o PDF sem colunas pouco úteis em campo, com
+    título customizado e com as colunas constantes (Controle, Situação,
+    Biomarcadores, Zona, nº de selecionados) movidas para o cabeçalho.
+    Antes de gerar, pergunta o tamanho da letra (padrão pré-preenchido);
+    todos os tamanhos acompanham proporcionalmente;
+  * KML-pro (Google Earth / Google Maps / geojson.io) — endereços em duas
+    camadas: Selecionado = Sim (vermelho, numerado) e Não (azul, menor).
+
+Em qualquer relatório do SIGC com tabela:
+  * CSV-pro — exporta a tabela como CSV, contornando um bug do portalweb
+    que quebra os botões nativos de CSV/Excel fora da VPN.
+
+No relatório Último Movimento e no Relatório de Acompanhamento de
+Biomarcadores, filtrados por agência, município ou controle — qualquer
+um deles basta (rode o Filtrar):
+  * MAPA-PRO — abre um painel com cinco abas. Mapa: os domicílios do
+    recorte filtrado, coloridos pela situação de cada um, com destaque
+    para os que estão perto do prazo e camadas por agência; domicílios no
+    mesmo endereço abrem em leque. Zonas (ou Controles): o andamento de
+    cada grupo (inclusive os ainda sem coleta), o que falta agendar, o
+    que já venceu, e os horários ainda livres dia a dia — os casos mais
+    problemáticos no topo. Cada página agrupa pela unidade que sabe
+    responder: o relatório de biomarcadores por ZONA, que é a unidade da
+    agenda; o Último Movimento por CONTROLE, a unidade de amostragem,
+    já que sem agenda não há capacidade por zona a comparar. Os
+    contornos no mapa seguem o mesmo agrupamento. Entrevistadores: as
+    mesmas contagens, por entrevistador, com a transmissão mais recente
+    de cada um e as zonas (ou controles) em que tem domicílios; no
+    Último Movimento, a aba de Controles também diz quem tem domicílios
+    em cada controle. Domicílios: a lista
+    completa, ordenável, com situação, a ação devida em cada caso e um
+    pino que leva ao domicílio no mapa. Cada aba baixa em CSV.
+    Em cada linha de Domicílios, o botão "Carta" baixa a carta de
+    notificação do domicílio em PDF (uma página, campos editáveis), já
+    com endereço, município, o agente que detém o domicílio e o
+    cadastro dele (função, telefone, e-mail), consultado no módulo de
+    usuários do SIGC na hora do clique — uma matrícula por clique, nada
+    armazenado. A agência vem da linha do relatório ou do filtro; por
+    município ou controle fica em branco. O módulo de usuários tem
+    sessão própria: se ela não estiver iniciada, a extensão abre o
+    módulo em uma aba para o login único do navegador e gera a carta
+    assim que ele responde (fechando a aba); se pedir login, entre na
+    aba. Se a consulta falhar, a carta sai só com nome e matrícula, com
+    um aviso. Sem assinatura: assina quem entrega, nas linhas em branco.
+    A última aba, "❓ Entenda", explica de onde vem cada número: o que o
+    relatório afirma, o que foi calculado e o que é apenas provável.
+    Vale ler antes de tomar decisão em cima das colunas.
+    IMPORTANTE: as duas páginas dão painéis diferentes. O Relatório de
+    Biomarcadores informa a situação da coleta, então ali as colunas de
+    demanda são fatos. O Último Movimento NÃO enxerga o biomarcador: ali
+    quem recusou a coleta aparece como entrevista realizada (verde no
+    mapa), e o painel omite as colunas de demanda em vez de estimá-las.
+    Para decidir coleta, use o relatório de biomarcadores.
+    As coordenadas e a agenda vêm do
+    próprio servidor do SIGC, mediante clique e confirmação, no mesmo
+    recorte que você filtrou — não é preciso ter acesso ao seletor de
+    agência. Filtros por entrevistador ou tipo de acompanhamento também
+    funcionam, desde que combinados com um dos três acima. Sem nenhum
+    deles o botão fica visível porém bloqueado, explicando o motivo no
+    tooltip e ao clicar — um relatório de estado inteiro é grande demais
+    para buscar coordenadas.
+
+No relatório Último Movimento:
+  * CSV TODAS — baixa o Último Movimento de TODAS as agências da UF
+    atual (não só a filtrada na tela) e combina tudo em um único CSV.
+    Faz uma requisição por agência, com 2s de intervalo, ao próprio
+    servidor do SIGC — pode levar alguns minutos. Agência que falhar é
+    pulada, não interrompe a exportação.
+
+No relatório Gerenciamento da Coleta:
+  * GEREN-PRO — abre um painel com a UF inteira (os filtros da
+    página não valem): Domicílios, Município e Agência, com uma coluna
+    por andamento do portal (contagem ou %). A amostra Bio se filtra
+    dentro do painel. Mantém separadas as recusas (questionário,
+    biomarcadores, domicílio). A aba Histórico guarda no navegador uma
+    foto por dia com as contagens por agência (nunca dados de domicílio)
+    e mostra a evolução por semana; há Exportar e Limpar histórico. Uma
+    requisição ao servidor do SIGC; dados só em memória por 5 minutos.
+
+Em Administrar Agenda:
+  * CSV-PRO — exporta os slots do calendário (dia/semana atual, todas as
+    equipes visíveis) como CSV, já com Controle, Domicílio, Nome, Sexo,
+    Endereço etc. separados em colunas (o SIGC só mostra isso dentro do
+    texto de cada slot). Inclui slots reservados e slots abertos.
+  * Verificar Slots — duas verificações em um clique: slots abertos (sem
+    endereço atribuído) agendados antes do prazo mínimo para ainda serem
+    preenchidos a tempo (hoje + 3 dias corridos; +4 se hoje for
+    sexta-feira) e zonas cujo nome não corresponde à equipe da coluna
+    (padrão UF_Equipe_Local).
+  * Guia do Dia (só na visualização Dia) — baixa um guia HTML autônomo.
+    Cada domicílio agendado recebe UM número para o dia inteiro (ordem
+    de horário), o mesmo em todas as abas e no mapa — assim uma rota
+    montada misturando equipes pode ser conferida e repassada a cada
+    equipe sem confusão. Abas: Resumo (a lista completa dos domicílios
+    do dia em ordem de horário — cartões numerados com endereço,
+    morador, telefone, Controle/Domicílio e a equipe em destaque), uma
+    aba Lab compartilhável com o laboratório (agrupada por equipe, com
+    marcador por linha: nº, hora, primeiro nome e ano de nascimento do
+    morador, domicílio, município e zona — sem Controle, sem nome
+    completo, sem data de nascimento completa) e, por equipe, os mesmos
+    cartões numerados. Em toda aba, "Ocultar não selecionadas" esconde
+    as linhas desmarcadas — inclusive na impressão.
+    Ctrl+P imprime a aba aberta.
+    Ao clicar, o Guia do Dia oferece consultar o próprio servidor do
+    SIGC (mediante confirmação) para obter coordenadas, zona real,
+    agência e entrevistador de cada visita. Aceitando, o guia ganha
+    também o mapa do dia (pontos numerados com o número de cada
+    domicílio, uma cor só — a equipe está escrita no cartão), link de
+    navegação por visita e seleção de paradas por checkbox em cada
+    cartão (até 9 por rota, com link do Google Maps atualizado em tempo
+    real) — no Resumo, misturando equipes. Recusando, o guia sai do
+    mesmo jeito, sem esses extras — recusar não cancela o download.
+    Nada vai a terceiros.
+
+Os botões nativos do SIGC não são alterados — os novos botões apenas se
+somam a eles. O PDF nativo funciona normalmente; CSV e Excel nativos têm
+um bug conhecido do portalweb fora da VPN (veja Problemas abaixo).
+
+AVISO: projeto independente, sem vínculo com o IBGE. Protótipo para
+demonstração à equipe oficial do SIGC. Use por sua conta e risco.
+
+Instalação (Chrome 111 ou superior)
+-----------------------------------
+1. Descompacte este arquivo ZIP em uma pasta permanente (não apague a
+   pasta depois — o Chrome carrega a extensão a partir dela).
+2. No Chrome, abra:  chrome://extensions
+3. Ative o "Modo do desenvolvedor" (canto superior direito).
+4. Clique em "Carregar sem compactação" e selecione a pasta "extension"
+   (a pasta que contém o arquivo manifest.json).
+5. Pronto. O ícone azul da extensão aparece na barra do Chrome (ele não
+   faz nada ao ser clicado — tudo acontece dentro da página do SIGC).
+
+Como usar
+---------
+1. Entre no SIGC e abra um relatório normalmente (Lista de Endereços para
+   PDF-pro/KML-pro; Último Movimento ou Acompanhamento de Biomarcadores,
+   filtrado por agência, município ou controle, para o MAPA-PRO;
+   qualquer relatório com tabela para CSV-pro; Administrar
+   Agenda para o CSV-PRO da Agenda).
+2. Ao lado dos botões de exportação (copiar, CSV, Excel, PDF) — ou, na
+   Agenda, ao lado dos botões "Dia"/"Semana" — aparece o botão azul
+   correspondente: "PDF-pro", "KML-pro", "MAPA-PRO", "CSV-pro",
+   "CSV-PRO", "Verificar Slots", "Slots Abertos" ou "Guia do Dia".
+3. Clique no que precisar — cada um baixa um arquivo, independente dos
+   outros. Na Agenda, o CSV reflete exatamente o que está na tela — para
+   outra semana/UF, mude a visualização e clique de novo.
+4. Abra o .kml em aplicativos como Google Earth ou QGIS para ver os
+   endereços no mapa, com selecionados em vermelho (rotulados com o nº do
+   domicílio) e não selecionados em azul, menores e sem rótulo (cores
+   seguras para daltonismo). Endereços sem coordenadas válidas são
+   avisados na tela.
+
+Problemas?
+----------
+* Os botões não aparecem: recarregue a página (Cmd+Shift+R / Ctrl+F5).
+  PDF-pro e KML-pro só aparecem na Lista de Endereços; o CSV-PRO da Agenda
+  só aparece em páginas Administrar Agenda.
+* Atualizou a extensão? Em chrome://extensions, clique no ícone de
+  recarregar (↻) do SIGC-PRO e recarregue a página do SIGC.
+* Mensagem "o layout da tabela não corresponde ao esperado" (PDF-pro ou
+  KML-pro): o SIGC mudou as colunas do relatório; reporte ao mantenedor.
+* CSV/Excel nativos não baixam nada fora da VPN: bug conhecido do
+  portalweb (proteção anti-bot quebra os botões nativos); o CSV-pro traz
+  uma alternativa.
+
+Privacidade
+-----------
+Nenhum dado do SIGC sai do seu computador para o desenvolvedor ou para
+terceiros. A extensão não pede NENHUMA permissão do navegador; os
+arquivos são gerados localmente.
+As consultas de dados são quatro, todas opcionais e todas ao próprio
+servidor do SIGC — o "Guia do Dia", o "MAPA-PRO", a exportação Último
+Movimento multi-agência e a "Carta" do MAPA-PRO (o cadastro do agente,
+pela matrícula) — somente quando você clica, dentro da sessão já
+autenticada.
+
+O único recurso externo é o fundo do mapa do MAPA-PRO: as imagens de
+mapa (tiles) do OpenStreetMap, buscadas apenas depois de uma
+confirmação própria e separada. Recusando, as abas Zonas e Domicílios
+continuam funcionando. Nenhum dado do SIGC acompanha esse pedido.
+
+Isso é verificado automaticamente a cada alteração do código.
+
+Código-fonte e contato: https://github.com/leoniedu/sigc-pro

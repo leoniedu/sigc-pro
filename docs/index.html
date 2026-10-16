@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SIGC-PRO — melhorias não oficiais para o SIGC (IBGE)</title>
+<style>
+  :root { --blue: #005a9c; --ink: #1a1a1a; --muted: #555; --bg: #f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.6 -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: #fff; }
+  header { background: var(--blue); color: #fff; padding: 3rem 1rem 2.5rem; text-align: center; }
+  header h1 { margin: 0 0 .3rem; font-size: 2.4rem; letter-spacing: .02em; }
+  header p { margin: 0; opacity: .9; }
+  main { max-width: 46rem; margin: 0 auto; padding: 2rem 1rem 4rem; }
+  .aviso { background: #fff8e1; border: 1px solid #e6c96b; border-radius: 8px; padding: .8rem 1rem; margin: 1.5rem 0; font-size: .95rem; }
+  h2 { color: var(--blue); margin-top: 2.2rem; }
+  .card { background: var(--bg); border: 1px solid #e1e4e8; border-radius: 8px; padding: 1rem 1.2rem; margin: 1rem 0; }
+  .card h3 { margin: 0 0 .4rem; font-size: 1.05rem; }
+  .card p { margin: 0; color: var(--muted); }
+  ol li { margin: .4rem 0; }
+  code { background: var(--bg); border: 1px solid #e1e4e8; border-radius: 4px; padding: .1rem .35rem; font-size: .9em; }
+  footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 2rem 1rem; border-top: 1px solid #e1e4e8; }
+  a { color: var(--blue); }
+</style>
+</head>
+<body>
+<header>
+  <h1>SIGC-PRO</h1>
+  <p>Melhorias não oficiais para o SIGC — Sistema Integrado de Gestão da Coleta (IBGE)</p>
+  <p style="opacity:.75; font-size:.85rem; margin-top:.4rem;">versão 0.2.253</p>
+</header>
+<main>
+  <div class="aviso">⚠️ Projeto independente, sem vínculo com o IBGE. Funcionalidades
+  em caráter de protótipo, para demonstração à equipe oficial do SIGC.</div>
+
+  <div class="card" style="border-color:#005a9c;">
+    <h3>📖 <a href="manual.html">Manual do supervisor</a></h3>
+    <p>Como ler o que o painel mostra: o que cada coluna conta, o que é fato
+    e o que é estimativa, e onde o número pode enganar. Leitura recomendada
+    antes de decidir agenda em cima das colunas.</p>
+  </div>
+
+  <h2>Funcionalidades</h2>
+  <div class="card">
+    <h3>📄 PDF-PRO — Lista de Endereços</h3>
+    <p>PDF em estilo listagem do IBGE: retrato, cabeçalho repetido em cada
+    página, colunas pouco úteis em campo removidas, coordenadas em graus
+    decimais (formato Google Maps). Antes de gerar, pergunta o tamanho da
+    letra (padrão pré-preenchido) — todos os tamanhos acompanham
+    proporcionalmente. O botão de PDF original do SIGC continua
+    intocado.</p>
+  </div>
+  <div class="card">
+    <h3>🗺️ KML-PRO — Lista de Endereços</h3>
+    <p>Arquivo KML (Google Earth / Maps) com camadas separadas para
+    Selecionado = Sim e Não, cores seguras para daltonismo e endereço
+    completo no balão de cada ponto.</p>
+  </div>
+  <div class="card">
+    <h3>📋 MAPA-PRO — Último Movimento e Biomarcadores</h3>
+    <p>Nos dois relatórios, filtrados por agência, município ou controle,
+    abre um
+    painel com cinco abas: o mapa dos domicílios coloridos por situação,
+    com destaque para os que estão perto do prazo e camadas por agência;
+    uma aba de
+    Zonas — ou de Controles, no Último Movimento, que sem consulta à
+    agenda não tem capacidade por zona a comparar — com o andamento de
+    cada grupo (incluindo os que ainda não tiveram
+    coleta) e os horários livres listados dia a dia; uma aba de
+    Entrevistadores, com as mesmas contagens por entrevistador, a
+    transmissão mais recente de cada um e as zonas ou controles em que
+    tem domicílios (no Último Movimento, a aba de Controles também diz
+    quem tem domicílios em cada controle); uma aba de
+    Domicílios com a situação, a ação devida, um pino que leva ao
+    domicílio no mapa e um botão <strong>Carta</strong> que baixa a
+    carta de notificação do domicílio em PDF editável, com endereço,
+    agente e o cadastro do agente consultado no SIGC; e a aba
+    <strong>❓ Entenda</strong>, que diz de onde
+    vem cada número — o que o relatório afirma, o que foi calculado e o que
+    é apenas provável. Em todas as abas, além da busca geral, há um filtro
+    por coluna sob cada cabeçalho. Cada aba de dados pode ser baixada em
+    CSV, já com os filtros aplicados.
+    Tudo obtido do próprio servidor do
+    SIGC mediante clique e confirmação, no mesmo recorte filtrado na
+    tela. Os dois relatórios dão painéis diferentes: veja o
+    <a href="manual.html">manual do supervisor</a>.</p>
+  </div>
+  <div class="card">
+    <h3>📊 CSV-PRO — qualquer relatório</h3>
+    <p>Exporta a tabela de qualquer relatório do SIGC em CSV pronto para o
+    Excel brasileiro (separador <code>;</code>, acentuação preservada),
+    incluindo todas as páginas da tabela, não só a visível.</p>
+  </div>
+  <div class="card">
+    <h3>📋 GEREN-PRO — Gerenciamento da Coleta</h3>
+    <p>Ao lado de Filtrar, abre um painel com a <strong>UF inteira</strong>:
+    domicílios, por município e por agência, com o andamento de cada um
+    e as recusas (questionário, biomarcadores e domicílio) separadas. Uma requisição ao próprio servidor do SIGC, a pedido; nada
+    é guardado.</p>
+  </div>
+  <div class="card">
+    <h3>📊 CSV TODAS — Último Movimento</h3>
+    <p>No relatório Último Movimento, exporta o relatório de
+    <strong>todas</strong> as agências da UF atual (não só a selecionada
+    na tela) em um único CSV — uma requisição por agência, com intervalo
+    entre elas, ao próprio servidor do SIGC. Confirma antes de rodar,
+    informando quantas agências serão consultadas.</p>
+  </div>
+  <div class="card">
+    <h3>📅 CSV-PRO — Agenda</h3>
+    <p>Exporta os slots do calendário (Administrar Agenda) — data, equipe,
+    horário, Controle, Domicílio, nome, endereço, telefone etc. — da semana
+    ou dia em exibição.</p>
+  </div>
+  <div class="card">
+    <h3>⏰ Verificar Slots — Agenda</h3>
+    <p>Duas verificações em um clique: slots ainda abertos (sem reserva)
+    marcados para datas dentro do prazo mínimo de agendamento (hoje + 3
+    dias; + 4 na sexta-feira) e zonas cujo nome não corresponde à equipe
+    da coluna (padrão <code>UF_Equipe_Local</code>).</p>
+  </div>
+  <div class="card">
+    <h3>🗒️ Guia do Dia — Agenda</h3>
+    <p>Na visualização Dia, gera um guia HTML autônomo em que cada domicílio
+    agendado recebe <strong>um número para o dia inteiro</strong> (ordem de
+    horário), o mesmo em todas as abas e no mapa — feito para montar uma
+    rota misturando equipes e repassá-la a cada equipe sem confusão. O
+    Resumo traz a lista completa dos domicílios do dia: cartões
+    numerados, em ordem de horário, com endereço, morador (nome, sexo,
+    idade), telefone, Controle/Domicílio, observações e a equipe em
+    destaque. Cada equipe tem sua aba com os mesmos cartões. Pronto para
+    imprimir por aba (Ctrl+P); em toda aba, "Ocultar não selecionadas"
+    esconde as linhas desmarcadas, inclusive na impressão. Ao clicar, o
+    guia oferece (opcional,
+    mediante confirmação) obter a zona real e as coordenadas de cada
+    visita do próprio servidor do SIGC; cada cartão ganha um checkbox para
+    incluí-lo na rota — no Resumo, misturando equipes — e um link do
+    Google Maps que se atualiza em tempo real conforme os checkboxes são
+    marcados (até 9 paradas por rota). Cada cartão traz também
+    <strong>abrir no mapa (ponto exato)</strong>, que marca a coordenada
+    do domicílio sem ajuste — o link de rota faz o Google traçar caminho
+    até a rua mais próxima que ele conhece, e o nome de rua ou bairro
+    exibido às vezes não é o do domicílio. A aba <strong>Lab</strong> lista as
+    coletas em versão compartilhável com o laboratório: agrupada por
+    equipe, com marcador por linha, nº, hora, primeiro nome e ano de
+    nascimento do morador, domicílio, município e zona — sem Controle,
+    sem nome completo e sem data de nascimento
+    completa. Aceitando a consulta, cada aba (exceto Lab) também mostra
+    um mapa-esquema (SVG, sem imagens de mapa) do dia — pontos com o
+    número de cada domicílio, uma cor só.</p>
+  </div>
+
+  <h2>Instalação</h2>
+  <p><strong>Equipes de campo:</strong> a extensão é distribuída pela Chrome
+  Web Store em modo não listado — o link de instalação é repassado
+  internamente às equipes, com atualização automática.</p>
+  <p><strong>Avaliação / desenvolvimento</strong> (modo desenvolvedor):</p>
+  <ol>
+    <li>Baixe o repositório e descompacte (ou <code>git clone</code>).</li>
+    <li>No Chrome, abra <code>chrome://extensions</code>.</li>
+    <li>Ative o <strong>Modo do desenvolvedor</strong>.</li>
+    <li>Clique em <strong>Carregar sem compactação</strong> e selecione a pasta <code>extension/</code>.</li>
+    <li>Abra a Lista de Endereços ou a Agenda no SIGC e use os botões <strong>PRO</strong>.</li>
+  </ol>
+  <p>Requer Chrome 111+. A extensão só age em páginas do SIGC e valida o
+  layout da tabela antes de alterar qualquer coisa. <strong>Não solicita
+  nenhuma permissão do navegador</strong> e a única coisa que guarda, no
+  seu navegador, é o histórico de contagens por agência do GEREN-PRO
+  (nunca dados de domicílio; há "Limpar histórico") — as
+  chamadas de rede são as consultas opcionais do Guia do Dia, do
+  MAPA-PRO e da exportação multi-agência do Último Movimento, todas ao
+  próprio servidor do SIGC, mediante clique e
+  confirmação; os arquivos exportados ficam somente no computador do
+  usuário.</p>
+</main>
+<footer>SIGC-PRO · projeto não oficial · MIT · <a href="PRIVACY_POLICY.html">Política de Privacidade</a></footer>
+</body>
+</html>

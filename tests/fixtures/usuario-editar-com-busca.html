@@ -1,0 +1,22 @@
+<!-- EditarUsuario answer that also carries the layout's own search bar
+     (a "Nome" filter box with a stale value and a "Login" box) before
+     the edit form, plus a select with no explicit selection. -->
+<div class="filtros">
+  <form id="formBusca" method="post" action="/usuario/Grid">
+    <label for="Nome">Nome</label><input type="text" id="Nome" name="Nome" value="BUSCA ANTIGA">
+    <label for="Login">Login</label><input type="text" id="Login" name="Login" value="">
+  </form>
+</div>
+<form id="formEditarUsuario" method="post" action="/usuario/SalvarUsuario">
+  <input type="hidden" name="Id" value="98765">
+  <div class="form-group"><label for="Usuario_Nome">Nome</label>
+    <input type="text" id="Usuario_Nome" name="Usuario.Nome" value="ALEXANDRE SILVA DE SANTANA"></div>
+  <div class="form-group"><label for="Usuario_Login">Login</label>
+    <input type="text" id="Usuario_Login" name="Usuario.Login" value="1234567"></div>
+  <div class="form-group"><label for="Usuario_Email">E-mail</label>
+    <input type="email" id="Usuario_Email" name="Usuario.Email" value="alexandre.santana@ibge.gov.br"></div>
+  <div class="form-group"><label for="Usuario_Celular">Celular</label>
+    <input type="text" id="Usuario_Celular" name="Usuario.Celular" value="+5571990000000"></div>
+  <div class="form-group"><label for="Usuario_IdFuncao">Função</label>
+    <select id="Usuario_IdFuncao" name="Usuario.IdFuncao"><option value="0">Selecione</option><option value="7">Agente</option></select></div>
+</form>

@@ -1,0 +1,338 @@
+#!/bin/sh
+# SIGC-PRO privacy gate: extension code must make no outbound requests and
+# keep no storage. With --staged, checks the content being committed (used
+# by the pre-commit hook); otherwise checks the working tree.
+#
+# This is a heuristic tripwire, not a proof: the hard guarantees remain the
+# empty permissions list in manifest.json and code review of extension/.
+
+# Blanket ban. Sanctioned exceptions, each narrow and audited:
+#   - extension/common/                    : fetch() only, same-origin only
+#     (hosts fetchViaGateway, the shared F5-gateway request helper used by
+#     agenda-lookups and ultimo-movimento-export; see
+#     docs/superpowers/specs/2026-08-06-guia-do-dia-agencia-entrevistador-zona-nome-design.md)
+#   - extension/features/agenda-lookups/       : fetch() only, same-origin only
+#     (queries SIGC's own server; see
+#     docs/superpowers/specs/2026-07-16-agenda-map-design.md)
+#   - extension/features/ultimo-movimento-export/ : fetch() only, same-origin
+#     only (same rationale, see
+#     docs/superpowers/specs/2026-07-24-ultimo-movimento-multi-agencia-export-design.md)
+#   - extension/features/gerenciamento-historico/ : IndexedDB only (the GEREN-PRO
+#     history by agência: per-UF, per-day counts, never a household), and NO
+#     network at all — fetch() is banned there like everywhere but FETCH_DIRS.
+#     Only historico-worker.js (extension origin) opens the database; the
+#     bridge and the client relay through DOM attributes. See
+#     docs/superpowers/specs/2026-10-15-gerenciamento-historico-design.md.
+#   - extension/vendor/                    : vendored third-party libraries,
+#     unmodified from upstream — not swept by this heuristic (which targets
+#     sigc-pro's own code), audited once at vendor time instead of per-commit.
+#     First vendored library: Leaflet (see
+#     docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md).
+#   - extension/features/ultimo-movimento-map/ : .src=/.href= only, and only
+#     when the value is chrome.runtime.getURL('vendor/...') — loads the
+#     vendored Leaflet bundle from the extension's own package, no network
+#     request leaves the browser (chrome-extension:// resolves locally, not
+#     a URL_PATTERN https?:// match). Not a fetch sanction: this directory
+#     may not call fetch() at all. ultimo-movimento-map.js runs in MAIN
+#     world (no chrome.*), so it never calls chrome.runtime.getURL
+#     directly — ultimo-movimento-map-relay.js (ISOLATED world) resolves
+#     the URLs and writes them as document.documentElement.dataset
+#     attributes (shared between worlds; window is not); the recognized
+#     safe pattern below additionally covers .src=/.href= assigned from a
+#     `.jsUrl`/`.cssUrl` property read off ANY expression — a property-NAME
+#     allowlist, not provenance-traced (see the fuller comment below for
+#     why). This directory ALSO gets an absolute-URL allowlist check
+#     (LOCAL_RESOURCE_URL_ALLOWLIST, below): unlike FETCH_DIRS (which must
+#     contain zero absolute URLs), it legitimately needs exactly one — the
+#     OpenStreetMap tile-host template Leaflet's L.tileLayer() uses — so
+#     any OTHER absolute URL found there still fails the gate. See
+#     docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md.
+# Every other API stays banned everywhere, including inside these
+# directories except for the one API each is sanctioned for. Fetch-sanctioned
+# directories may not contain absolute URLs, so their requests physically
+# cannot leave location.origin. XMLHttpRequest is matched only as `new
+# XMLHttpRequest` (actual API usage), not as a bare identifier — the
+# standard AJAX header value "X-Requested-With: XMLHttpRequest" is a string
+# literal, not a call, and the fetch-sanctioned directories legitimately
+# send that header.
+# extension/features/usuario-lookup: the Carta de notificação's agent
+# lookup — two same-origin requests through the page's F5 gateway to the
+# SIGC usuário module: POST /usuario/Grid (siape -> id) and GET
+# /usuario/EditarUsuario (id -> cadastro). The module's backend hex
+# prefix is a constant in extension/common (no URL literal here).
+FETCH_DIRS='extension/common extension/features/agenda-lookups extension/features/ultimo-movimento-export extension/features/usuario-lookup'
+# Storage APIs are banned EVERYWHERE in extension/ except this directory:
+# the GEREN-PRO history (2026-10-15, the first thing this extension stores).
+# chrome.storage stays banned even here — the history is IndexedDB in the
+# service worker, and the manifest still requests no permissions at all.
+# (An earlier list, the advanced-flags Options page, was retired 2026-08-13.)
+STORAGE_DIRS='extension/features/gerenciamento-historico'
+VENDOR_DIRS='extension/vendor'
+# extension/features/carta-notificacao loads the vendored pdf-lib bundle
+# and the letterhead-assets script the same way (relay + .jsUrl); it may
+# not request anything — its agent lookup lives in usuario-lookup/.
+LOCAL_RESOURCE_DIRS='extension/features/ultimo-movimento-map extension/features/carta-notificacao'
+
+PATTERN='fetch\(|["'\''"]fetch["'\''"]|import\(|new[[:space:]]+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src[[:space:]]*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
+PATTERN_NOFETCH='import\(|new[[:space:]]+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src[[:space:]]*=|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
+# The storage-sanctioned directory: IndexedDB is allowed (that is the point),
+# everything that moves bytes off-origin is not, and neither are the other
+# storage APIs (chrome.storage, localStorage, sessionStorage, cookies).
+PATTERN_NOSTORAGE='fetch\(|["'\''"]fetch["'\''"]|import\(|new[[:space:]]+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src[[:space:]]*=|chrome\.storage|localStorage|sessionStorage|document\.cookie|eval\(|new Function'
+# extension/features/ultimo-movimento-map/ may assign .src=/.href= ONLY
+# from chrome.runtime.getURL('vendor/...') (loading the vendored Leaflet
+# bundle — a local, bundled resource, not a network request). Every other
+# banned API (fetch, XHR, new Image, chrome.storage, etc.) still applies
+# there in full — this is the narrowest possible carve-out from PATTERN,
+# not a second fetch/storage sanction.
+PATTERN_NOLOCALRESOURCE='fetch\(|["'\''"]fetch["'\''"]|import\(|new[[:space:]]+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
+# .src=/.href= is allowed when the RHS's provenance is visible in the
+# SAME FILE as one of:
+#   (a) inline: literally chrome.runtime.getURL('vendor/...')
+#   (b) a bare variable that was itself assigned from that same call
+#       earlier in the file — covers
+#       `const cssHref = chrome.runtime.getURL(...); link.href = cssHref;`
+#   (c) a `.jsUrl`/`.cssUrl` property read off ANY expression — e.g.
+#       `link.href = urls.cssUrl;` — covers
+#       ultimo-movimento-map.js's MAIN-world consumption of
+#       ultimo-movimento-map-relay.js's (ISOLATED-world) Leaflet URLs,
+#       passed via document.documentElement.dataset (shared between
+#       worlds; window is not) rather than by tracing the exact call
+#       chain that produces the `urls`/`jsUrl`/`cssUrl` binding — a
+#       CustomEvent + variable-provenance-tracing version of this rule
+#       was tried first and had to be rewritten twice (2026-08-09: once
+#       because the event itself raced and silently never fired, once
+#       because the replacement dataset-based code didn't match the
+#       tracing regex either) — a property-NAME allowlist is deliberately
+#       simpler and doesn't re-break on the next refactor of how those
+#       two names get bound. The two property names (jsUrl/cssUrl) are
+#       self-documenting and specific to this one feature; an attacker
+#       would need to get a property literally named jsUrl or cssUrl onto
+#       whatever object reaches .src=/.href= here, which is a narrow
+#       surface for a directory whose only legitimate purpose is loading
+#       the vendored Leaflet bundle.
+# (a)/(b) still trace same-file variable provenance (inline literal, or a
+# bare reassignment revoking a whitelisted name) since that's cheap and
+# precise for the simple case; (c) does not attempt to.
+LOCAL_RESOURCE_SRC_INLINE_OK='\.(src|href)[[:space:]]*=[[:space:]]*chrome\.runtime\.getURL\(['\''"]vendor/'
+LOCAL_RESOURCE_VAR_DEF='(const|let|var)[[:space:]]+([A-Za-z_$][A-Za-z0-9_$]*)[[:space:]]*=[[:space:]]*chrome\.runtime\.getURL\(['\''"]vendor/'
+LOCAL_RESOURCE_PROP_OK='\.(src|href)[[:space:]]*=[[:space:]]*[A-Za-z_$][A-Za-z0-9_$.]*\.(jsUrl|cssUrl)[[:space:]]*;'
+URL_PATTERN='https?://'
+# extension/features/ultimo-movimento-map/ is not URL-free like FETCH_DIRS
+# (which must contain zero absolute URLs): it legitimately loads OSM map
+# tiles via Leaflet's L.tileLayer(), which needs one hardcoded tile-host
+# URL template (see ultimo-movimento-map.js's renderLeafletMap and
+# docs/superpowers/specs/2026-08-08-ultimo-movimento-mapa-design.md). So
+# this is an ALLOWLIST, not a ban: any https?:// URL in this directory
+# must match the exact tile-host template below, or the gate fails —
+# catching a future unauthorized second external URL while still
+# permitting the one sanctioned tile host.
+# Substring match (not anchored to the whole line — the real call site
+# is `L.tileLayer('https://...png', { ... })`, so the URL is only part
+# of its line): a line is only exempted when it contains this exact
+# tile-host template somewhere in it.
+LOCAL_RESOURCE_URL_ALLOWLIST='https://\{s\}\.tile\.openstreetmap\.org/\{z\}/\{x\}/\{y\}\.png'
+
+# The tile-host allowlist belongs to the map directory alone: any other
+# local-resource directory (carta-notificacao) has no business with
+# tiles, so every absolute URL there fails. Filters stdin.
+LOCAL_RESOURCE_TILE_DIR='extension/features/ultimo-movimento-map'
+local_resource_url_filter() {
+  if [ "$1" = "$LOCAL_RESOURCE_TILE_DIR" ]; then
+    grep -vE "$LOCAL_RESOURCE_URL_ALLOWLIST"
+  else
+    cat
+  fi
+}
+
+# Prints the .src=/.href= lines in $1 (a directory) that are NOT covered
+# by the recognized safe patterns above, evaluated per file. $2 selects
+# git-grep --cached (pass "staged") vs plain grep over the working tree
+# (pass "tree").
+local_resource_bad_src() {
+  d="$1"; mode="$2"
+  if [ "$mode" = staged ]; then
+    files=$(git grep --cached -lE '\.(src|href)[[:space:]]*=' -- "$d" 2>/dev/null)
+  else
+    files=$(grep -rlE '\.(src|href)[[:space:]]*=' "$d/" 2>/dev/null)
+  fi
+  [ -z "$files" ] && return 0
+  echo "$files" | while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    local_resource_bad_src_file "$f" "$mode"
+  done
+}
+
+# Per-file worker for local_resource_bad_src: builds this ONE file's
+# variable whitelist (direct getURL('vendor/...') assignments, plus
+# sigc-pro-leaflet-urls event-detail assignments for .jsUrl/.cssUrl
+# access), revokes any name that's later bare-reassigned to something
+# else, then reports .src=/.href= lines not covered by an inline literal
+# or a still-whitelisted variable/property read.
+local_resource_bad_src_file() {
+  f="$1"; mode="$2"
+  if [ "$mode" = staged ]; then
+    content=$(git show ":$f" 2>/dev/null)
+  else
+    content=$(cat "$f" 2>/dev/null)
+  fi
+  [ -z "$content" ] && return 0
+  src_lines=$(echo "$content" | grep -nE '\.(src|href)[[:space:]]*=')
+  [ -z "$src_lines" ] && return 0
+
+  direct_defs=$(echo "$content" | grep -oE "$LOCAL_RESOURCE_VAR_DEF" | sed -E 's/.*(const|let|var)[[:space:]]+([A-Za-z_$][A-Za-z0-9_$]*)[[:space:]]*=.*/\2/')
+
+  # A direct_defs name counts as whitelisted only up to its last bare
+  # reassignment (`name = <not-a-qualifying-RHS>;`) in file order. Since
+  # this is a line-order text scan (not real control flow), a
+  # reassignment ANYWHERE after the qualifying definition revokes the
+  # name for simplicity and safety (a false rejection here just means
+  # writing a fresh variable name, not a security gap).
+  revoked=""
+  for name in $direct_defs; do
+    reassign=$(echo "$content" | grep -nE "^[[:space:]]*${name}[[:space:]]*=[[:space:]]*[^;]*;" | grep -vE "getURL\(['\''\"]vendor/")
+    if [ -n "$reassign" ]; then
+      revoked="$revoked $name"
+    fi
+  done
+
+  live_direct=""
+  for name in $direct_defs; do
+    case " $revoked " in
+      *" $name "*) ;;
+      *) live_direct="$live_direct $name" ;;
+    esac
+  done
+
+  direct_names=$(echo "$live_direct" | tr ' ' '\n' | sed '/^$/d' | sort -u | tr '\n' '|' | sed 's/|$//')
+
+  result="$src_lines"
+  result=$(echo "$result" | grep -vE "$LOCAL_RESOURCE_SRC_INLINE_OK")
+  if [ -n "$direct_names" ]; then
+    result=$(echo "$result" | grep -vE "\.(src|href)[[:space:]]*=[[:space:]]*($direct_names)[[:space:]]*;")
+  fi
+  result=$(echo "$result" | grep -vE "$LOCAL_RESOURCE_PROP_OK")
+  if [ -n "$result" ]; then
+    echo "$result" | sed "s|^|$f:|"
+  fi
+}
+
+if [ "$1" = "--staged" ]; then
+  EXCLUDES=""
+  for d in $FETCH_DIRS $STORAGE_DIRS $VENDOR_DIRS $LOCAL_RESOURCE_DIRS; do EXCLUDES="$EXCLUDES ':!$d'"; done
+  MATCHES=$(eval git grep --cached -nE "\"$PATTERN\"" -- extension/ $EXCLUDES 2>/dev/null)
+  FETCH_MATCHES=""
+  FETCH_URLS=""
+  for d in $FETCH_DIRS; do
+    FETCH_MATCHES="$FETCH_MATCHES
+$(git grep --cached -nE "$PATTERN_NOFETCH" -- "$d" 2>/dev/null)"
+    # extension/common can contain URLs (gmapsDestinoUrl), which aren't
+    # fetch calls — sigc-common is a shared utility file, not a feature.
+    if [ "$d" != "extension/common" ]; then
+      FETCH_URLS="$FETCH_URLS
+$(git grep --cached -nE "$URL_PATTERN" -- "$d" 2>/dev/null)"
+    fi
+  done
+  STORAGE_MATCHES=""
+  for d in $STORAGE_DIRS; do
+    STORAGE_MATCHES="$STORAGE_MATCHES
+$(git grep --cached -nE "$PATTERN_NOSTORAGE" -- "$d" 2>/dev/null)"
+  done
+  LOCAL_RESOURCE_MATCHES=""
+  LOCAL_RESOURCE_BAD_SRC=""
+  LOCAL_RESOURCE_BAD_URLS=""
+  for d in $LOCAL_RESOURCE_DIRS; do
+    LOCAL_RESOURCE_MATCHES="$LOCAL_RESOURCE_MATCHES
+$(git grep --cached -nE "$PATTERN_NOLOCALRESOURCE" -- "$d" 2>/dev/null)"
+    LOCAL_RESOURCE_BAD_SRC="$LOCAL_RESOURCE_BAD_SRC
+$(local_resource_bad_src "$d" staged)"
+    LOCAL_RESOURCE_BAD_URLS="$LOCAL_RESOURCE_BAD_URLS
+$(git grep --cached -nE "$URL_PATTERN" -- "$d" 2>/dev/null | local_resource_url_filter "$d")"
+  done
+else
+  EXCLUDE_GREP=""
+  for d in $FETCH_DIRS $STORAGE_DIRS $VENDOR_DIRS $LOCAL_RESOURCE_DIRS; do EXCLUDE_GREP="$EXCLUDE_GREP -e ^$d/"; done
+  MATCHES=$(grep -rnE "$PATTERN" extension/ 2>/dev/null | grep -vE "$(echo $EXCLUDE_GREP | sed 's/-e //g' | tr ' ' '|')")
+  FETCH_MATCHES=""
+  FETCH_URLS=""
+  for d in $FETCH_DIRS; do
+    FETCH_MATCHES="$FETCH_MATCHES
+$(grep -rnE "$PATTERN_NOFETCH" "$d/" 2>/dev/null)"
+    # extension/common can contain URLs (gmapsDestinoUrl), which aren't
+    # fetch calls — sigc-common is a shared utility file, not a feature.
+    if [ "$d" != "extension/common" ]; then
+      FETCH_URLS="$FETCH_URLS
+$(grep -rnE "$URL_PATTERN" "$d/" 2>/dev/null)"
+    fi
+  done
+  STORAGE_MATCHES=""
+  for d in $STORAGE_DIRS; do
+    STORAGE_MATCHES="$STORAGE_MATCHES
+$(grep -rnE "$PATTERN_NOSTORAGE" "$d/" 2>/dev/null)"
+  done
+  LOCAL_RESOURCE_MATCHES=""
+  LOCAL_RESOURCE_BAD_SRC=""
+  LOCAL_RESOURCE_BAD_URLS=""
+  for d in $LOCAL_RESOURCE_DIRS; do
+    LOCAL_RESOURCE_MATCHES="$LOCAL_RESOURCE_MATCHES
+$(grep -rnE "$PATTERN_NOLOCALRESOURCE" "$d/" 2>/dev/null)"
+    LOCAL_RESOURCE_BAD_SRC="$LOCAL_RESOURCE_BAD_SRC
+$(local_resource_bad_src "$d" tree)"
+    LOCAL_RESOURCE_BAD_URLS="$LOCAL_RESOURCE_BAD_URLS
+$(grep -rnE "$URL_PATTERN" "$d/" 2>/dev/null | local_resource_url_filter "$d")"
+  done
+fi
+
+if [ -n "$MATCHES" ]; then
+  echo "PRIVACY GATE FAILED — request/storage APIs found outside sanctioned directories:" >&2
+  echo "$MATCHES" >&2
+  exit 1
+fi
+if [ -n "$(echo "$FETCH_MATCHES" | tr -d '[:space:]')" ]; then
+  echo "PRIVACY GATE FAILED — non-fetch request/storage APIs in a fetch-sanctioned directory:" >&2
+  echo "$FETCH_MATCHES" >&2
+  exit 1
+fi
+if [ -n "$(echo "$FETCH_URLS" | tr -d '[:space:]')" ]; then
+  echo "PRIVACY GATE FAILED — absolute URL in a fetch-sanctioned directory (must use location.origin only):" >&2
+  echo "$FETCH_URLS" >&2
+  exit 1
+fi
+if [ -n "$(echo "$STORAGE_MATCHES" | tr -d '[:space:]')" ]; then
+  echo "PRIVACY GATE FAILED — fetch/other request API in a storage-sanctioned directory (only chrome.storage is allowed there):" >&2
+  echo "$STORAGE_MATCHES" >&2
+  exit 1
+fi
+if [ -n "$(echo "$LOCAL_RESOURCE_MATCHES" | tr -d '[:space:]')" ]; then
+  echo "PRIVACY GATE FAILED — banned API in a local-resource-sanctioned directory (only .src=/.href= from chrome.runtime.getURL('vendor/...') is allowed there):" >&2
+  echo "$LOCAL_RESOURCE_MATCHES" >&2
+  exit 1
+fi
+if [ -n "$(echo "$LOCAL_RESOURCE_BAD_SRC" | tr -d '[:space:]')" ]; then
+  echo "PRIVACY GATE FAILED — .src=/.href= in a local-resource-sanctioned directory not assigned from chrome.runtime.getURL('vendor/...'):" >&2
+  echo "$LOCAL_RESOURCE_BAD_SRC" >&2
+  exit 1
+fi
+if [ -n "$(echo "$LOCAL_RESOURCE_BAD_URLS" | tr -d '[:space:]')" ]; then
+  echo "PRIVACY GATE FAILED — absolute URL in a local-resource-sanctioned directory not matching the allowlisted tile host ($LOCAL_RESOURCE_URL_ALLOWLIST):" >&2
+  echo "$LOCAL_RESOURCE_BAD_URLS" >&2
+  exit 1
+fi
+
+# Unlisted-distribution gate: the Chrome Web Store item is unlisted, so its
+# URL must never land in this public repo (docs, README, Pages, anywhere) —
+# publishing the link would effectively de-unlist it. Checked repo-wide,
+# not just extension/.
+STORE_PATTERN='chromewebstore\.google\.com/detail|chrome\.google\.com/webstore/detail'
+if [ "$1" = "--staged" ]; then
+  STORE_MATCHES=$(git grep --cached -nE "$STORE_PATTERN" -- . 2>/dev/null)
+else
+  STORE_MATCHES=$(grep -rnE "$STORE_PATTERN" . 2>/dev/null)
+fi
+
+if [ -n "$STORE_MATCHES" ]; then
+  echo "PRIVACY GATE FAILED — unlisted Chrome Web Store URL found in repo:" >&2
+  echo "$STORE_MATCHES" >&2
+  exit 1
+fi
+echo "privacy gate: CLEAN"

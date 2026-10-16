@@ -1,0 +1,1019 @@
+// SIGC-PRO shared runtime: pesquisa registry, page detection, poll loop,
+// and table-layout validation. Loaded before all feature scripts (MAIN world).
+(function () {
+  'use strict';
+
+  if (window.__sigcPro) return;
+
+  const TAG = '[sigc-pro]';
+
+  // Column labels every pesquisa's Lista de Endereços is expected to
+  // share. agenda-lookups resolves fetched-response columns against THESE
+  // (the Agenda page has no report title to detectPesquisa against), so
+  // it must never depend on any single pesquisa's registry entry — that
+  // would silently pin it to the wrong survey once a second one exists.
+  const LISTA_COMMON_LABELS = {
+    controle: 'Controle',
+    nDomicilio: 'N.º Domicilio',
+    latitude: 'Latitude',
+    longitude: 'Longitude',
+    idZona: 'ID Zona',
+    nomeZona: 'Nome ZONA',
+  };
+
+  // One entry per pesquisa. `columns` describes the Lista de Endereços table
+  // (0-based, left to right); `label` is the expected header text — features
+  // refuse to act when labels don't match, so a SIGC layout change can't
+  // silently shift data into the wrong column.
+  const PESQUISAS = {
+    PNS2026: {
+      titlePattern: /SIGC\s*-\s*PNS2026/i,
+      columns: {
+        // Index 0 is SIGC's new "lupa" (map/KML) icon column — blank
+        // header, no data we consume. Every other column shifted +1.
+        controle:      { index: 1,  label: LISTA_COMMON_LABELS.controle },
+        idCnefe:       { index: 2,  label: 'ID_CNEFE' },
+        nDomicilio:    { index: 3,  label: LISTA_COMMON_LABELS.nDomicilio },
+        quadra:        { index: 4,  label: 'Quadra' },
+        face:          { index: 5,  label: 'Face' },
+        logradouro:    { index: 6,  label: 'Logradouro' },
+        numero:        { index: 7,  label: 'Número' },
+        complemento:   { index: 8,  label: 'Complemento' },
+        bairro:        { index: 9,  label: 'Bairro' },
+        latitude:      { index: 10, label: LISTA_COMMON_LABELS.latitude },
+        longitude:     { index: 11, label: LISTA_COMMON_LABELS.longitude },
+        telefone:      { index: 12, label: 'Telefone' },
+        morador:       { index: 13, label: 'Morador' },
+        situacao:      { index: 14, label: 'Situação' },
+        selecionado:   { index: 15, label: 'Selecionado' },
+        antropometria: { index: 16, label: 'Antropometria' },
+        biomarcadores: { index: 17, label: 'Biomarcadores' },
+        idZona:        { index: 18, label: LISTA_COMMON_LABELS.idZona },
+        nomeZona:      { index: 19, label: LISTA_COMMON_LABELS.nomeZona },
+      },
+    },
+  };
+
+  // Drawn wherever a cell has no value: a genuinely empty <td> reads as
+  // a rendering fault rather than as "nothing here". The CSV export has
+  // to recognise it to strip it back out — see cellText.
+  const PLACEHOLDER_VAZIO = '—';
+
+  // The em-dash belongs here too: SIGC writes "-", our own panels write
+  // "—", and both mean the same absent value to parseCoord and friends.
+  const MISSING_VALUES = ['-', PLACEHOLDER_VAZIO, ''];
+
+  function normalizeLabel(s) {
+    return String(s ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  // The key identifying one household across every SIGC report this
+  // extension joins: a Controle alone is not unique (it covers many
+  // Domicílios, each with its own entrevistador and coordinates).
+  // Defined here because agenda-lookups.js builds these keys from
+  // fetched tables, agenda-day-guide.js looks them up from Agenda rows,
+  // and route-map.js indexes plotted points by them — three modules
+  // that must agree on the exact same string, byte for byte.
+  function enderecoKey(r) {
+    return `${r.controle}|${r.domicilio}`;
+  }
+
+  function detectPesquisa() {
+    const el = document.querySelector('.header-sigc__title');
+    if (!el) return null;
+    const text = el.textContent || '';
+    for (const [id, cfg] of Object.entries(PESQUISAS)) {
+      if (cfg.titlePattern.test(text)) return Object.assign({ id }, cfg);
+    }
+    return null;
+  }
+
+  // True only on the Lista de Endereços page. KML/PDF export are meaningless
+  // elsewhere in SIGC, so features gate on this before touching the DOM.
+  function onListaEnderecos() {
+    return [...document.querySelectorAll('h6')].some(
+      (h) => normalizeLabel(h.textContent).replace(/[çã]/g, (c) => (c === 'ç' ? 'c' : 'a')) ===
+        'lista de enderecos'
+    );
+  }
+
+  // Fires callback(pesquisa, prereq) once, when a pesquisa matches, the
+  // current page is the Lista de Endereços, AND prereqFn() is truthy.
+  // Silent give-up after ~10 s keeps the extension inert on non-SIGC IBGE
+  // pages and on other SIGC pages within a matching pesquisa.
+  function whenReady(prereqFn, callback) {
+    let attempts = 0;
+    const tick = () => {
+      const pesquisa = detectPesquisa();
+      const prereq = pesquisa && onListaEnderecos() ? prereqFn() : null;
+      if (pesquisa && prereq) {
+        callback(pesquisa, prereq);
+        return;
+      }
+      attempts += 1;
+      if (attempts <= 50) setTimeout(tick, 200);
+    };
+    tick();
+  }
+
+  // Like whenReady, but with no pesquisa/page requirement — for features
+  // that work on any SIGC report (e.g. generic CSV export). Fires
+  // callback(prereq) once prereqFn() is truthy. Unlike whenReady, this never
+  // gives up: every SIGC report has a table eventually, so a slow AJAX load
+  // (past whenReady's 10 s pesquisa-detection window) should still resolve
+  // instead of leaving the button missing until a reload.
+  function whenReadyGeneric(prereqFn, callback) {
+    const tick = () => {
+      const prereq = prereqFn();
+      if (prereq) {
+        callback(prereq);
+        return;
+      }
+      setTimeout(tick, 200);
+    };
+    tick();
+  }
+
+  // Returns the page's live DataTables instance, or null if jQuery,
+  // DataTables, or a table isn't present/initialized yet.
+  // Filtered, not a bare `jq('table')`: SIGC's page script initializes
+  // DataTables over the tables it finds, and SIGC-PRO's own panels inject
+  // tables into document.body — which the bare selector matched too, so
+  // this could hand back OUR table in place of the report's and a caller
+  // like readUltimoMovimentoTable would parse the wrong data. Every
+  // SIGC-PRO-authored table lives under a [data-sigc-pro] root or carries
+  // a sigc-pro- class, so excluding those leaves only the page's.
+  //
+  // A DOM predicate rather than one CSS selector: the ancestor half of
+  // this test ("is it inside a SIGC-PRO panel?") needs `closest`, which a
+  // `:not([data-sigc-pro] table)` selector expresses but neither happy-dom
+  // nor older engines evaluate reliably — verified failing in this repo's
+  // test environment, so it must not be the thing correctness rests on.
+  function isSigcProTable(el) {
+    return /(^|\s)sigc-pro-/.test(el.className || '') || !!el.closest('[data-sigc-pro]');
+  }
+
+  function getDataTable() {
+    const jq = window.jQuery || window.$;
+    if (!jq || !jq.fn || !jq.fn.dataTable) return null;
+    const ours = Array.from(document.querySelectorAll('table')).filter((t) => !isSigcProTable(t));
+    // ONLY tables DataTables already owns. Calling .DataTable() on an
+    // uninitialized table CONSTRUCTS one, and a page whose report failed
+    // to render (proxy timeout, partial HTML) can leave a malformed table
+    // behind — DataTables then reports "Incorrect column count" through
+    // its own alert(), not a thrown error, so no try/catch here could
+    // contain it. Because this runs on every mount tick, the user got an
+    // undismissable modal over and over (reported 2026-08-15).
+    //
+    // Reading is this function's whole job: nothing here wants to create
+    // a DataTable, and initPanelTables owns that for our own tables.
+    const prontas = typeof jq.fn.dataTable.isDataTable === 'function'
+      ? ours.filter((t) => jq.fn.dataTable.isDataTable(t))
+      : ours;
+    if (prontas.length === 0) return null;
+    const table = jq(prontas).DataTable();
+    if (!table || !table.table || table.table().node() == null) return null;
+    return table;
+  }
+
+  // Reads the full current-table dataset (all pages) via the DataTables JS
+  // API — reliable under the F5 gateway (confirmed: row count matches
+  // "Showing X of Y", stable across pagination/sort, unlike raw DOM
+  // scraping of table/tr/td which the gateway's cloning made unreliable).
+  // Returns { rows, header } (plain strings, HTML stripped) or null if no
+  // table is available.
+  function readDataTable() {
+    const table = getDataTable();
+    if (!table) return null;
+    const header = table.columns().header().toArray().map((h) => h.textContent.trim());
+    const rows = table.rows().data().toArray().map((r) => Array.from(r).map((c) => cellText(c)));
+    return { rows, header };
+  }
+
+  // Lista de Endereços-specific: readDataTable() plus validation against
+  // pesquisa.columns. Returns { rows, header } or null (table unavailable,
+  // or header doesn't match — mismatch is logged by tableMatchesLayout).
+  function getTableRows(pesquisa) {
+    const result = readDataTable();
+    if (!result) return null;
+    if (!tableMatchesLayout(result.header, pesquisa.columns)) return null;
+    return result;
+  }
+
+  function tableMatchesLayout(headerTexts, columns) {
+    const mismatches = Object.entries(columns).filter(
+      ([, c]) => normalizeLabel(headerTexts[c.index]) !== normalizeLabel(c.label)
+    );
+    if (mismatches.length > 0) {
+      console.warn(
+        `${TAG} Layout mismatch:`,
+        mismatches
+          .map(([k, c]) => `${k}[${c.index}] expected "${c.label}" got "${headerTexts[c.index] ?? ''}"`)
+          .join('; '),
+        '| live headers:',
+        JSON.stringify(headerTexts)
+      );
+      return false;
+    }
+    return true;
+  }
+
+  // A cell carrying data-order is stored ORTHOGONALLY: DataTables hands
+  // back {display, sort, filter, type} instead of a string, and String()
+  // on it yields "[object Object]". Every report with a sortable-key
+  // column exported that way. `display` is the cell's real HTML, which
+  // is what cellText wants; the other keys are fallbacks for tables that
+  // define only some of them.
+  function cellRaw(v) {
+    if (v == null) return '';
+    if (typeof v !== 'object') return String(v);
+    const orto = v.display !== undefined ? v.display
+      : v._ !== undefined ? v._
+        : v.filter !== undefined ? v.filter
+          : v.sort;
+    return orto == null ? '' : String(orto);
+  }
+
+  function cellText(v) {
+    // Cell data may contain HTML; reduce to text. DOMParser is inert —
+    // unlike innerHTML on a detached div, it never fetches resources or
+    // runs handlers (e.g. <img src onerror>), keeping the zero-network
+    // guarantee independent of table contents.
+    const doc = new DOMParser().parseFromString(cellRaw(v), 'text/html');
+    const texto = (doc.body.textContent || '').trim();
+    // The em-dash is drawn so an empty HTML cell does not read as broken
+    // markup. A CSV wants the opposite: "—" in an otherwise-numeric
+    // column makes every reader type the whole column as text, so R and
+    // pandas get strings instead of numbers with NAs. Only a cell that
+    // is NOTHING BUT the placeholder blanks; one inside real text stays.
+    return texto === PLACEHOLDER_VAZIO ? '' : texto;
+  }
+
+  // CSV building/download shared via buildCsv/downloadFile, so escaping,
+  // delimiter, and BOM rules live in one place.
+  function escapeCsvField(s) {
+    let v = String(s ?? '');
+    // Excel formula-injection guard: a leading = + - @ or tab makes Excel
+    // evaluate the field. Prefix a quote unless the field is a plain
+    // number (keeps negative coordinates numeric on import).
+    if (/^[=+\-@\t\r]/.test(v) && !/^-?\d+(?:[.,]\d+)?$/.test(v)) v = "'" + v;
+    return /[;"\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  }
+
+  // pt-BR Excel expects `;`-delimited CSV (comma is the decimal separator
+  // in that locale, so comma-delimited CSVs misparse on import).
+  function buildCsv(header, rows) {
+    const lines = [header, ...rows].map((r) => r.map(escapeCsvField).join(';'));
+    return lines.join('\r\n') + '\r\n';
+  }
+
+  function downloadFile(filename, text, mimeType, opts) {
+    // UTF-8 BOM so Excel doesn't mangle accented CSVs; pass
+    // { bom: false } for formats that declare their own encoding (KML/XML).
+    const bom = !(opts && opts.bom === false);
+    const blob = new Blob([bom ? '﻿' + text : text], { type: mimeType || 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // { data: 'YYYY-MM-DD', hora: 'HHMMSS' } for the current instant — shared
+  // by every feature's fallback/generic filename builder (csv-export,
+  // agenda-csv-export), so the format stays identical across them.
+  function timestampSlug() {
+    const now = new Date();
+    return {
+      data: now.toISOString().slice(0, 10),
+      hora: now.toTimeString().slice(0, 8).replace(/:/g, ''),
+    };
+  }
+
+  // Filename-safe slug: deaccented, non-alphanumerics collapsed to "-".
+  // Shared by agenda-csv-export and agenda-day-guide filename builders.
+  function slug(s) {
+    return String(s ?? '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase();
+  }
+
+  // Index = Date.getDay(). Shared by agenda-slot-checks (alert dates) and
+  // agenda-day-guide (guide header).
+  const WEEKDAYS_PT = [
+    'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira',
+    'quinta-feira', 'sexta-feira', 'sábado',
+  ];
+
+  // Parses a coordinate cell to signed decimal degrees, or null.
+  // SIGC shows DMS: "dd mm ss.sss S" (also tolerates °'" marks; hemisphere
+  // N/S/E/W, plus O = Oeste). Decimal seconds may use comma. Plain decimal
+  // values (dot or comma) are accepted too.
+  function parseCoord(v) {
+    const s = cellText(v);
+    if (s === '' || MISSING_VALUES.includes(s)) return null;
+
+    const dms = s.match(
+      /^(-?\d{1,3})[°\s]+(\d{1,2})['\s]+(\d{1,2}(?:[.,]\d+)?)["\s]*([NSEWO])?$/i
+    );
+    if (dms) {
+      const deg = Math.abs(parseInt(dms[1], 10));
+      const min = parseInt(dms[2], 10);
+      const sec = Number(dms[3].replace(',', '.'));
+      if (!Number.isFinite(sec) || min >= 60 || sec >= 60) return null;
+      let value = deg + min / 60 + sec / 3600;
+      const hemi = (dms[4] || '').toUpperCase();
+      if (hemi === 'S' || hemi === 'W' || hemi === 'O' || dms[1].startsWith('-')) value = -value;
+      return value;
+    }
+
+    const n = Number(s.replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // F5 BIG-IP URL-rewriting prefix ("/f5-w-<hex>$$"); the hex decodes to
+  // the real backend origin. null on the direct host (e.g. via VPN).
+  // Shared by every feature that talks to portalweb behind the gateway
+  // (agenda-lookups, ultimo-movimento-export) — each hitting a different
+  // path, hence the parametrized gatewayUrl/fetchViaGateway below rather
+  // than a single hardcoded endpoint.
+  function f5Prefix(pathname) {
+    const m = /^\/f5-w-([0-9a-f]+)\$\$/.exec(String(pathname || ''));
+    return m ? { prefix: m[0], hex: m[1] } : null;
+  }
+
+  // simple=true: plain prefixed path. simple=false: replicate the fuller
+  // shape captured from the live gateway (f5-h-$$ segment + F5_origin/
+  // F5CH params). On the direct host (f5Prefix returns null), both modes
+  // collapse to the plain origin+path.
+  function gatewayUrl(origin, pathname, path, simple) {
+    const f5 = f5Prefix(pathname);
+    if (!f5) return `${origin}${path}`;
+    return simple
+      ? `${origin}${f5.prefix}${path}`
+      : `${origin}${f5.prefix}/f5-h-$$${path};F5_origin=${f5.hex}&F5CH=I`;
+  }
+
+  // The SIGC usuário module (cadastro de usuários) is served by a
+  // DIFFERENT backend host from the reports, so behind the F5 gateway
+  // its prefix is /f5-w-<hex>$$ built from THAT origin's hex — the same
+  // encoding f5Prefix decodes for the page's own host (the hex is the
+  // origin string, byte by byte, lowercase). Precomputed and kept here,
+  // not in the feature that uses it: check-privacy.sh forbids an
+  // https:// literal inside a fetch-sanctioned directory, and this file
+  // is exempt from that check (it is a shared utility, not a feature).
+  // Decodes to https://w3servicosigc.ibge.gov.br — asserted by a test.
+  // The request itself still goes to location.origin (the gateway
+  // host); nothing here names a third-party URL.
+  const USUARIO_ORIGIN_HEX = '68747470733a2f2f77337365727669636f736967632e696267652e676f762e6272';
+  // The usuário module's own survey code — PNS2025, verified live
+  // 2026-10-09; it is NOT the report pages' PNS2026, and must not be
+  // derived from PESQUISAS.
+  const USUARIO_CODIGO_PESQUISA = 'PNS2025';
+
+  // URL of a usuário-module path through the page's gateway. On the
+  // direct host (no f5 prefix — e.g. via VPN) the module is on another
+  // host entirely and this falls back to the page origin, which the
+  // caller must expect to fail gracefully (the letter is still produced,
+  // without the cadastro).
+  function usuarioGatewayUrl(origin, pathname, path) {
+    const f5 = f5Prefix(pathname);
+    if (!f5) return `${origin}${path}`;
+    return `${origin}/f5-w-${USUARIO_ORIGIN_HEX}$$${path}`;
+  }
+
+  // Tries the simple prefixed URL first, then the full captured F5 form —
+  // which form the live gateway actually needs isn't knowable in advance.
+  async function fetchViaGateway(path, options) {
+    const urls = [...new Set([
+      gatewayUrl(location.origin, location.pathname, path, true),
+      gatewayUrl(location.origin, location.pathname, path, false),
+    ])];
+    let lastErr = new Error('sem resposta');
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, options);
+        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
+        return res;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
+  }
+
+  const FORM_POST_HEADERS = {
+    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+    'X-Requested-With': 'XMLHttpRequest',
+  };
+
+  // URL of SIGC's generic /relatorio/filtrar?slug=... endpoint (Lista de
+  // Endereços, Último Movimento, Gerenciamento da Coleta, ...). Built as a
+  // STRING: a query-param builder escapes the "$$" and the portal answers
+  // 404, and the ";" between the slug and F5_origin is part of the shape.
+  // simple=true: plain prefixed path. simple=false: the fuller captured
+  // shape (doubled /relatorio segment, f5-h-$$, F5_origin/F5CH).
+  function relatorioFiltrarUrl(origin, pathname, slug, simple) {
+    const f5 = f5Prefix(pathname);
+    if (!f5) return `${origin}/relatorio/filtrar?slug=${slug}`;
+    return simple
+      ? `${origin}${f5.prefix}/relatorio/filtrar?slug=${slug}`
+      : `${origin}${f5.prefix}/relatorio/f5-h-$$/relatorio/filtrar?slug=${slug};F5_origin=${f5.hex}&F5CH=I`;
+  }
+
+  // SIGC serves a SHORT response when the POST does not look like it came
+  // from the report's own page (180 rows for a 1.185-row scope, or a page
+  // with no #tableRelatorio at all), so every report call sends the
+  // report page as its referrer — pns.zonas does the same.
+  function refererDoSlug(slug) {
+    const f5 = f5Prefix(location.pathname);
+    const prefixo = f5 ? f5.prefix : '';
+    return `${location.origin}${prefixo}/relatorio/${slug}`;
+  }
+
+  // POSTs one /relatorio/filtrar report and parses its response.
+  //
+  // Tries the simple prefixed URL first, then the full captured F5 form
+  // (identical on the direct host, where the Set collapses them), moving
+  // on to the next URL on a transport error, a non-2xx, or an
+  // unrecognized table, and throwing the last error if none worked.
+  // `referrer`, not a Referer header: Referer is a forbidden header name
+  // and the browser drops it silently.
+  //
+  // `parse` returns the report's result, or null for "table not
+  // recognized" — the signal to try the next URL rather than accept an
+  // empty result.
+  async function postRelatorio({ slug, body, parse }) {
+    const urls = [...new Set([
+      relatorioFiltrarUrl(location.origin, location.pathname, slug, true),
+      relatorioFiltrarUrl(location.origin, location.pathname, slug, false),
+    ])];
+    let lastErr = new Error('sem resposta');
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: FORM_POST_HEADERS,
+          referrer: refererDoSlug(slug),
+          body,
+        });
+        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
+        const result = parse(await res.text());
+        if (result) return result;
+        lastErr = new Error('tabela não reconhecida');
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
+  }
+
+  // Single-destination Google Maps link, '' when either coordinate is
+  // missing so callers render plain text — a dead link looks actionable
+  // and goes nowhere.
+  //
+  // Lives here rather than in the feature that uses it because
+  // check-privacy.sh forbids an https:// literal inside a
+  // fetch-sanctioned directory: a module allowed to make requests must
+  // not name a third-party host. This file is not such a directory.
+  function gmapsDestinoUrl(lat, lon) {
+    if (lat == null || lon == null) return '';
+    return 'https://www.google.com/maps/dir/?api=1&travelmode=driving' +
+      `&destination=${encodeURIComponent(`${lat},${lon}`)}`;
+  }
+
+  // Just centers/pins the point (Google's Maps "search" API endpoint) —
+  // unlike gmapsDestinoUrl, does NOT open turn-by-turn directions. The
+  // query value is a single encodeURIComponent-wrapped "lat,lon" string
+  // (comma, no space) — mirrors gmapsDestinoUrl's own encoding exactly,
+  // so this is safe as a URL parameter regardless of what separator or
+  // whitespace a caller might otherwise be tempted to hand-format in.
+  function gmapsPontoUrl(lat, lon) {
+    if (lat == null || lon == null) return '';
+    return 'https://www.google.com/maps/search/?api=1' +
+      `&query=${encodeURIComponent(`${lat},${lon}`)}`;
+  }
+
+  // --- Agenda (AdministracaoAgenda) shared reading -------------------
+  // Used by both agenda-csv-export and agenda-slot-checks, which both
+  // need "every slot in the currently rendered calendar, parsed" — kept
+  // here so the DOM-reading/title-parsing logic exists in exactly one
+  // place. See docs/superpowers/specs/2026-07-16-agenda-csv-export-design.md
+  // for how these were reverse-engineered against the live FullCalendar
+  // resource-timegrid markup.
+
+  // Matches any ibge.gov.br page (through the F5 proxy or not) whose
+  // logical path ends with /AdministracaoAgenda. Query strings/F5 routing
+  // suffixes live in location.search, not location.pathname.
+  function onAgendaPage() {
+    return /\/AdministracaoAgenda\/?$/i.test(location.pathname);
+  }
+
+  // The FullCalendar toolbar always renders both view-switch buttons
+  // (Dia/Semana), whichever is active — used both as the "agenda is ready"
+  // signal and as the anchor Agenda features insert their buttons next to.
+  function findAgendaToolbarChunk() {
+    const viewBtn = document.querySelector(
+      '.fc-resourceTimeGridWeek-button, .fc-resourceTimeGridDay-button, ' +
+        '.fc-timeGridWeek-button, .fc-timeGridDay-button'
+    );
+    return viewBtn ? viewBtn.closest('.fc-toolbar-chunk') : null;
+  }
+
+  // "Label: value" per line -> { Label: value }. Empty/placeholder values
+  // ("-" after trim) are dropped so callers can just `|| ''`.
+  function parseAgendaSlotTitle(text) {
+    const fields = {};
+    String(text ?? '').split('\n').forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      const sep = trimmed.indexOf(':');
+      if (sep === -1) return;
+      const label = trimmed.slice(0, sep).trim();
+      const value = trimmed.slice(sep + 1).trim();
+      if (!MISSING_VALUES.includes(value)) fields[label] = value;
+    });
+    return fields;
+  }
+
+  // Minimal HTML escaper; the numeric &#39; entity is valid in XML too,
+  // so the KML export shares it as its XML escaper.
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // Comma-separated Zonas field -> individual entries, e.g.
+  // "29.3.03.03 29_Linus_Pituba, 29.3.02.03 29_Linus_Pituba" -> two
+  // entries, each "código nome". Entries are kept whole; callers that
+  // match against the equipe do so on the entry's tail, so the code
+  // format never needs parsing.
+  function parseZonaEntries(zonas) {
+    return String(zonas ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  }
+
+  // "HH:MM" -> minutes since midnight, null when there is no parseable
+  // time. Callers branch on null, so an unparseable value must never
+  // collapse to 0 — midnight and "no time" are different. Shared because
+  // three features need it (agenda-slots-abertos, agenda-day-guide,
+  // lista-agenda) and the copies had already drifted apart in form.
+  function toMin(hhmm) {
+    const m = /^(\d{1,2}):(\d{2})/.exec(hhmm || '');
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  }
+
+  function fmtMin(min) {
+    return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+  }
+
+  function isoToBr(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso || '');
+  }
+
+  // UF <select> on the Agenda page: option 0 is the placeholder. `code`
+  // is the option value (used in request bodies), `name` the visible
+  // text (used in filenames and headers).
+  function getAgendaUf() {
+    const s = document.getElementById('selectUf');
+    return {
+      code: s ? s.value : '',
+      name: s && s.selectedIndex > 0 ? s.options[s.selectedIndex].text.trim() : '',
+    };
+  }
+
+  // idEquipe (uuid) -> team name. Prefers the calendar's own resource
+  // header cells (what's actually on screen); falls back to the Equipes
+  // <select> options in case a header cell is missing for some resource.
+  function getAgendaEquipeNames() {
+    const names = {};
+    document.querySelectorAll('[data-resource-id].fc-col-header-cell').forEach((el) => {
+      const id = el.getAttribute('data-resource-id');
+      if (id && !names[id]) names[id] = el.textContent.trim();
+    });
+    const select = document.getElementById('selectEquipes');
+    if (select) {
+      Array.from(select.options).forEach((o) => {
+        if (o.value && !names[o.value]) names[o.value] = o.text.trim();
+      });
+    }
+    return names;
+  }
+
+  // Reads every slot currently rendered in the calendar — both reserved
+  // (evento-reservado, has Controle/Domicílio/Nome/…) and open/unbooked
+  // (title is just "Zonas: …", no patient assigned yet). `reservado`
+  // lets callers filter either way without re-touching the DOM. Returns
+  // [] if the calendar has no events (empty week/day, or nothing loaded
+  // yet) — never throws.
+  function readAgendaSlots() {
+    const root = document.getElementById('calendar') || document;
+    const events = Array.from(root.querySelectorAll('.fc-timegrid-event'));
+    if (events.length === 0) return [];
+
+    const equipeNames = getAgendaEquipeNames();
+
+    const rows = events.map((el) => {
+      const col = el.closest('.fc-timegrid-col[data-date]');
+      const isoDate = col ? col.getAttribute('data-date') || '' : '';
+      const resourceId = col ? col.getAttribute('data-resource-id') || '' : '';
+      const equipe = equipeNames[resourceId] || resourceId;
+
+      const timeEl = el.querySelector('.fc-event-time');
+      const [horaInicio, horaFim] = (timeEl ? timeEl.textContent : '')
+        .split('-')
+        .map((s) => s.trim());
+
+      const titleEl = el.querySelector('.fc-event-title');
+      const f = parseAgendaSlotTitle(titleEl ? titleEl.textContent : '');
+
+      return {
+        isoDate,
+        data: isoToBr(isoDate),
+        equipe,
+        resourceId,
+        reservado: el.className.includes('evento-reservado'),
+        horaInicio: horaInicio || '',
+        horaFim: horaFim || '',
+        controle: f['Controle'] || '',
+        domicilio: f['Domicílio'] || '',
+        nome: f['Nome'] || '',
+        sexo: f['Sexo'] || '',
+        dtNascimento: f['Dt. Nascimento'] || '',
+        idade: f['Idade'] || '',
+        endereco: f['Endereço'] || '',
+        telefone: f['Telefone'] || '',
+        zonas: f['Zonas'] || '',
+        observacao: f['Observação'] || '',
+      };
+    });
+
+    rows.sort((a, b) =>
+      a.isoDate.localeCompare(b.isoDate) ||
+      a.horaInicio.localeCompare(b.horaInicio) ||
+      a.equipe.localeCompare(b.equipe)
+    );
+    return rows;
+  }
+
+  // Minimum date (Date, local midnight) a new slot could still realistically
+  // be scheduled for, counting forward from refDate: +3 calendar days, or
+  // +4 if refDate is a Friday (coordination decided Sat/Sun get no special
+  // treatment — just the plain +3 rule). Used to flag open slots that fall
+  // inside a window too close to today to still be actionable.
+  function agendaMinScheduleDate(refDate) {
+    const base = refDate instanceof Date ? refDate : new Date();
+    const offsetDays = base.getDay() === 5 ? 4 : 3; // 5 = Friday
+    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    d.setDate(d.getDate() + offsetDays);
+    return d;
+  }
+
+  function dateToIso(d) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  // Shared export filename (no extension):
+  // lista-enderecos-<pesquisa>_<controle>_<tipo>_<data>.
+  // tipo = "selecionados" when every row has Selecionado = Sim (the report
+  // was requested filtered), otherwise "completos".
+  // Accepts either the ORIGINAL pdfmake table body (rows of {text} cells,
+  // header row included — pass the full `body`) or plain-string rows from
+  // the DataTables API (no header row — pass `rows` directly).
+  function exportFileBase(pesquisa, bodyOrRows) {
+    const cols = pesquisa.columns;
+    const looksLikeBody = bodyOrRows[0] && bodyOrRows[0][0] && typeof bodyOrRows[0][0] === 'object';
+    const rows = looksLikeBody ? bodyOrRows.slice(1) : bodyOrRows;
+    const val = (r, i) => {
+      const c = r[i];
+      if (c && typeof c === 'object' && c.text != null) return String(c.text).trim();
+      return c != null ? String(c).trim() : '';
+    };
+
+    const controles = [...new Set(rows.map((r) => val(r, cols.controle.index)).filter(Boolean))];
+    const controle = controles.length === 1 ? controles[0] : 'varios-controles';
+
+    const allSim =
+      rows.length > 0 && rows.every((r) => val(r, cols.selecionado.index) === 'Sim');
+    const tipo = allSim ? 'selecionados' : 'completos';
+
+    const data = new Date().toISOString().slice(0, 10);
+    return `lista-enderecos-${pesquisa.id.toLowerCase()}_${controle}_${tipo}_${data}`;
+  }
+
+  // --- shared widget mounting ----------------------------------------
+  // ONE registry + ONE MutationObserver on document.body for every
+  // SIGC-PRO widget, replacing the per-feature observers (7+ of them,
+  // each fanning out on every DOM mutation on busy FullCalendar/
+  // DataTables pages). Every mount is insert-or-remove: each tick, a
+  // widget exists iff its anchor exists and its `when` gate passes, so
+  // toolbar re-renders that wipe a widget are healed on the next batch
+  // and SPA-navigating away removes it.
+  const mounts = [];
+  let mountObserver = null;
+
+  // Per-batch context: memoizes the lookups several mounts share, so a
+  // batch costs one document-wide query per lookup, not one per mount.
+  function makeTickCtx() {
+    const memo = new Map();
+    const once = (key, fn) => {
+      if (!memo.has(key)) memo.set(key, fn());
+      return memo.get(key);
+    };
+    return {
+      dtToolbar: () => once('dtToolbar', () => document.querySelector('.dt-buttons')),
+      agendaChunk: () => once('agendaChunk', findAgendaToolbarChunk),
+      onLista: () => once('onLista', onListaEnderecos),
+      onAgenda: () => once('onAgenda', onAgendaPage),
+      ultimoMovimentoFiltrarBtn: () =>
+        once('ultimoMovimentoFiltrarBtn', () => document.getElementById('btnFiltrar')),
+    };
+  }
+
+  // try/catch per mount: one broken mount must never break the others —
+  // the isolation the per-feature IIFEs used to provide.
+  //
+  // insert: 'append' (default) puts the built widget inside the anchor,
+  // as a last child — the original behavior, for anchors that are
+  // containers (e.g. a toolbar). insert: 'after' puts it as the anchor's
+  // NEXT SIBLING instead — for anchors that are themselves a button to
+  // sit beside (e.g. Último Movimento's Filtrar), where appending into
+  // the anchor's parent would land after unrelated trailing siblings.
+  function tickMount(m, ctx) {
+    try {
+      const existing = document.getElementById(m.id);
+      const anchorEl = m.anchor(ctx);
+      const ok = anchorEl && (!m.when || m.when(ctx));
+      if (ok && !existing) {
+        if (m.insert === 'after') anchorEl.insertAdjacentElement('afterend', m.build());
+        else anchorEl.appendChild(m.build());
+      } else if (!ok && existing) {
+        existing.remove();
+      }
+    } catch (err) {
+      console.warn(`${TAG} mount "${m.id}" tick failed:`, err);
+    }
+  }
+
+  function tickAllMounts() {
+    const ctx = makeTickCtx();
+    mounts.forEach((m) => tickMount(m, ctx));
+  }
+
+  // Forces every mounted widget's `when` to be re-evaluated right now,
+  // without waiting for a DOM mutation to trigger the shared observer.
+  // Needed by features whose gating condition can flip asynchronously
+  // with no DOM change of its own (e.g. settings.js, once an async
+  // flag value arrives from the ISOLATED-world relay).
+  function recheckMounts() {
+    tickAllMounts();
+  }
+
+  // { id, anchor: (ctx) => Element|null, when?: (ctx) => bool,
+  //   build: () => Element }. Registers the widget, ticks it once
+  // immediately (covers already-loaded pages), and lazily starts the
+  // shared observer. The union config (childList + subtree + class
+  // attributes) serves every mount — class attributes because the
+  // Dia/Semana toggle flips fc-button-active without re-rendering the
+  // toolbar; ticks are cheap (memoized ctx + O(1) getElementById), so
+  // the extra firings don't matter.
+  function mountWidget(spec) {
+    mounts.push(spec);
+    tickMount(spec, makeTickCtx());
+    if (!mountObserver) {
+      mountObserver = new MutationObserver(tickAllMounts);
+      mountObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class'],
+      });
+    }
+  }
+
+  // --- SIGC-PRO button factories --------------------------------------
+  // The two toolbar button styles used across features, each defined
+  // exactly once (previously copy-pasted 3× each).
+
+  // DataTables toolbar button (Lista de Endereços). Same classes as
+  // SIGC's own icon buttons (dt-btn-icon etc.) — their CSS controls the
+  // exact box metrics (size, padding, vertical position) that keep
+  // native buttons aligned with each other. Matching pixel values by
+  // hand kept drifting; reusing the classes guarantees identical
+  // alignment since it's the same rules. We only override color and
+  // font to make ours read as SIGC-PRO, not layout.
+  // The PRO blue, and the washed-out variant a disabled button wears.
+  // Both factories set `background` INLINE, which beats any stylesheet —
+  // so a :disabled CSS rule could never take effect and the only way to
+  // show unavailability is to rewrite the inline value.
+  const PRO_BLUE = '#005a9c';
+  const PRO_BLUE_DISABLED = '#7fb3d3';
+
+  // Makes `disabled` visible on a PRO button. Two different states share
+  // this look, and both mean "you can't click this now": a feature gated
+  // off (e.g. Mapa outside a single agência) and one busy fetching. The
+  // FullCalendar buttons got this free from .fc-button:disabled's opacity
+  // — the DataTables ones never did, so a click that started a multi-
+  // second fetch gave no feedback at all (reported 2026-08-12).
+  //
+  // Wraps the `disabled` property so every existing `btn.disabled = x`
+  // call site repaints with no change: there is no separate "set busy"
+  // API to remember to call, and no way for the flag and the colour to
+  // drift apart.
+  function paintDisabledState(btn) {
+    const proto = Object.getPrototypeOf(btn);
+    const desc = Object.getOwnPropertyDescriptor(proto, 'disabled') ||
+      Object.getOwnPropertyDescriptor(HTMLButtonElement.prototype, 'disabled');
+    if (!desc || !desc.set) return;
+    const repaint = (on) => {
+      btn.style.background = on ? PRO_BLUE_DISABLED : PRO_BLUE;
+      btn.style.borderColor = on ? PRO_BLUE_DISABLED : PRO_BLUE;
+      btn.style.cursor = on ? 'default' : '';
+    };
+    Object.defineProperty(btn, 'disabled', {
+      configurable: true,
+      get() { return desc.get.call(btn); },
+      set(v) { desc.set.call(btn, v); repaint(!!v); },
+    });
+    repaint(btn.disabled);
+  }
+
+  function makeDtProButton({ id, lines, title, onClick }) {
+    const btn = document.createElement('button');
+    btn.id = id;
+    btn.type = 'button';
+    btn.className = 'dt-button buttons-html5 dt-btn-icon';
+    const span = document.createElement('span');
+    lines.forEach((line, i) => {
+      if (i > 0) span.appendChild(document.createElement('br'));
+      span.appendChild(document.createTextNode(line));
+    });
+    btn.appendChild(span);
+    btn.title = title;
+    btn.style.background = '#005a9c';
+    btn.style.borderColor = '#005a9c';
+    btn.style.color = '#fff';
+    btn.style.fontWeight = '700';
+    btn.style.fontSize = '7px';
+    btn.style.lineHeight = '1.15';
+    btn.style.textAlign = 'center';
+    btn.style.textTransform = 'uppercase';
+    // The native icon glyph is small/fixed-size; our two-line text label
+    // is wider, so the class's width: auto grows to fit it. Pin box
+    // dimensions only (not display/align-items, which broke vertical
+    // alignment before) to keep a consistent footprint next to the icon
+    // buttons.
+    //
+    // 44px, not the original 36px: at 36 the widest label in use ("MAPA")
+    // ellipsised to "M…" while shorter ones like "CSV" still fit
+    // (reported 2026-08-14). Sized to the longest label rather than the
+    // shortest, since every caller shares this one box.
+    btn.style.width = '44px';
+    btn.style.minWidth = '44px';
+    btn.style.maxWidth = '44px';
+    btn.style.borderRadius = '4px';
+    btn.addEventListener('click', onClick);
+    paintDisabledState(btn);
+    return btn;
+  }
+
+  // FullCalendar toolbar button (Agenda). FullCalendar's own button
+  // classes give correct box metrics/spacing next to Dia/Semana; only
+  // color is overridden to read as SIGC-PRO. id/onClick optional: the
+  // date-picker composes this inside a wrapper that owns the widget id
+  // and wires its own listeners.
+  function makeFcProButton({ id, text, title, onClick }) {
+    const btn = document.createElement('button');
+    if (id) btn.id = id;
+    btn.type = 'button';
+    btn.className = 'fc-button fc-button-primary';
+    btn.textContent = text;
+    btn.title = title;
+    btn.style.background = '#005a9c';
+    btn.style.borderColor = '#005a9c';
+    btn.style.marginLeft = '4px';
+    if (onClick) btn.addEventListener('click', onClick);
+    return btn;
+  }
+
+  // SIGC form-action button (e.g. Último Movimento's Filtrar/Cancelar,
+  // rendered as `<a class="btn btn-primary btn-sigc">`, not a real
+  // <button> — SIGC's own bootstrap-based button styling). Reusing these
+  // classes gives correct box metrics/padding/font next to the native
+  // buttons; only background/border are overridden to read as SIGC-PRO,
+  // same "reuse native classes, override color only" approach as
+  // makeDtProButton/makeFcProButton. A real <button> element (not an <a>)
+  // is used regardless — no href/javascript: URL needed since onClick is
+  // wired directly, and this avoids SIGC's F5 javascript-URL rewriting
+  // wrapper entirely.
+  // small: narrower than the native Filtrar/Cancelar size, with `text`
+  // wrapped onto two stacked lines (split on the first space) — for a
+  // button that shares this style family (rounded, blue, same font as
+  // Filtrar) but shouldn't visually compete width-wise with the primary
+  // form actions next to it (e.g. an advanced, off-by-default export
+  // button). Deliberately NOT shrunk to makeDtProButton's tiny square
+  // icon shape — narrower/taller, not a toolbar icon.
+  function makeSigcFormButton({ id, text, title, onClick, small }) {
+    const btn = document.createElement('button');
+    btn.id = id;
+    btn.type = 'button';
+    btn.className = 'btn btn-primary btn-sigc';
+    btn.title = title;
+    btn.style.background = '#005a9c';
+    btn.style.borderColor = '#005a9c';
+    btn.style.marginLeft = '8px';
+    if (small) {
+      const [first, ...rest] = text.split(' ');
+      const span = document.createElement('span');
+      span.appendChild(document.createTextNode(first));
+      if (rest.length > 0) {
+        span.appendChild(document.createElement('br'));
+        span.appendChild(document.createTextNode(rest.join(' ')));
+      }
+      btn.appendChild(span);
+      // Padding alone doesn't narrow this — .btn-sigc/Bootstrap's .btn
+      // sets its own line-height/min-width that holds the box at
+      // Filtrar's full single-line size regardless of padding (confirmed
+      // visually). Pin box dimensions explicitly instead — same
+      // "override the box, not just the visual style" approach
+      // makeDtProButton already needed for its own native-class fight.
+      btn.style.boxSizing = 'border-box';
+      btn.style.width = '64px';
+      btn.style.minWidth = '64px';
+      btn.style.lineHeight = '1.3';
+      btn.style.padding = '4px 0';
+      btn.style.fontSize = '11px';
+      btn.style.fontWeight = '700';
+      btn.style.textAlign = 'center';
+    } else {
+      btn.textContent = text;
+    }
+    btn.addEventListener('click', onClick);
+    return btn;
+  }
+
+  // Note: agenda-day-guide additionally injects `dayGuide` (generate /
+  // diaViewActive) onto this object at load time, consumed by agenda-lookups;
+  // manifest load order guarantees day-guide runs first.
+  window.__sigcPro = {
+    PESQUISAS,
+    LISTA_COMMON_LABELS,
+    MISSING_VALUES,
+    normalizeLabel,
+    enderecoKey,
+    detectPesquisa,
+    onListaEnderecos,
+    whenReady,
+    whenReadyGeneric,
+    tableMatchesLayout,
+    getDataTable,
+    isSigcProTable,
+    readDataTable,
+    getTableRows,
+    exportFileBase,
+    parseCoord,
+    f5Prefix,
+    gatewayUrl,
+    fetchViaGateway,
+    FORM_POST_HEADERS,
+    relatorioFiltrarUrl,
+    refererDoSlug,
+    postRelatorio,
+    USUARIO_ORIGIN_HEX,
+    USUARIO_CODIGO_PESQUISA,
+    usuarioGatewayUrl,
+    gmapsDestinoUrl,
+    gmapsPontoUrl,
+    escapeHtml,
+    buildCsv,
+    downloadFile,
+    timestampSlug,
+    slug,
+    WEEKDAYS_PT,
+    onAgendaPage,
+    findAgendaToolbarChunk,
+    parseZonaEntries,
+    toMin,
+    fmtMin,
+    parseAgendaSlotTitle,
+    isoToBr,
+    dateToIso,
+    getAgendaUf,
+    readAgendaSlots,
+    agendaMinScheduleDate,
+    mountWidget,
+    recheckMounts,
+    makeDtProButton,
+    makeFcProButton,
+    makeSigcFormButton,
+  };
+  console.log(`${TAG} common runtime loaded.`);
+})();

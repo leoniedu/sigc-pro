@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SIGC-PRO — Política de Privacidade</title>
+<style>
+  :root { --blue: #005a9c; --ink: #1a1a1a; --muted: #555; --bg: #f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.6 -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: #fff; }
+  header { background: var(--blue); color: #fff; padding: 2rem 1rem; text-align: center; }
+  header h1 { margin: 0; font-size: 1.6rem; }
+  main { max-width: 46rem; margin: 0 auto; padding: 2rem 1rem 4rem; }
+  h2 { color: var(--blue); margin-top: 2rem; font-size: 1.15rem; }
+  .destaque { background: var(--bg); border-left: 4px solid var(--blue); padding: .8rem 1rem; margin: 1.5rem 0; }
+  code { background: var(--bg); border: 1px solid #e1e4e8; border-radius: 4px; padding: .1rem .35rem; font-size: .9em; }
+  footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 2rem 1rem; border-top: 1px solid #e1e4e8; }
+  a { color: var(--blue); }
+</style>
+</head>
+<body>
+<header><h1>SIGC-PRO — Política de Privacidade</h1></header>
+<main>
+  <p><em>Última atualização: 15 de outubro de 2026.</em></p>
+
+  <div class="destaque"><strong>Resumo: o SIGC-PRO NÃO coleta, NÃO transmite e NÃO envia nenhum dado ao desenvolvedor ou a terceiros. As consultas de dados são opcionais, acionadas por clique e confirmadas pelo usuário, e vão ao próprio servidor do SIGC — dentro da sessão já autenticada. A única exceção é o fundo do mapa do "Mapa-pro": após uma confirmação específica, o navegador busca as imagens de mapa (tiles) do OpenStreetMap, um serviço externo. Essas imagens são o fundo cartográfico — nenhum dado do SIGC (endereço, morador, telefone, Controle) é enviado nessa requisição. A única coisa que a extensão guarda é, no próprio navegador, o histórico de contagens por agência do GEREN-PRO (item 3) — nenhum dado de domicílio, morador ou endereço —, que nunca sai do seu computador. A extensão não solicita nenhuma permissão do navegador.</strong></div>
+
+  <h2>1. O que a extensão faz</h2>
+  <p>O SIGC-PRO opera exclusivamente dentro das páginas do SIGC já abertas no
+  seu navegador, lendo dados já carregados na tela e gerando arquivos salvos
+  localmente pelo mecanismo padrão de download do navegador:</p>
+  <p>Na Lista de Endereços: reexporta o PDF em formato listagem e converte a
+  tabela de endereços em um arquivo KML (Google Earth/Maps), ambos com
+  camadas/colunas reorganizadas; e anota cada domicílio com a data e hora
+  da entrevista agendada, a situação e o tipo de entrevista do último
+  movimento, e os slots livres da zona por turno nas próximas duas semanas
+  (opcionalmente, mediante clique e confirmação, veja item 2). O arquivo
+  gerado contém links para o Google Maps nos endereços (quando há
+  coordenadas), que são links, não recursos carregados — nada é buscado
+  ao abrir o arquivo. Em qualquer relatório com
+  tabela: exporta os
+  dados como CSV. No relatório Último Movimento: exporta o relatório de
+  todas as agências da UF atual em um único CSV. No relatório
+  Gerenciamento da Coleta: abre um painel com a UF inteira a partir de uma
+  única requisição ao servidor do SIGC, mantida só em memória por 5
+  minutos. No painel "Mapa-pro"
+  (Último Movimento e Acompanhamento de Biomarcadores): gera, por
+  domicílio e mediante clique, a carta de notificação em PDF, preenchida
+  com dados já na tela e com o cadastro do agente consultado no módulo
+  de usuários do SIGC (veja item 2). Na Agenda (Administrar
+  Agenda): exporta os slots do calendário como CSV; verifica prazos de
+  agendamento e consistência de nomes de zona/equipe; oferece um seletor de
+  data; e gera um guia HTML do dia por equipe (opcionalmente enriquecido,
+  mediante clique e confirmação, com a zona real e as coordenadas de cada
+  visita, veja item 2).</p>
+
+  <h2>2. Coleta e transmissão de dados</h2>
+  <p>Quase nenhuma. Quatro recursos opcionais fazem requisições ao próprio
+  servidor do SIGC (mesma origem da página), sempre dentro da sessão já
+  autenticada do usuário: o "Guia do Dia", que consulta as coordenadas, a
+  zona, a agência e o entrevistador dos endereços do dia mediante clique
+  e confirmação — recusar a consulta ainda gera o guia, apenas sem esses
+  dados; a resposta é processada localmente e usada para incluir, no
+  guia gerado, esses dados por visita, links de navegação para o Google
+  Maps (por visita e por equipe) e um mapa-esquema em SVG da rota, que
+  não carrega nenhuma imagem ou serviço externo;
+  o "Mapa-pro" dos relatórios Último Movimento e Acompanhamento de
+  Biomarcadores, que consulta a Lista de
+  Endereços do recorte filtrado na tela — agência, município ou controle
+  — (coordenadas e zona) e, no relatório de biomarcadores, também a
+  agenda da UF,
+  mediante clique e confirmação, para mostrar os domicílios no mapa por
+  situação, o andamento e os horários livres de cada zona, e a coleta
+  agendada de cada domicílio — a resposta é processada localmente,
+  reduzida aos campos exibidos e mantida apenas em memória, e os links
+  para o Google Maps são links, não recursos carregados; e a
+  exportação avançada do relatório Último Movimento (multi-agência), que
+  confirma antes de rodar, nomeando quantas agências serão consultadas, e
+  faz uma requisição por agência da UF atual (com 2 segundos
+  de intervalo entre elas) para montar um único CSV; e a "Carta" do
+  "Mapa-pro", que, ao clicar no botão de um domicílio, consulta o módulo
+  de usuários do SIGC pela matrícula do agente que detém o domicílio
+  (duas requisições à mesma origem por matrícula: a matrícula é enviada;
+  volta o cadastro desse usuário — função, telefone, e-mail — e, quando
+  o filtro é por agência, a lista de agências da UF, uma requisição por
+  UF, para escrever o nome da agência), usados
+  apenas para preencher os campos da carta gerada; se o módulo de
+  usuários não tiver sessão iniciada, a extensão abre a página dele em
+  uma aba (mesma origem, pelo próprio portal) para que o navegador faça
+  o login único, repete a consulta a cada 2 segundos por até 90
+  segundos e fecha a aba quando ela passa a responder — a extensão não
+  envia credenciais nem formulários de autenticação, e um redirecionamento
+  de autenticação nunca é seguido pelo código; nada é armazenado
+  (o resultado fica em memória por 60 segundos, para um segundo clique
+  no mesmo agente não repetir a consulta). Fora essas quatro
+  funcionalidades opcionais, o código não contém chamadas de rede — uma
+  verificação automática do repositório (scripts/check-privacy.sh) confere,
+  a cada alteração, que requisições só existem nesses quatro módulos e só
+  para a própria origem, complementando a auditoria do código aberto.</p>
+
+  <p>Há um único recurso externo em toda a extensão: as imagens de mapa
+  (tiles) do OpenStreetMap, usadas como fundo cartográfico do "Mapa-pro".
+  Elas só são buscadas após uma confirmação própria, separada da consulta
+  de dados — recusando, o painel continua funcionando (as abas Zonas e
+  Domicílios são tabelas, não dependem do mapa). Como toda requisição
+  web, o navegador informa ao servidor de tiles o seu endereço IP e quais
+  quadrículas do mapa foram pedidas; nenhum dado do SIGC — endereço,
+  morador, telefone, Controle, coordenada de domicílio — acompanha esse
+  pedido. A biblioteca de mapa (Leaflet), a biblioteca de PDF da carta
+  (pdf-lib) e as imagens do timbre são distribuídas dentro da própria
+  extensão, não carregadas de um CDN. Não há telemetria, análise de uso
+  nem qualquer outra integração com serviços de terceiros.</p>
+
+  <h2>3. Armazenamento</h2>
+  <p><strong>Uma única coisa, local e opcional de apagar:</strong> A cada consulta do GEREN-PRO a extensão guarda, no seu navegador, as contagens por agência (quantos domicílios em cada andamento). Nenhum dado de domicílio, morador ou endereço é guardado, e nada é enviado a ninguém. O botão "Limpar histórico" apaga tudo. Em
+  detalhe: a cada consulta do GEREN-PRO (a aba "Histórico" do painel do
+  relatório Gerenciamento da Coleta) a extensão grava, no IndexedDB da
+  própria extensão — no seu navegador, nunca em servidor —, uma foto por
+  UF por dia: quantos domicílios há em cada agência, em cada andamento do
+  portal e com ou sem amostra de biomarcadores. Não são gravados
+  Controle, domicílio, nome, endereço, telefone ou qualquer outro dado de
+  domicílio ou de morador. O histórico serve para mostrar a evolução
+  semana a semana; o botão "Exportar histórico" gera uma cópia em CSV e o
+  botão "Limpar histórico" apaga tudo. Remover a extensão ou limpar os
+  dados dela também apaga o histórico. A extensão não usa
+  <code>chrome.storage</code>, <code>localStorage</code> nem cookies.
+  Consentimentos e demais caches existem apenas em memória e desaparecem
+  ao recarregar a página. Os arquivos exportados são gerados em memória e
+  gravados apenas onde você escolher salvá-los.</p>
+
+  <h2>4. Permissões do navegador</h2>
+  <p>A extensão <strong>não solicita nenhuma permissão</strong>: a lista
+  <code>permissions</code> do manifesto está vazia (o IndexedDB da própria
+  extensão não exige permissão; ele é acessado por um service worker
+  declarado no manifesto). O manifesto declara
+  apenas em quais páginas
+  (<code>portalweb.ibge.gov.br</code>,
+  <code>portalweb2.ibge.gov.br</code> e <code>w3sigcpns2025.ibge.gov.br</code>,
+  os domínios do SIGC) seus scripts são executados. Isso pode ser
+  verificado em <code>chrome://extensions</code> e no arquivo
+  <code>manifest.json</code>.</p>
+
+  <h2>5. Código aberto e auditoria</h2>
+  <p>Todo o código executável são os arquivos JavaScript publicados neste
+  repositório. O Manifest V3 do Chrome proíbe código remoto: o que está no
+  repositório é exatamente o que roda no navegador.</p>
+
+  <h2>6. LGPD</h2>
+  <p>Como não há coleta ou tratamento de dados pessoais pela extensão, não há
+  operações sujeitas à Lei Geral de Proteção de Dados (Lei nº 13.709/2018)
+  realizadas pelo SIGC-PRO. Os dados exibidos nas páginas do SIGC permanecem
+  sob a governança do IBGE e das políticas de acesso do próprio sistema.</p>
+
+  <h2>7. Alterações nesta política</h2>
+  <p>Qualquer mudança futura será refletida nesta página e no histórico do
+  repositório antes de ser distribuída. Em 15 de outubro de 2026, esta
+  política foi atualizada porque a extensão voltou a guardar dados
+  localmente: o histórico de contagens por agência do GEREN-PRO (item 3),
+  sem dados de domicílio. Em 24 de julho de 2026, esta
+  política foi atualizada para refletir a primeira funcionalidade a usar
+  armazenamento local (item 3) e a segunda funcionalidade a fazer
+  requisições de rede (item 2), ambas opcionais e descritas acima. Em 31
+  de julho de 2026, esta política foi atualizada para refletir a
+  terceira funcionalidade a fazer requisições de rede (a anotação da
+  Lista de Endereços, item 2), também opcional e descrita acima. Em 6
+  de agosto de 2026, esta política foi atualizada para refletir que o
+  "Guia do Dia" (item 2) passou a consultar também a agência e o
+  entrevistador de cada visita, além das coordenadas e zona já
+  descritas — mesma consulta opcional já existente, sem novo clique de
+  confirmação.</p>
+
+  <h2>8. Contato</h2>
+  <p>Dúvidas e reportes: abra uma <em>issue</em> no repositório do projeto no
+  GitHub.</p>
+</main>
+<footer>SIGC-PRO · projeto não oficial, sem vínculo com o IBGE ·
+<a href="index.html">página inicial</a></footer>
+</body>
+</html>

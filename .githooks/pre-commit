@@ -1,0 +1,58 @@
+#!/bin/sh
+set -e
+ROOT="$(git rev-parse --show-toplevel)"
+
+"$ROOT/scripts/check-privacy.sh" --staged
+
+# Re-prove the gate itself whenever it (or its self-test) changes.
+if ! git diff --cached --no-ext-diff --quiet -- scripts/check-privacy.sh scripts/test-privacy-gate.sh; then
+  "$ROOT/scripts/test-privacy-gate.sh"
+fi
+
+# Auto-bump the patch version whenever extension/ changes, unless this
+# commit already edits manifest.json's version itself (manual minor/major
+# bump takes precedence — don't double-bump).
+MANIFEST="$ROOT/extension/manifest.json"
+if ! git diff --cached --no-ext-diff --quiet -- extension/ \
+   && ! git diff --cached --no-ext-diff -- "$MANIFEST" | grep -q '"version"'; then
+  CURRENT=$(grep '"version"' "$MANIFEST" | sed -E 's/.*"version": *"([0-9]+)\.([0-9]+)\.([0-9]+)".*/\1 \2 \3/')
+  read -r MAJOR MINOR PATCH <<EOF
+$CURRENT
+EOF
+  NEW="$MAJOR.$MINOR.$((PATCH + 1))"
+  sed -i '' -E "s/\"version\": *\"[0-9]+\.[0-9]+\.[0-9]+\"/\"version\": \"$NEW\"/" "$MANIFEST"
+  git add "$MANIFEST"
+  echo "extension/manifest.json version bumped to $NEW"
+fi
+
+# Keep the GitHub Pages version marker in sync with the (possibly
+# just-bumped) staged manifest version.
+if ! git diff --cached --no-ext-diff --quiet -- extension/; then
+  VER=$(git show :extension/manifest.json | grep '"version"' | sed -E 's/.*"version": *"([0-9.]+)".*/\1/')
+  if [ -n "$VER" ] && grep -qE 'versão [0-9]+\.[0-9]+\.[0-9]+' "$ROOT/docs/index.html"; then
+    sed -i '' -E "s/versão [0-9]+\.[0-9]+\.[0-9]+/versão $VER/" "$ROOT/docs/index.html"
+    git add "$ROOT/docs/index.html"
+    echo "docs/index.html version marker synced to $VER"
+  fi
+fi
+
+# Keep dist/sigc-pro-extension.zip in sync: rebuild from the staged content
+# whenever the commit touches extension/ or the bundled manual, and include
+# it in the same commit. Zip layout: LEIA-ME.txt + extension/.
+if ! git diff --cached --no-ext-diff --quiet -- extension/ LEIA-ME.txt; then
+  mkdir -p "$ROOT/dist"
+  TREE=$(git write-tree)
+  git archive --format=zip -o "$ROOT/dist/sigc-pro-extension.zip" "$TREE" extension LEIA-ME.txt
+  git add "$ROOT/dist/sigc-pro-extension.zip"
+  echo "dist/sigc-pro-extension.zip rebuilt from staged extension/ + LEIA-ME.txt"
+
+  # Chrome Web Store upload: manifest.json must sit at the archive root (it
+  # rejects files outside the manifest's own directory), so this zip has no
+  # LEIA-ME.txt and no extension/ wrapper folder — just extension/'s
+  # contents, flattened to the root. git archive can't flatten a subtree
+  # directly, so archive the extension/ subtree object itself.
+  SUBTREE=$(git rev-parse "$TREE:extension")
+  git archive --format=zip -o "$ROOT/dist/sigc-pro-store.zip" "$SUBTREE"
+  git add "$ROOT/dist/sigc-pro-store.zip"
+  echo "dist/sigc-pro-store.zip rebuilt (manifest.json at root, for Web Store upload)"
+fi

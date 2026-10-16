@@ -1,0 +1,52 @@
+<!-- SYNTHETIC fixture for GET /usuario/EditarUsuario?codigoPesquisa=PNS2025&id=98765.
+     Written from the expected ASP.NET MVC form shape (Bootstrap form-groups,
+     inputs named after the model), NOT captured from the live module — the
+     parser resolves fields by input name/id first and by label text second,
+     so a live form with either convention parses. Replace with a sanitized
+     live capture when one is available and keep the values below. -->
+<div class="modal-body">
+<form id="formEditarUsuario" method="post" action="/usuario/SalvarUsuario">
+  <input type="hidden" name="Id" id="Id" value="98765">
+  <input type="hidden" name="CodigoPesquisa" value="PNS2025">
+  <div class="form-group">
+    <label for="Nome">Nome</label>
+    <input class="form-control" type="text" id="Nome" name="Nome" value="ALEXANDRE SILVA DE SANTANA">
+  </div>
+  <div class="form-group">
+    <label for="Login">Login</label>
+    <input class="form-control" type="text" id="Login" name="Login" value="1234567" readonly>
+  </div>
+  <div class="form-group">
+    <label for="Email">E-mail</label>
+    <input class="form-control" type="email" id="Email" name="Email" value="alexandre.santana@ibge.gov.br">
+  </div>
+  <div class="form-group">
+    <label for="Telefone">Telefone</label>
+    <input class="form-control" type="text" id="Telefone" name="Telefone" value="+557133333333">
+  </div>
+  <div class="form-group">
+    <label for="Celular">Celular</label>
+    <input class="form-control" type="text" id="Celular" name="Celular" value="+5571990000000">
+  </div>
+  <div class="form-group">
+    <label for="IdFuncao">Função</label>
+    <select class="form-control" id="IdFuncao" name="IdFuncao">
+      <option value="">Selecione</option>
+      <option value="3">Supervisor de Coleta e Qualidade</option>
+      <option value="7" selected="selected">Agente de Pesquisas e Mapeamento</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label for="IdPosto">Posto</label>
+    <select class="form-control" id="IdPosto" name="IdPosto">
+      <option value="">Selecione</option>
+      <option value="2905" selected="selected">29XJYY - SALVADOR</option>
+      <option value="2906">29XJZZ - FEIRA DE SANTANA</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label for="Patrimonio">Patrimônio</label>
+    <input class="form-control" type="text" id="Patrimonio" name="Patrimonio" value="">
+  </div>
+</form>
+</div>
