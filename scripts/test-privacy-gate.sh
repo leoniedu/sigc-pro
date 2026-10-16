@@ -10,7 +10,7 @@ cd "$(git rev-parse --show-toplevel)"
 PLANT_OUT="extension/features/__privacy_tripwire__.js"
 PLANT_MAP_XHR="extension/features/agenda-lookups/__privacy_tripwire_xhr__.js"
 PLANT_MAP_URL="extension/features/agenda-lookups/__privacy_tripwire_url__.js"
-PLANT_SETTINGS_FETCH="extension/features/agenda-date-picker/__privacy_tripwire_fetch__.js"
+PLANT_OTHER_FETCH="extension/features/agenda-date-picker/__privacy_tripwire_fetch__.js"
 PLANT_UME_XHR="extension/features/ultimo-movimento-export/__privacy_tripwire_xhr__.js"
 PLANT_UME_URL="extension/features/ultimo-movimento-export/__privacy_tripwire_url__.js"
 PLANT_UME_STORAGE="extension/features/ultimo-movimento-export/__privacy_tripwire_storage__.js"
@@ -19,11 +19,6 @@ PLANT_VENDOR_LOOKALIKE="extension/vendor-evil/__privacy_tripwire_lookalike__.js"
 PLANT_UMM_XHR="extension/features/ultimo-movimento-map/__privacy_tripwire_xhr__.js"
 PLANT_UMM_SRC_BAD="extension/features/ultimo-movimento-map/__privacy_tripwire_src_bad__.js"
 PLANT_UMM_SRC_VAR_BAD="extension/features/ultimo-movimento-map/__privacy_tripwire_src_var_bad__.js"
-PLANT_UMM_SRC_OK="extension/features/ultimo-movimento-map/__privacy_tripwire_src_ok__.js"
-PLANT_UMM_SRC_VAR_OK="extension/features/ultimo-movimento-map/__privacy_tripwire_src_var_ok__.js"
-PLANT_UMM_SCOPE_DEF="extension/features/ultimo-movimento-map/__privacy_tripwire_scope_def__.js"
-PLANT_UMM_SCOPE_LEAK="extension/features/ultimo-movimento-map/__privacy_tripwire_scope_leak__.js"
-PLANT_UMM_REASSIGN="extension/features/ultimo-movimento-map/__privacy_tripwire_reassign__.js"
 PLANT_UMM_EVENT_OK="extension/features/ultimo-movimento-map/__privacy_tripwire_event_ok__.js"
 PLANT_UMM_EVENT_REASSIGN_OK="extension/features/ultimo-movimento-map/__privacy_tripwire_event_reassign_ok__.js"
 PLANT_UMM_TILE_URL_OK="extension/features/ultimo-movimento-map/__privacy_tripwire_tile_url_ok__.js"
@@ -44,7 +39,7 @@ PLANT_COMMON_URL_OK="extension/common/__privacy_tripwire_url_ok__.js"
 PLANT_COMMON_URL_BAD="extension/common/__privacy_tripwire_url_bad__.js"
 PLANT_HEX_URL="extension/features/csv-export/__privacy_tripwire_hex__.js"
 PLANT_B64_URL="extension/features/csv-export/__privacy_tripwire_b64__.js"
-cleanup() { rm -f "$PLANT_COMMON_URL_OK" "$PLANT_COMMON_URL_BAD" "$PLANT_HEX_URL" "$PLANT_B64_URL"; rm -f "$PLANT_GH_IDB_OK" "$PLANT_GH_FETCH" "$PLANT_GH_CHROME" "$PLANT_GH_LOCAL" "$PLANT_GR_IDB"; rm -f "$PLANT_CN_TILE_BAD" "$PLANT_UL_URL" "$PLANT_UL_SRC" "$PLANT_CN_FETCH" "$PLANT_CN_SRC_OK" "$PLANT_CN_SRC_BAD" "$PLANT_CN_URL_BAD"; rm -f "$PLANT_OUT" "$PLANT_MAP_XHR" "$PLANT_MAP_URL" "$PLANT_SETTINGS_FETCH" "$PLANT_UME_XHR" "$PLANT_UME_URL" "$PLANT_UME_STORAGE" "$PLANT_VENDOR_OK" "$PLANT_VENDOR_LOOKALIKE" "$PLANT_UMM_XHR" "$PLANT_UMM_SRC_BAD" "$PLANT_UMM_SRC_VAR_BAD" "$PLANT_UMM_SRC_OK" "$PLANT_UMM_SRC_VAR_OK" "$PLANT_UMM_SCOPE_DEF" "$PLANT_UMM_SCOPE_LEAK" "$PLANT_UMM_REASSIGN" "$PLANT_UMM_EVENT_OK" "$PLANT_UMM_EVENT_REASSIGN_OK" "$PLANT_UMM_TILE_URL_OK" "$PLANT_UMM_URL_BAD"; rmdir extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map 2>/dev/null || true; }
+cleanup() { rm -f "$PLANT_COMMON_URL_OK" "$PLANT_COMMON_URL_BAD" "$PLANT_HEX_URL" "$PLANT_B64_URL"; rm -f "$PLANT_GH_IDB_OK" "$PLANT_GH_FETCH" "$PLANT_GH_CHROME" "$PLANT_GH_LOCAL" "$PLANT_GR_IDB"; rm -f "$PLANT_CN_TILE_BAD" "$PLANT_UL_URL" "$PLANT_UL_SRC" "$PLANT_CN_FETCH" "$PLANT_CN_SRC_OK" "$PLANT_CN_SRC_BAD" "$PLANT_CN_URL_BAD"; rm -f "$PLANT_OUT" "$PLANT_MAP_XHR" "$PLANT_MAP_URL" "$PLANT_OTHER_FETCH" "$PLANT_UME_XHR" "$PLANT_UME_URL" "$PLANT_UME_STORAGE" "$PLANT_VENDOR_OK" "$PLANT_VENDOR_LOOKALIKE" "$PLANT_UMM_XHR" "$PLANT_UMM_SRC_BAD" "$PLANT_UMM_SRC_VAR_BAD" "$PLANT_UMM_EVENT_OK" "$PLANT_UMM_EVENT_REASSIGN_OK" "$PLANT_UMM_TILE_URL_OK" "$PLANT_UMM_URL_BAD"; rmdir extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 mkdir -p extension/features/agenda-date-picker extension/features/ultimo-movimento-export extension/vendor extension/vendor-evil extension/features/ultimo-movimento-map extension/features/usuario-lookup extension/features/carta-notificacao extension/features/gerenciamento-historico extension/features/gerenciamento-coleta
 
@@ -92,18 +87,15 @@ if scripts/check-privacy.sh >/dev/null 2>&1; then
 fi
 rm -f "$PLANT_MAP_URL"
 
-# 5. fetch( inside settings/ must fail (only chrome.storage is sanctioned
-#    there, not fetch).
-echo 'fetch("/x");' > "$PLANT_SETTINGS_FETCH"
+# 5. fetch( in a feature directory with no sanction must fail.
+echo 'fetch("/x");' > "$PLANT_OTHER_FETCH"
 if scripts/check-privacy.sh >/dev/null 2>&1; then
-  fail "gate missed fetch( inside settings/"
+  fail "gate missed fetch( inside agenda-date-picker/"
 fi
-rm -f "$PLANT_SETTINGS_FETCH"
+rm -f "$PLANT_OTHER_FETCH"
 
-# 6. chrome.storage must now FAIL EVERYWHERE. The settings/ exception was
-#    retired with the advanced-flags Options page (2026-08-13) and the
-#    manifest requests no permissions at all — so any storage API
-#    reappearing anywhere is a regression, not a sanctioned use.
+# 6. chrome.storage must FAIL EVERYWHERE — the manifest requests no
+#    permissions at all.
 echo 'chrome.storage.local.get(["x"], () => {});' > "extension/features/ultimo-movimento-export/__privacy_tripwire_storage__.js"
 if scripts/check-privacy.sh >/dev/null 2>&1; then
   fail "gate accepted chrome.storage — the storage ban must now be global"
@@ -168,71 +160,16 @@ if scripts/check-privacy.sh >/dev/null 2>&1; then
 fi
 rm -f "$PLANT_UMM_SRC_BAD"
 
-# 14. .src= assigned from a variable that was NOT itself sourced from
-#     chrome.runtime.getURL('vendor/...') must fail — proves the
-#     variable carve-out can't be used to smuggle an arbitrary URL
-#     through an intermediate variable.
+# 14. .src= assigned from a plain variable must fail — only a
+#     .jsUrl/.cssUrl property read is allowed.
 printf '%s\n' \
   "const evilUrl = 'https://evil.example/x';" \
   "link.href = evilUrl;" \
   > "$PLANT_UMM_SRC_VAR_BAD"
 if scripts/check-privacy.sh >/dev/null 2>&1; then
-  fail "gate missed .src=/.href= from a variable not sourced from chrome.runtime.getURL('vendor/...')"
+  fail "gate missed .src=/.href= from a plain variable"
 fi
 rm -f "$PLANT_UMM_SRC_VAR_BAD"
-
-# 15. .src= assigned inline from chrome.runtime.getURL('vendor/...'), and
-#     the same via a two-step variable, must both PASS — the real shape
-#     ultimo-movimento-map.js uses to load the vendored Leaflet bundle
-#     (loadLeafletAssets: cssHref is assigned, then used two lines later).
-echo "script.src = chrome.runtime.getURL('vendor/leaflet/leaflet.js');" > "$PLANT_UMM_SRC_OK"
-if ! scripts/check-privacy.sh >/dev/null 2>&1; then
-  fail "gate rejected inline .src= from chrome.runtime.getURL('vendor/...')"
-fi
-rm -f "$PLANT_UMM_SRC_OK"
-
-printf '%s\n' \
-  "const jsHref = chrome.runtime.getURL('vendor/leaflet/leaflet.js');" \
-  "script.src = jsHref;" \
-  > "$PLANT_UMM_SRC_VAR_OK"
-if ! scripts/check-privacy.sh >/dev/null 2>&1; then
-  fail "gate rejected .src= from a variable sourced from chrome.runtime.getURL('vendor/...')"
-fi
-rm -f "$PLANT_UMM_SRC_VAR_OK"
-
-# 16. Variable whitelist must be scoped PER FILE, not per directory: a
-#     name legitimately safe in one file (jsHref, defined here from
-#     getURL('vendor/...')) must not make the SAME name safe in a
-#     different file of the same directory that assigns it from an
-#     attacker URL instead. Both files are planted together so the
-#     directory-wide scan sees both; only the second (leak) file should
-#     be reported as bad.
-printf '%s\n' \
-  "const jsHref = chrome.runtime.getURL('vendor/leaflet/leaflet.js');" \
-  "script.src = jsHref;" \
-  > "$PLANT_UMM_SCOPE_DEF"
-printf '%s\n' \
-  "const jsHref = 'https://evil.example/x';" \
-  "script.src = jsHref;" \
-  > "$PLANT_UMM_SCOPE_LEAK"
-if scripts/check-privacy.sh >/dev/null 2>&1; then
-  fail "gate let a variable name whitelisted in one file leak safety to a same-named variable in a different file"
-fi
-rm -f "$PLANT_UMM_SCOPE_DEF" "$PLANT_UMM_SCOPE_LEAK"
-
-# 17. A variable whitelisted from chrome.runtime.getURL('vendor/...') but
-#     later reassigned to something else must still fail — proves
-#     reassignment isn't ignored (only the first assignment used to be
-#     checked).
-printf '%s\n' \
-  "let cssHref = chrome.runtime.getURL('vendor/leaflet/leaflet.css');" \
-  "cssHref = 'https://evil.example/x';" \
-  "link.href = cssHref;" \
-  > "$PLANT_UMM_REASSIGN"
-if scripts/check-privacy.sh >/dev/null 2>&1; then
-  fail "gate missed a whitelisted variable reassigned to a non-vendor value before use"
-fi
-rm -f "$PLANT_UMM_REASSIGN"
 
 # 18. .src=/.href= assigned from a `.jsUrl`/`.cssUrl` property read off
 #     ANY expression must PASS — a property-NAME allowlist, not a

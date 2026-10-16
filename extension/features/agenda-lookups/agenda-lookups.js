@@ -957,15 +957,6 @@
 
   const horaDe = (ms) => new Date(ms).toTimeString().slice(0, 5);
 
-  // A cache hit and a fresh fetch must not look the same: the panel shows
-  // the fetch time specifically because a stale count causes a real
-  // double-booking, so the one case that IS knowably stale (served from
-  // the in-memory cache, up to TTL_MS old) has to say so rather than just
-  // naming the clock time as if it had just been fetched.
-  function fetchLabel(em, cache) {
-    return cache ? `${horaDe(em)} (em cache)` : horaDe(em);
-  }
-
   function resetAgendaCache() {
     cacheAgenda.clear();
   }

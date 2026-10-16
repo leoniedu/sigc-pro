@@ -116,24 +116,6 @@
     tick();
   }
 
-  // Like whenReady, but with no pesquisa/page requirement — for features
-  // that work on any SIGC report (e.g. generic CSV export). Fires
-  // callback(prereq) once prereqFn() is truthy. Unlike whenReady, this never
-  // gives up: every SIGC report has a table eventually, so a slow AJAX load
-  // (past whenReady's 10 s pesquisa-detection window) should still resolve
-  // instead of leaving the button missing until a reload.
-  function whenReadyGeneric(prereqFn, callback) {
-    const tick = () => {
-      const prereq = prereqFn();
-      if (prereq) {
-        callback(prereq);
-        return;
-      }
-      setTimeout(tick, 200);
-    };
-    tick();
-  }
-
   // Returns the page's live DataTables instance, or null if jQuery,
   // DataTables, or a table isn't present/initialized yet.
   // Filtered, not a bare `jq('table')`: SIGC's page script initializes
@@ -979,7 +961,6 @@
     detectPesquisa,
     onListaEnderecos,
     whenReady,
-    whenReadyGeneric,
     tableMatchesLayout,
     getDataTable,
     isSigcProTable,
@@ -995,7 +976,6 @@
     relatorioFiltrarUrl,
     refererDoSlug,
     postRelatorio,
-    USUARIO_ORIGIN,
     USUARIO_ORIGIN_HEX,
     USUARIO_CODIGO_PESQUISA,
     usuarioGatewayUrl,
@@ -1007,8 +987,6 @@
     timestampSlug,
     slug,
     WEEKDAYS_PT,
-    onAgendaPage,
-    findAgendaToolbarChunk,
     parseZonaEntries,
     toMin,
     fmtMin,

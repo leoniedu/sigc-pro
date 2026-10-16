@@ -30,19 +30,12 @@
 #     First vendored library: Leaflet (see
 #     docs/archive/specs/2026-08-08-ultimo-movimento-mapa-design.md).
 #   - extension/features/ultimo-movimento-map/ : .src=/.href= only, and only
-#     when the value is chrome.runtime.getURL('vendor/...') — loads the
-#     vendored Leaflet bundle from the extension's own package, no network
-#     request leaves the browser (chrome-extension:// resolves locally, not
-#     a URL_PATTERN https?:// match). Not a fetch sanction: this directory
-#     may not call fetch() at all. ultimo-movimento-map.js runs in MAIN
-#     world (no chrome.*), so it never calls chrome.runtime.getURL
-#     directly — ultimo-movimento-map-relay.js (ISOLATED world) resolves
-#     the URLs and writes them as document.documentElement.dataset
-#     attributes (shared between worlds; window is not); the recognized
-#     safe pattern below additionally covers .src=/.href= assigned from a
-#     `.jsUrl`/`.cssUrl` property read off ANY expression — a property-NAME
-#     allowlist, not provenance-traced (see the fuller comment below for
-#     why). This directory ALSO gets an absolute-URL allowlist check
+#     from a `.jsUrl`/`.cssUrl` property — the vendored Leaflet bundle's
+#     chrome-extension:// URLs, which ultimo-movimento-map-relay.js
+#     (ISOLATED world) writes as document.documentElement.dataset
+#     attributes for the MAIN-world script. Not a fetch sanction: this
+#     directory may not call fetch() at all. This directory ALSO gets an
+#     absolute-URL allowlist check
 #     (LOCAL_RESOURCE_URL_ALLOWLIST, below): unlike FETCH_DIRS (which must
 #     contain zero absolute URLs), it legitimately needs exactly one — the
 #     OpenStreetMap tile-host template Leaflet's L.tileLayer() uses — so
@@ -80,43 +73,19 @@ PATTERN_NOFETCH='import\(|new[[:space:]]+XMLHttpRequest|sendBeacon|WebSocket|Eve
 # everything that moves bytes off-origin is not, and neither are the other
 # storage APIs (chrome.storage, localStorage, sessionStorage, cookies).
 PATTERN_NOSTORAGE='fetch\(|["'\''"]fetch["'\''"]|import\(|new[[:space:]]+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|\.src[[:space:]]*=|chrome\.storage|localStorage|sessionStorage|document\.cookie|eval\(|new Function'
-# extension/features/ultimo-movimento-map/ may assign .src=/.href= ONLY
-# from chrome.runtime.getURL('vendor/...') (loading the vendored Leaflet
-# bundle — a local, bundled resource, not a network request). Every other
+# Local-resource directories may assign .src=/.href= ONLY from a
+# .jsUrl/.cssUrl property (loading a vendored bundle — a local resource,
+# not a network request). Every other
 # banned API (fetch, XHR, new Image, chrome.storage, etc.) still applies
 # there in full — this is the narrowest possible carve-out from PATTERN,
 # not a second fetch/storage sanction.
 PATTERN_NOLOCALRESOURCE='fetch\(|["'\''"]fetch["'\''"]|import\(|new[[:space:]]+XMLHttpRequest|sendBeacon|WebSocket|EventSource|RTCPeerConnection|importScripts|new Image|chrome\.storage|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function'
-# .src=/.href= is allowed when the RHS's provenance is visible in the
-# SAME FILE as one of:
-#   (a) inline: literally chrome.runtime.getURL('vendor/...')
-#   (b) a bare variable that was itself assigned from that same call
-#       earlier in the file — covers
-#       `const cssHref = chrome.runtime.getURL(...); link.href = cssHref;`
-#   (c) a `.jsUrl`/`.cssUrl` property read off ANY expression — e.g.
-#       `link.href = urls.cssUrl;` — covers
-#       ultimo-movimento-map.js's MAIN-world consumption of
-#       ultimo-movimento-map-relay.js's (ISOLATED-world) Leaflet URLs,
-#       passed via document.documentElement.dataset (shared between
-#       worlds; window is not) rather than by tracing the exact call
-#       chain that produces the `urls`/`jsUrl`/`cssUrl` binding — a
-#       CustomEvent + variable-provenance-tracing version of this rule
-#       was tried first and had to be rewritten twice (2026-08-09: once
-#       because the event itself raced and silently never fired, once
-#       because the replacement dataset-based code didn't match the
-#       tracing regex either) — a property-NAME allowlist is deliberately
-#       simpler and doesn't re-break on the next refactor of how those
-#       two names get bound. The two property names (jsUrl/cssUrl) are
-#       self-documenting and specific to this one feature; an attacker
-#       would need to get a property literally named jsUrl or cssUrl onto
-#       whatever object reaches .src=/.href= here, which is a narrow
-#       surface for a directory whose only legitimate purpose is loading
-#       the vendored Leaflet bundle.
-# (a)/(b) still trace same-file variable provenance (inline literal, or a
-# bare reassignment revoking a whitelisted name) since that's cheap and
-# precise for the simple case; (c) does not attempt to.
-LOCAL_RESOURCE_SRC_INLINE_OK='\.(src|href)[[:space:]]*=[[:space:]]*chrome\.runtime\.getURL\(['\''"]vendor/'
-LOCAL_RESOURCE_VAR_DEF='(const|let|var)[[:space:]]+([A-Za-z_$][A-Za-z0-9_$]*)[[:space:]]*=[[:space:]]*chrome\.runtime\.getURL\(['\''"]vendor/'
+# .src=/.href= is allowed only from a `.jsUrl`/`.cssUrl` property read
+# off any expression (`script.src = urls.jsUrl;`). A property-NAME
+# allowlist, deliberately not provenance-traced: two tracing versions
+# broke the moment the real call shape changed (2026-08-09). An attacker
+# would need a property literally named jsUrl/cssUrl to reach .src=/.href=
+# in a directory whose only purpose is loading vendored bundles.
 LOCAL_RESOURCE_PROP_OK='\.(src|href)[[:space:]]*=[[:space:]]*[A-Za-z_$][A-Za-z0-9_$.]*\.(jsUrl|cssUrl)[[:space:]]*;'
 URL_PATTERN='https?://'
 # extension/features/ultimo-movimento-map/ is not URL-free like FETCH_DIRS
@@ -166,76 +135,14 @@ local_resource_url_filter() {
   fi
 }
 
-# Prints the .src=/.href= lines in $1 (a directory) that are NOT covered
-# by the recognized safe patterns above, evaluated per file. $2 selects
-# git-grep --cached (pass "staged") vs plain grep over the working tree
-# (pass "tree").
+# Prints the .src=/.href= lines in $1 (a directory) not assigned from a
+# .jsUrl/.cssUrl property. $2: "staged" (git grep --cached) or "tree".
 local_resource_bad_src() {
-  d="$1"; mode="$2"
-  if [ "$mode" = staged ]; then
-    files=$(git grep --cached -lE '\.(src|href)[[:space:]]*=' -- "$d" 2>/dev/null)
+  if [ "$2" = staged ]; then
+    git grep --cached -nE '\.(src|href)[[:space:]]*=' -- "$1" 2>/dev/null
   else
-    files=$(grep -rlE '\.(src|href)[[:space:]]*=' "$d/" 2>/dev/null)
-  fi
-  [ -z "$files" ] && return 0
-  echo "$files" | while IFS= read -r f; do
-    [ -z "$f" ] && continue
-    local_resource_bad_src_file "$f" "$mode"
-  done
-}
-
-# Per-file worker for local_resource_bad_src: builds this ONE file's
-# variable whitelist (direct getURL('vendor/...') assignments, plus
-# sigc-pro-leaflet-urls event-detail assignments for .jsUrl/.cssUrl
-# access), revokes any name that's later bare-reassigned to something
-# else, then reports .src=/.href= lines not covered by an inline literal
-# or a still-whitelisted variable/property read.
-local_resource_bad_src_file() {
-  f="$1"; mode="$2"
-  if [ "$mode" = staged ]; then
-    content=$(git show ":$f" 2>/dev/null)
-  else
-    content=$(cat "$f" 2>/dev/null)
-  fi
-  [ -z "$content" ] && return 0
-  src_lines=$(echo "$content" | grep -nE '\.(src|href)[[:space:]]*=')
-  [ -z "$src_lines" ] && return 0
-
-  direct_defs=$(echo "$content" | grep -oE "$LOCAL_RESOURCE_VAR_DEF" | sed -E 's/.*(const|let|var)[[:space:]]+([A-Za-z_$][A-Za-z0-9_$]*)[[:space:]]*=.*/\2/')
-
-  # A direct_defs name counts as whitelisted only up to its last bare
-  # reassignment (`name = <not-a-qualifying-RHS>;`) in file order. Since
-  # this is a line-order text scan (not real control flow), a
-  # reassignment ANYWHERE after the qualifying definition revokes the
-  # name for simplicity and safety (a false rejection here just means
-  # writing a fresh variable name, not a security gap).
-  revoked=""
-  for name in $direct_defs; do
-    reassign=$(echo "$content" | grep -nE "^[[:space:]]*${name}[[:space:]]*=[[:space:]]*[^;]*;" | grep -vE "getURL\(['\''\"]vendor/")
-    if [ -n "$reassign" ]; then
-      revoked="$revoked $name"
-    fi
-  done
-
-  live_direct=""
-  for name in $direct_defs; do
-    case " $revoked " in
-      *" $name "*) ;;
-      *) live_direct="$live_direct $name" ;;
-    esac
-  done
-
-  direct_names=$(echo "$live_direct" | tr ' ' '\n' | sed '/^$/d' | sort -u | tr '\n' '|' | sed 's/|$//')
-
-  result="$src_lines"
-  result=$(echo "$result" | grep -vE "$LOCAL_RESOURCE_SRC_INLINE_OK")
-  if [ -n "$direct_names" ]; then
-    result=$(echo "$result" | grep -vE "\.(src|href)[[:space:]]*=[[:space:]]*($direct_names)[[:space:]]*;")
-  fi
-  result=$(echo "$result" | grep -vE "$LOCAL_RESOURCE_PROP_OK")
-  if [ -n "$result" ]; then
-    echo "$result" | sed "s|^|$f:|"
-  fi
+    grep -rnE '\.(src|href)[[:space:]]*=' "$1/" 2>/dev/null
+  fi | grep -vE "$LOCAL_RESOURCE_PROP_OK"
 }
 
 if [ "$1" = "--staged" ]; then
@@ -324,12 +231,12 @@ if [ -n "$(echo "$STORAGE_MATCHES" | tr -d '[:space:]')" ]; then
   exit 1
 fi
 if [ -n "$(echo "$LOCAL_RESOURCE_MATCHES" | tr -d '[:space:]')" ]; then
-  echo "PRIVACY GATE FAILED — banned API in a local-resource-sanctioned directory (only .src=/.href= from chrome.runtime.getURL('vendor/...') is allowed there):" >&2
+  echo "PRIVACY GATE FAILED — banned API in a local-resource-sanctioned directory (only .src=/.href= from a .jsUrl/.cssUrl property is allowed there):" >&2
   echo "$LOCAL_RESOURCE_MATCHES" >&2
   exit 1
 fi
 if [ -n "$(echo "$LOCAL_RESOURCE_BAD_SRC" | tr -d '[:space:]')" ]; then
-  echo "PRIVACY GATE FAILED — .src=/.href= in a local-resource-sanctioned directory not assigned from chrome.runtime.getURL('vendor/...'):" >&2
+  echo "PRIVACY GATE FAILED — .src=/.href= in a local-resource-sanctioned directory not assigned from a .jsUrl/.cssUrl property:" >&2
   echo "$LOCAL_RESOURCE_BAD_SRC" >&2
   exit 1
 fi
