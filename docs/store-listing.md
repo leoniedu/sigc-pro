@@ -118,10 +118,11 @@ extensão não solicita NENHUMA permissão do navegador. A única coisa que
 guarda, no seu próprio navegador, é o histórico de contagens por agência
 do GEREN-PRO (nunca dados de domicílio; há "Limpar histórico"); todos os arquivos são gerados localmente e salvos pelo mecanismo
 padrão de download do Chrome. As consultas de dados — Guia do Dia, Mapa-pro
-(nos dois relatórios), exportação multi-agência do Último Movimento e a
+(nos dois relatórios), exportação multi-agência do Último Movimento,
 Carta do Mapa-pro (o cadastro do agente, pela matrícula, no módulo de
-usuários do SIGC) — vão todas ao próprio servidor do SIGC (mesma sessão
-do usuário), acionadas por clique. Se o módulo de usuários não tiver
+usuários do SIGC) e GEREN-PRO (o relatório da UF, só em memória) — vão
+todas ao próprio servidor do SIGC (mesma sessão do usuário), acionadas
+por clique, identificadas pelo cabeçalho X-SIGC-PRO. Se o módulo de usuários não tiver
 sessão iniciada, a extensão abre a página dele em uma aba para o login
 único do navegador e a fecha quando ele responde; nunca envia
 credenciais nem formulários de autenticação.
@@ -161,12 +162,12 @@ GEREN-PRO history of per-agência counts (never household data).
 
 ## Host permission justification (dashboard field)
 
-Limit: 1000 characters. Current text is 993.
+Limit: 1000 characters. Current text is 974.
 
 ```
-The extension injects a content script only on SIGC portal pages (Sistema Integrado de Gestão da Coleta, IBGE), matched by the three hosts SIGC is served from — portalweb.ibge.gov.br, portalweb2.ibge.gov.br and w3sigcpns2025.ibge.gov.br — not the whole ibge.gov.br domain. It adds export buttons (PDF, KML, CSV), a zone map panel and Agenda helpers, reading data already on the page. No other site is accessed, no permission is declared, nothing is stored.
+The extension injects content scripts only on the three hosts IBGE's SIGC is served from — portalweb.ibge.gov.br, portalweb2.ibge.gov.br and w3sigcpns2025.ibge.gov.br — not the whole ibge.gov.br domain. It adds export buttons (PDF, KML, CSV), map and progress panels and Agenda helpers, reading data already on the page. No permission is declared. The only thing stored is the GEREN-PRO history of per-agência counts, in the browser's IndexedDB; no household data.
 
-Network calls are four optional, click-triggered requests to the SIGC server itself, same origin, in the user's session: a printable day guide; a map panel on two reports (address list and agenda slots of the filtered scope); a bulk report export, one request per agência; and a notification-letter PDF, looking up one agent by matrícula in the portal's user module.
+Network calls are five optional, click-triggered requests to the page's own SIGC origin, in the user's session, each tagged X-SIGC-PRO: a day guide; a map panel (address list and agenda of the filtered scope); a bulk export, one request per agência; a notification letter, looking up one agent by matrícula; and a whole-UF progress report.
 
 The only external resource is the map background: OpenStreetMap tiles, after a separate confirmation, with no SIGC data. Leaflet and pdf-lib are bundled. No telemetry.
 ```
