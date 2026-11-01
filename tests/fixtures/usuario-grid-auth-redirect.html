@@ -1,0 +1,15 @@
+<!-- Shaped from a live capture (2026-10-09) of POST /usuario/Grid when the
+     browser has no session with the usuário module: the F5 gateway returns
+     the OpenID Connect "Working..." page — an auto-submitting form of hidden
+     inputs posting to the SIGC authentication service's /authorize, itself
+     reached through the same gateway (the f5-w hex is that service's
+     origin). The capture was truncated after the first input; the hidden
+     inputs below are the usual authorize parameters, not the live values. -->
+<html><head><title>Working...</title><script id='F5_helperDataStringsId' type='text/javascript'>
+if(typeof(F5_flush)!=='function'){
+var ur_firepass_host='https://portalweb.ibge.gov.br';
+var ur_baseurl='/f5-w-68747470733a2f2f77337365727669636f736967632e696267652e676f762e6272$$/usuario/';
+}
+</script>
+<script id='F5_helperFunctionsId' type='text/javascript' src='/private/fm/cache-fm-Modern.js'></script>
+</head><body><form method="POST" name="hiddenform" action="https://portalweb.ibge.gov.br/f5-w-68747470733a2f2f77332d736967632d617574656e7469636163616f2d736572766963652d6763656e2d7072642e617070732e6f6370342e696267652e676f762e6272$$/auth/connect/authorize"><input type="hidden" name="client_id" value="sigc-usuario" /><input type="hidden" name="redirect_uri" value="https://portalweb.ibge.gov.br/f5-w-68747470733a2f2f77337365727669636f736967632e696267652e676f762e6272$$/signin-oidc" /><input type="hidden" name="response_type" value="code id_token" /><input type="hidden" name="scope" value="openid profile" /><input type="hidden" name="response_mode" value="form_post" /><input type="hidden" name="nonce" value="n-0S6_WzA2Mj" /><input type="hidden" name="state" value="af0ifjsldkj" /><noscript><p>Script is disabled. Click Submit to continue.</p><input type="submit" value="Submit" /></noscript></form><script language="javascript">window.setTimeout(function() {document.forms[0].submit();}, 0);</script></body></html>

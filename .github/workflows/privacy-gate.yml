@@ -1,0 +1,13 @@
+name: Privacy gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  privacy-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/check-privacy.sh
